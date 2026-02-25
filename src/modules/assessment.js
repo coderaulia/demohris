@@ -59,8 +59,20 @@ export function initiateSelfAssessment(clickedId) {
 
 // ---- RENDER PENDING LIST ----
 export function renderPendingList() {
-    const { currentUser, db } = state;
+    const { currentUser, db, appSettings } = state;
     if (!currentUser) return;
+
+    // Load dynamic seniority levels
+    const senEl = document.getElementById('inp-seniority');
+    if (senEl) {
+        const levels = (appSettings?.levels || 'Junior, Intermediate, Senior, Lead, Manager, Director').split(',').map(s => s.trim()).filter(Boolean);
+        const prevVal = senEl.value;
+        senEl.innerHTML = '<option value="">-- Level --</option>';
+        levels.forEach(l => {
+            senEl.innerHTML += `<option value="${escapeHTML(l)}">${escapeHTML(l)}</option>`;
+        });
+        if (prevVal) senEl.value = prevVal;
+    }
 
     if (isEmployee()) {
         // Employee view: hide selector, show their own info
@@ -344,7 +356,7 @@ export async function finalSubmit() {
 
     const rec = db[currentSession.id];
     rec.training_history = rec.training_history || [];
-    rec.department = getDepartment(rec.position);
+    if (!rec.department) rec.department = getDepartment(rec.position);
 
     if (isEmployee()) {
         rec.self_scores = currentSession.scores;

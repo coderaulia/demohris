@@ -10,10 +10,10 @@ import { syncAll } from './modules/data.js';
 import { renderDashboard } from './modules/dashboard.js';
 import { renderRecordsTable, openReportByVal, openTrainingLog, closeTrainingLog, closeReport, searchRecords, deleteRecordSafe, editRecordSafe, saveTrainingLog, approveTraining, editTrainingItem, deleteTrainingItem, resetTrainingForm, fillTrainingRec, toggleOngoing, initiateSelfAssessment as recordSelfAssess } from './modules/records.js';
 import { renderPendingList, loadPendingEmployee, startAssessment, renderQuestions, reviewAssessment, finalSubmit, goBack, initiateSelfAssessment } from './modules/assessment.js';
-import { renderAdminList, savePositionConfig, loadPositionForEdit, deletePositionConfig, clearAdminForm, exportConfigJSON, triggerConfigImport, importConfigJSON } from './modules/admin.js';
+import { renderAdminList, savePositionConfig, loadPositionForEdit, deletePositionConfig, clearAdminForm, exportConfigJSON, triggerConfigImport, importConfigJSON, addCompetencyRow, removeCompetencyRow } from './modules/admin.js';
 import { renderEmployeeManager, saveEmployeeData, loadEmployeeForEdit, resetEmployeeForm, deleteEmployeeData, exportEmployeeCSV, importEmployeeCSV } from './modules/employees.js';
 import { renderKpiManager, submitKpiRecord, saveKpiDef, editKpiDef, removeKpiDef, removeKpiRecord, clearKpiDefForm, onKpiMetricChange } from './modules/kpi.js';
-import { renderSettings, saveAppSettings, applyBranding, editUserRole, setupUserLogin } from './modules/settings.js';
+import { renderSettings, saveAppSettings, applyBranding, editUserRole, setupUserLogin, saveOrgConfig } from './modules/settings.js';
 
 // ---- Expose functions to onclick handlers ----
 window.__app = {
@@ -37,6 +37,7 @@ window.__app = {
     // Admin
     renderAdminList, savePositionConfig, loadPositionForEdit, deletePositionConfig,
     clearAdminForm, exportConfigJSON, triggerConfigImport, importConfigJSON,
+    addCompetencyRow, removeCompetencyRow,
 
     // Employees
     renderEmployeeManager, saveEmployeeData, loadEmployeeForEdit, resetEmployeeForm,
@@ -50,7 +51,7 @@ window.__app = {
     removeKpiRecord, clearKpiDefForm, onKpiMetricChange,
 
     // Settings
-    renderSettings, saveAppSettings, editUserRole, setupUserLogin,
+    renderSettings, saveAppSettings, editUserRole, setupUserLogin, saveOrgConfig, toggleSettingsView,
 };
 
 // ---- Tab Navigation ----
@@ -81,10 +82,29 @@ function switchTab(tabId) {
     if (tabId === 'tab-dashboard') renderDashboard();
     if (tabId === 'tab-records') renderRecordsTable();
     if (tabId === 'tab-assessment') renderPendingList();
-    if (tabId === 'tab-admin') renderAdminList();
     if (tabId === 'tab-employees') renderEmployeeManager();
     if (tabId === 'tab-kpi') renderKpiManager();
-    if (tabId === 'tab-settings') renderSettings();
+    if (tabId === 'tab-settings') {
+        renderSettings();
+        renderAdminList(); // Also render competencies setup since it's now inside settings
+    }
+}
+
+// ---- Sub-View Toggle (Settings/Dashboard) ----
+function toggleSettingsView(viewId, btn) {
+    // Hide all
+    ['set-general', 'set-users', 'set-competencies', 'set-org'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+
+    // Deactivate all pills
+    document.querySelectorAll('#settingsPills .nav-link').forEach(el => el.classList.remove('active'));
+
+    // Show active
+    const target = document.getElementById(viewId);
+    if (target) target.classList.remove('hidden');
+    if (btn) btn.classList.add('active');
 }
 
 // ---- Theme Toggle ----
@@ -141,7 +161,7 @@ function showApp() {
 
     // Role-based navigation
     const navConfig = {
-        superadmin: ['nav-dashboard', 'nav-employees', 'nav-assessment', 'nav-records', 'nav-kpi', 'nav-admin', 'nav-settings'],
+        superadmin: ['nav-dashboard', 'nav-employees', 'nav-assessment', 'nav-records', 'nav-kpi', 'nav-settings'],
         manager: ['nav-dashboard', 'nav-assessment', 'nav-records', 'nav-kpi'],
         employee: ['nav-records', 'nav-kpi'],
     };

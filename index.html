@@ -103,11 +103,7 @@
                             <i class="bi bi-graph-up-arrow me-1"></i><span class="nav-label">KPI</span>
                         </button>
                     </div>
-                    <div class="nav-item" data-role="admin">
-                        <button class="nav-link nav-tab" id="nav-admin" onclick="window.__app.switchTab('tab-admin')">
-                            <i class="bi bi-gear me-1"></i><span class="nav-label">Config</span>
-                        </button>
-                    </div>
+
                     <div class="nav-item" data-role="admin">
                         <button class="nav-link nav-tab" id="nav-settings"
                             onclick="window.__app.switchTab('tab-settings')">
@@ -316,6 +312,14 @@
                                     </select>
                                 </div>
                                 <div class="col-6">
+                                    <label class="small text-muted fw-bold">Department</label>
+                                    <select id="emp-department" class="form-select form-select-sm">
+                                        <option value="">-- Department --</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-12">
                                     <label class="small text-muted fw-bold">Role</label>
                                     <select id="emp-role" class="form-select form-select-sm">
                                         <option value="employee">Employee</option>
@@ -625,109 +629,199 @@
             </div>
         </div>
 
-        <!-- ==================== TAB: ADMIN (Config) ==================== -->
-        <div id="tab-admin" class="content-section">
-            <div class="card shadow-sm border-0">
-                <div class="card-body p-4">
-                    <h5 class="card-title text-primary mb-3"><i class="bi bi-gear me-1"></i> Competencies Configuration
-                    </h5>
-                    <div class="alert alert-info py-2 small mb-3">
-                        <i class="bi bi-info-circle me-1"></i>
-                        Define positions and their competencies. Each competency has a name, recommended training, and
-                        description.
-                        Format: <code>Competency Name | Training Recommendation | Description</code> (one per line)
-                    </div>
-                    <div class="d-flex justify-content-end gap-2 mb-4">
-                        <button class="btn btn-warning btn-sm" onclick="window.__app.exportConfigJSON()"><i
-                                class="bi bi-download me-1"></i> Export JSON</button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="window.__app.triggerConfigImport()"><i
-                                class="bi bi-upload me-1"></i> Import JSON</button>
-                        <input type="file" id="config-import" class="hidden" accept=".json"
-                            onchange="window.__app.importConfigJSON(this)">
-                    </div>
-                    <div class="row">
-                        <div class="col-md-5 mb-4 mb-md-0" id="admin-form-panel">
-                            <div class="editor-box bg-light p-3 rounded border h-100">
-                                <h6 id="editor-title" class="fw-bold mb-3"><i class="bi bi-pencil-square"></i> Add /
-                                    Edit Position</h6>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Position Name</label>
-                                    <input type="text" class="form-control" id="admin-pos-name"
-                                        placeholder="e.g. Senior Copywriter">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Competencies</label>
-                                    <textarea class="form-control font-monospace" id="admin-pos-comps"
-                                        style="height: 200px; font-size:12px;"
-                                        placeholder="Skill Name | Recommended Training | Description"></textarea>
-                                </div>
-                                <div class="d-grid gap-2">
-                                    <button class="btn btn-success btn-sm"
-                                        onclick="window.__app.savePositionConfig()"><i class="bi bi-check-lg"></i>
-                                        Save</button>
-                                    <button class="btn btn-outline-secondary btn-sm"
-                                        onclick="window.__app.clearAdminForm()">Clear</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-7">
-                            <h6 class="fw-bold mb-3">Existing Positions</h6>
-                            <ul id="admin-pos-list" class="list-group"></ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- ==================== TAB: SETTINGS ==================== -->
         <div id="tab-settings" class="content-section">
             <div class="row g-4">
-                <!-- App Settings -->
-                <div class="col-md-6">
-                    <div class="card shadow-sm border-0">
-                        <div class="card-header bg-primary text-white">
-                            <h6 class="m-0 fw-bold"><i class="bi bi-sliders me-1"></i> Application Settings</h6>
-                        </div>
-                        <div class="card-body">
-                            <p class="small text-muted mb-3">Configure your company branding and app settings. These are
-                                applied across the entire application.</p>
-                            <div class="row" id="settings-app-fields"></div>
-                            <button class="btn btn-success w-100 mt-2" onclick="window.__app.saveAppSettings()">
-                                <i class="bi bi-save me-1"></i> Save Settings
-                            </button>
+                <div class="col-md-3">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body p-2">
+                            <ul class="nav nav-pills flex-column gap-1" id="settingsPills">
+                                <li class="nav-item">
+                                    <button class="nav-link active w-100 text-start" data-target="set-general"
+                                        onclick="toggleSettingsView('set-general', this)">
+                                        <i class="bi bi-sliders me-2"></i> General Apps
+                                    </button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link w-100 text-start" data-target="set-users"
+                                        onclick="toggleSettingsView('set-users', this)">
+                                        <i class="bi bi-people-fill me-2"></i> Users & Roles
+                                    </button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link w-100 text-start" data-target="set-competencies"
+                                        onclick="toggleSettingsView('set-competencies', this)">
+                                        <i class="bi bi-person-check-fill me-2"></i> Competencies
+                                    </button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link w-100 text-start" data-target="set-org"
+                                        onclick="toggleSettingsView('set-org', this)">
+                                        <i class="bi bi-diagram-3 me-2"></i> Organization Map
+                                    </button>
+                                </li>
+                            </ul>
                         </div>
                     </div>
                 </div>
-                <!-- User Management -->
-                <div class="col-md-6">
-                    <div class="card shadow-sm border-0">
-                        <div class="card-header bg-white border-bottom">
-                            <h6 class="m-0 fw-bold"><i class="bi bi-people-fill me-1"></i> User & Role Management</h6>
+
+                <div class="col-md-9">
+                    <!-- General Settings -->
+                    <div id="set-general">
+                        <div class="card shadow-sm border-0 h-100">
+                            <div class="card-header bg-white border-bottom">
+                                <h6 class="m-0 fw-bold"><i class="bi bi-sliders me-1"></i> Application Layout settings
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="small text-muted mb-3">Configure your company branding and app settings. These
+                                    are
+                                    applied across the entire application.</p>
+                                <div class="row" id="settings-app-fields"></div>
+                                <button class="btn btn-success mt-3" onclick="window.__app.saveAppSettings()">
+                                    <i class="bi bi-save me-1"></i> Save App Settings
+                                </button>
+                            </div>
                         </div>
-                        <div class="card-body p-0">
-                            <div class="p-3 bg-light border-bottom">
-                                <div class="d-flex gap-2 flex-wrap">
-                                    <span class="badge bg-danger">Super Admin</span> Full access, settings, user
-                                    management
-                                    <span class="badge bg-warning text-dark ms-2">Manager</span> Assess subordinates,
-                                    view reports
-                                    <span class="badge bg-secondary ms-2">Employee</span> Self-assess, view own records
+                    </div>
+
+                    <!-- User Management -->
+                    <div id="set-users" class="hidden">
+                        <div class="card shadow-sm border-0 h-100">
+                            <div class="card-header bg-white border-bottom">
+                                <h6 class="m-0 fw-bold"><i class="bi bi-people-fill me-1"></i> System User Role setup
+                                </h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="p-3 bg-light border-bottom">
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <span class="badge bg-danger">Super Admin</span> Full access, settings, user
+                                        management
+                                        <span class="badge bg-warning text-dark ms-2">Manager</span> Assess
+                                        subordinates,
+                                        view reports
+                                        <span class="badge bg-secondary ms-2">Employee</span> Self-assess, view own
+                                        records
+                                    </div>
+                                </div>
+                                <div class="table-responsive" style="max-height: 500px;">
+                                    <table class="table table-hover table-sm align-middle mb-0">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Name</th>
+                                                <th>Position</th>
+                                                <th class="text-center">Role</th>
+                                                <th>Login</th>
+                                                <th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="user-mgmt-tbody"></tbody>
+                                    </table>
                                 </div>
                             </div>
-                            <div class="table-responsive" style="max-height: 500px;">
-                                <table class="table table-hover table-sm align-middle mb-0">
-                                    <thead class="table-light sticky-top">
-                                        <tr>
-                                            <th>ID</th>
-                                            <th>Name</th>
-                                            <th>Position</th>
-                                            <th class="text-center">Role</th>
-                                            <th>Login</th>
-                                            <th class="text-end">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="user-mgmt-tbody"></tbody>
-                                </table>
+                        </div>
+                    </div>
+
+                    <!-- Competencies Config -->
+                    <div id="set-competencies" class="hidden">
+                        <div class="card shadow-sm border-0 h-100">
+                            <div
+                                class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+                                <h6 class="m-0 fw-bold"><i class="bi bi-person-check-fill me-1"></i> Setup Skill
+                                    Matrices</h6>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-warning btn-sm" onclick="window.__app.exportConfigJSON()"><i
+                                            class="bi bi-download me-1"></i> Export JSON</button>
+                                    <button class="btn btn-outline-secondary btn-sm"
+                                        onclick="window.__app.triggerConfigImport()"><i class="bi bi-upload me-1"></i>
+                                        Import JSON</button>
+                                    <input type="file" id="config-import" class="hidden" accept=".json"
+                                        onchange="window.__app.importConfigJSON(this)">
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-5 mb-4 mb-md-0" id="admin-form-panel">
+                                        <div class="editor-box bg-light p-3 rounded border h-100">
+                                            <h6 id="editor-title" class="fw-bold mb-3"><i
+                                                    class="bi bi-pencil-square"></i> Add /
+                                                Edit Position</h6>
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Position Name</label>
+                                                <input type="text" class="form-control" id="admin-pos-name"
+                                                    placeholder="e.g. Senior Copywriter">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold text-primary">Competency
+                                                    Detail</label>
+                                                <input type="text" class="form-control form-control-sm mb-1"
+                                                    id="comp-input-name" placeholder="Skill Name">
+                                                <input type="text" class="form-control form-control-sm mb-1"
+                                                    id="comp-input-rec" placeholder="Recommended Training">
+                                                <input type="text" class="form-control form-control-sm mb-2"
+                                                    id="comp-input-desc" placeholder="Description">
+                                                <button class="btn btn-sm btn-outline-primary"
+                                                    onclick="window.__app.addCompetencyRow()"><i class="bi bi-plus"></i>
+                                                    Add Competency</button>
+                                            </div>
+                                            <ul class="list-group mb-3" id="comp-temp-list">
+                                                <li class="list-group-item text-muted fst-italic small py-1">No
+                                                    competencies added yet.</li>
+                                            </ul>
+                                            <div class="d-grid gap-2">
+                                                <button class="btn btn-success btn-sm"
+                                                    onclick="window.__app.savePositionConfig()"><i
+                                                        class="bi bi-check-lg"></i>
+                                                    Save Position</button>
+                                                <button class="btn btn-outline-secondary btn-sm"
+                                                    onclick="window.__app.clearAdminForm()">Clear</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-7">
+                                        <h6 class="fw-bold mb-3">Existing Positions</h6>
+                                        <ul id="admin-pos-list"
+                                            class="list-group list-group-flush border rounded-3 p-2"></ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Organization Map Config -->
+                    <div id="set-org" class="hidden">
+                        <div class="card shadow-sm border-0 h-100">
+                            <div class="card-header bg-white border-bottom">
+                                <h6 class="m-0 fw-bold"><i class="bi bi-diagram-3 me-1"></i> Organization Level
+                                    Definitions</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-secondary py-2 small mb-4">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Define the available options for employee forms in the application. Separate
+                                    multiple values using a comma (,).
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold small text-primary">Seniority Levels</label>
+                                    <textarea class="form-control mb-2 font-monospace text-dark" id="settings-levels"
+                                        rows="3"
+                                        placeholder="Junior, Intermediate, Senior, Manager, Director"></textarea>
+                                    <div class="form-text">Example: Junior, Intermediate, Senior, Lead, Manager,
+                                        Director</div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold small text-success">Departments</label>
+                                    <textarea class="form-control mb-2 font-monospace text-dark"
+                                        id="settings-departments" rows="4"
+                                        placeholder="Human Resources, Finance, IT, Operations"></textarea>
+                                    <div class="form-text">Example: Strategy & Support, GMV Based, Project Based, Direct
+                                        Report, Business Dev</div>
+                                </div>
+
+                                <button class="btn btn-primary" onclick="window.__app.saveOrgConfig()"><i
+                                        class="bi bi-save me-1"></i> Save Maps</button>
                             </div>
                         </div>
                     </div>

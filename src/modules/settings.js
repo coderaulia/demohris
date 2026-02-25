@@ -13,6 +13,13 @@ export function renderSettings() {
     if (!isAdmin()) return;
     renderAppSettings();
     renderUserManagement();
+    renderOrgSettings();
+
+    // Default to general tab if none active
+    setTimeout(() => {
+        const activeNav = document.querySelector('#settingsPills .nav-link.active');
+        if (activeNav) window.__app.toggleSettingsView(activeNav.dataset.target, activeNav);
+    }, 50);
 }
 
 // ---- APP SETTINGS ----
@@ -74,6 +81,30 @@ export function applyBranding() {
 
     const loginApp = document.getElementById('login-app-name');
     if (loginApp) loginApp.innerText = appSettings.app_name || 'HR Performance Suite';
+}
+
+// ---- ORG SETTINGS ----
+function renderOrgSettings() {
+    const { appSettings } = state;
+    const levelsEl = document.getElementById('settings-levels');
+    const deptsEl = document.getElementById('settings-departments');
+
+    if (levelsEl) levelsEl.value = appSettings.levels || 'Junior, Intermediate, Senior, Lead, Manager, Director';
+    if (deptsEl) deptsEl.value = appSettings.departments || 'Human Resources, Finance, IT, Operations, Marketing, Sales';
+}
+
+export async function saveOrgConfig() {
+    try {
+        const levels = document.getElementById('settings-levels').value.trim();
+        const depts = document.getElementById('settings-departments').value.trim();
+
+        await saveSetting('levels', levels);
+        await saveSetting('departments', depts);
+
+        alert('Organization settings saved successfully!');
+    } catch (err) {
+        alert('Error saving organization settings: ' + err.message);
+    }
 }
 
 // ---- USER MANAGEMENT ----

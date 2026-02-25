@@ -20,9 +20,23 @@ export function renderEmployeeManager() {
             posSelect.innerHTML += `<option value="${escapeHTML(pos)}">${escapeHTML(pos)}</option>`;
         });
     }
-    if (currentPosVal && document.getElementById('emp-edit-mode').value === 'true') {
-        posSelect.value = currentPosVal;
-    }
+    if (currentPosVal && document.getElementById('emp-edit-mode').value === 'true') posSelect.value = currentPosVal;
+
+    // 1b. Levels & Departments
+    const { appSettings } = state;
+    const loadDropdown = (selId, settingKey, defStr, prevVal) => {
+        const sel = document.getElementById(selId);
+        if (!sel) return;
+        const opts = (appSettings[settingKey] || defStr).split(',').map(s => s.trim()).filter(Boolean);
+        sel.innerHTML = `<option value="">-- Select --</option>`;
+        opts.forEach(opt => {
+            sel.innerHTML += `<option value="${escapeHTML(opt)}">${escapeHTML(opt)}</option>`;
+        });
+        if (prevVal) sel.value = prevVal;
+    };
+
+    loadDropdown('emp-seniority', 'levels', 'Junior, Intermediate, Senior, Lead, Manager, Director', document.getElementById('emp-seniority')?.value);
+    loadDropdown('emp-department', 'departments', 'Human Resources, Finance, IT, Operations, Marketing, Sales', document.getElementById('emp-department')?.value);
 
     // 2. Manager Dropdown
     const mgrSelect = document.getElementById('emp-manager-id');
@@ -91,6 +105,7 @@ export async function saveEmployeeData() {
     const name = document.getElementById('emp-name').value.trim();
     const pos = document.getElementById('emp-position').value;
     const seniority = document.getElementById('emp-seniority').value;
+    const department = document.getElementById('emp-department')?.value || getDepartment(pos);
     const joinDate = document.getElementById('emp-join').value;
     const isEdit = document.getElementById('emp-edit-mode').value === 'true';
     const managerId = document.getElementById('emp-manager-id').value;
@@ -118,7 +133,7 @@ export async function saveEmployeeData() {
     rec.seniority = seniority;
     rec.join_date = joinDate;
     rec.manager_id = managerId;
-    rec.department = getDepartment(pos);
+    rec.department = department; // Used manual selection or fallback
     rec.auth_email = authEmail;
     rec.role = role;
 
@@ -138,9 +153,15 @@ export function loadEmployeeForEdit(id) {
     document.getElementById('emp-id').value = rec.id;
     document.getElementById('emp-id').disabled = true;
     document.getElementById('emp-name').value = rec.name;
-    document.getElementById('emp-seniority').value = rec.seniority || 'Junior';
     document.getElementById('emp-join').value = getInputValue(rec.join_date);
     document.getElementById('emp-manager-id').value = rec.manager_id || '';
+
+    // Set these values BEFORE calling renderEmployeeManager, so they are preserved
+    document.getElementById('emp-position').value = rec.position || '';
+    document.getElementById('emp-seniority').value = rec.seniority || '';
+
+    const deptEl = document.getElementById('emp-department');
+    if (deptEl) deptEl.value = rec.department || '';
 
     const emailEl = document.getElementById('emp-auth-email');
     if (emailEl) emailEl.value = rec.auth_email || '';
@@ -161,7 +182,9 @@ export function resetEmployeeForm() {
     document.getElementById('emp-name').value = '';
     document.getElementById('emp-position').value = '';
     document.getElementById('emp-join').value = '';
-    document.getElementById('emp-seniority').value = 'Junior';
+    document.getElementById('emp-seniority').value = '';
+    const deptEl = document.getElementById('emp-department');
+    if (deptEl) deptEl.value = '';
     document.getElementById('emp-edit-mode').value = 'false';
     document.getElementById('emp-cancel-btn').classList.add('hidden');
     const emailEl = document.getElementById('emp-auth-email');

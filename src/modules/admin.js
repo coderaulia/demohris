@@ -7,6 +7,8 @@ import { state, emit, isAdmin } from '../lib/store.js';
 import { escapeHTML } from '../lib/utils.js';
 import { saveConfig, deleteConfig } from './data.js';
 
+let tempCompetencies = [];
+
 export function renderAdminList() {
     const listEl = document.getElementById('admin-pos-list');
     if (!listEl) return;
@@ -56,30 +58,70 @@ export function renderAdminList() {
     });
 }
 
+function renderTempCompetencies() {
+    const listEl = document.getElementById('comp-temp-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    if (tempCompetencies.length === 0) {
+        listEl.innerHTML = '<li class="list-group-item text-muted fst-italic small py-1">No competencies added yet.</li>';
+        return;
+    }
+
+    tempCompetencies.forEach((c, index) => {
+        listEl.innerHTML += `
+        <li class="list-group-item list-group-item-sm py-1 border-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="fw-bold small">${escapeHTML(c.name)}</div>
+                    <div class="text-muted" style="font-size: 10px;">${escapeHTML(c.rec)}</div>
+                </div>
+                <button class="btn btn-sm btn-link text-danger p-0" onclick="window.__app.removeCompetencyRow(${index})"><i class="bi bi-x-circle-fill"></i></button>
+            </div>
+        </li>`;
+    });
+}
+
+export function addCompetencyRow() {
+    const nameInput = document.getElementById('comp-input-name');
+    const recInput = document.getElementById('comp-input-rec');
+    const descInput = document.getElementById('comp-input-desc');
+
+    const name = nameInput.value.trim();
+    const rec = recInput.value.trim() || 'General training recommended.';
+    const desc = descInput.value.trim() || '';
+
+    if (!name) {
+        alert('Please enter a Skill Name.');
+        return;
+    }
+
+    tempCompetencies.push({ name, rec, desc });
+
+    nameInput.value = '';
+    recInput.value = '';
+    descInput.value = '';
+
+    renderTempCompetencies();
+    nameInput.focus();
+}
+
+export function removeCompetencyRow(index) {
+    tempCompetencies.splice(index, 1);
+    renderTempCompetencies();
+}
+
 export async function savePositionConfig() {
     if (!isAdmin()) { alert('Access Denied'); return; }
 
     const posName = document.getElementById('admin-pos-name').value.trim();
-    const compsText = document.getElementById('admin-pos-comps').value.trim();
 
     if (!posName) { alert('Please enter a Position Name.'); return; }
-    if (!compsText) { alert('Please enter at least one competency.'); return; }
-
-    const competencies = [];
-    compsText.split('\n').forEach(line => {
-        if (line.trim()) {
-            const parts = line.split('|');
-            competencies.push({
-                name: parts[0].trim(),
-                rec: parts[1] ? parts[1].trim() : 'General training recommended.',
-                desc: parts[2] ? parts[2].trim() : '',
-            });
-        }
-    });
+    if (tempCompetencies.length === 0) { alert('Please add at least one competency.'); return; }
 
     try {
-        await saveConfig(posName, competencies);
-        alert(`Configuration saved! ${competencies.length} competencies for "${posName}".`);
+        await saveConfig(posName, tempCompetencies);
+        alert(`Configuration saved! ${tempCompetencies.length} competencies for "${posName}".`);
         renderAdminList();
         clearAdminForm();
     } catch (err) {
@@ -95,11 +137,8 @@ export function loadPositionForEdit(posName) {
     document.getElementById('admin-pos-name').value = posName;
     document.getElementById('editor-title').innerHTML = `<i class="bi bi-pencil-square"></i> Editing: <span class="text-primary">${escapeHTML(posName)}</span>`;
 
-    let text = '';
-    if (config.competencies) {
-        config.competencies.forEach(c => { text += `${c.name} | ${c.rec} | ${c.desc}\n`; });
-    }
-    document.getElementById('admin-pos-comps').value = text.trim();
+    tempCompetencies = config.competencies ? [...config.competencies] : [];
+    renderTempCompetencies();
 }
 
 export async function deletePositionConfig(posName) {
@@ -112,8 +151,13 @@ export async function deletePositionConfig(posName) {
 
 export function clearAdminForm() {
     document.getElementById('admin-pos-name').value = '';
-    document.getElementById('admin-pos-comps').value = '';
+    document.getElementById('comp-input-name').value = '';
+    document.getElementById('comp-input-rec').value = '';
+    document.getElementById('comp-input-desc').value = '';
     document.getElementById('editor-title').innerHTML = '<i class="bi bi-pencil-square"></i> Add / Edit Position';
+
+    tempCompetencies = [];
+    renderTempCompetencies();
 }
 
 export function exportConfigJSON() {
