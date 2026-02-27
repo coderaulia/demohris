@@ -4,6 +4,26 @@
 
 import './styles/main.css';
 
+// ---- Component HTML Imports (inlined at build time via Vite ?raw) ----
+import loginHTML from './components/login.html?raw';
+import headerHTML from './components/header.html?raw';
+import dashboardHTML from './components/tab-dashboard.html?raw';
+import employeesHTML from './components/tab-employees.html?raw';
+import assessmentHTML from './components/tab-assessment.html?raw';
+import recordsHTML from './components/tab-records.html?raw';
+import settingsHTML from './components/tab-settings.html?raw';
+import overlaysHTML from './components/overlays.html?raw';
+
+// Inject components into shell
+document.getElementById('component-login').innerHTML = loginHTML;
+document.getElementById('component-header').innerHTML = headerHTML;
+document.getElementById('component-dashboard').innerHTML = dashboardHTML;
+document.getElementById('component-employees').innerHTML = employeesHTML;
+document.getElementById('component-assessment').innerHTML = assessmentHTML;
+document.getElementById('component-records').innerHTML = recordsHTML;
+document.getElementById('component-settings').innerHTML = settingsHTML;
+document.getElementById('component-overlays').innerHTML = overlaysHTML;
+
 import { state, subscribe, emit, isAdmin, isManager, isEmployee } from './lib/store.js';
 import { restoreSession, signIn, signOut } from './modules/auth.js';
 import { syncAll } from './modules/data.js';
@@ -12,7 +32,7 @@ import { renderRecordsTable, openReportByVal, openTrainingLog, closeTrainingLog,
 import { renderPendingList, loadPendingEmployee, startAssessment, renderQuestions, reviewAssessment, finalSubmit, goBack, initiateSelfAssessment } from './modules/assessment.js';
 import { renderAdminList, savePositionConfig, loadPositionForEdit, deletePositionConfig, clearAdminForm, exportConfigJSON, triggerConfigImport, importConfigJSON, addCompetencyRow, removeCompetencyRow } from './modules/admin.js';
 import { renderEmployeeManager, saveEmployeeData, loadEmployeeForEdit, resetEmployeeForm, deleteEmployeeData, exportEmployeeCSV, importEmployeeCSV } from './modules/employees.js';
-import { renderKpiManager, submitKpiRecord, saveKpiDef, editKpiDef, copyKpiDef, removeKpiDef, removeKpiRecord, clearKpiDefForm, onKpiMetricChange, onKpiEmployeeChange, exportKpiJSON, importKpiJSON, startKpiInput, saveKpiTargets } from './modules/kpi.js';
+import { renderKpiManager, submitKpiRecord, saveKpiDef, editKpiDef, copyKpiDef, removeKpiDef, removeKpiRecord, clearKpiDefForm, onKpiMetricChange, onKpiEmployeeChange, exportKpiJSON, importKpiJSON, startKpiInput, saveKpiTargets, renderKpiHistory } from './modules/kpi.js';
 import { renderSettings, saveAppSettings, applyBranding, editUserRole, setupUserLogin, saveOrgConfig, addOrgDepartment, addOrgPosition } from './modules/settings.js';
 
 // ---- Expose functions to onclick handlers ----
@@ -48,10 +68,10 @@ window.__app = {
 
     // KPI
     renderKpiManager, submitKpiRecord, saveKpiDef, editKpiDef, copyKpiDef, removeKpiDef,
-    removeKpiRecord, clearKpiDefForm, onKpiMetricChange, onKpiEmployeeChange, exportKpiJSON, importKpiJSON, startKpiInput, saveKpiTargets,
+    removeKpiRecord, clearKpiDefForm, onKpiMetricChange, onKpiEmployeeChange, exportKpiJSON, importKpiJSON, startKpiInput, saveKpiTargets, renderKpiHistory,
 
     // Settings
-    renderSettings, saveAppSettings, editUserRole, setupUserLogin, saveOrgConfig, addOrgDepartment, addOrgPosition, toggleSettingsView, toggleDashboardView,
+    renderSettings, saveAppSettings, editUserRole, setupUserLogin, saveOrgConfig, addOrgDepartment, addOrgPosition, toggleSettingsView, toggleDashboardView, toggleRecordsView,
 };
 
 // ---- Tab Navigation ----
@@ -78,7 +98,10 @@ function switchTab(tabId) {
 
     // Trigger renders
     if (tabId === 'tab-dashboard') renderDashboard();
-    if (tabId === 'tab-records') renderRecordsTable();
+    if (tabId === 'tab-records') {
+        renderRecordsTable();
+        renderKpiHistory();
+    }
     if (tabId === 'tab-assessment') renderPendingList();
     if (tabId === 'tab-employees') renderEmployeeManager();
     if (tabId === 'tab-settings') {
@@ -113,6 +136,19 @@ function toggleDashboardView(viewId, btn) {
     const target = document.getElementById(viewId);
     if (target) target.classList.remove('hidden');
     if (btn) btn.classList.add('active');
+}
+
+// ---- Sub-View Toggle (Records) ----
+function toggleRecordsView(viewId, btn) {
+    ['records-assessment', 'records-kpi'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+    document.querySelectorAll('#recordsPills .nav-link').forEach(el => el.classList.remove('active'));
+    const target = document.getElementById(viewId);
+    if (target) target.classList.remove('hidden');
+    if (btn) btn.classList.add('active');
+    if (viewId === 'records-kpi') renderKpiHistory();
 }
 
 // ---- Theme Toggle ----

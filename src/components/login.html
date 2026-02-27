@@ -1,0 +1,31 @@
+    <div class="login-wrapper" id="login-view">
+        <div class="card shadow-lg border-0 login-card">
+            <div class="card-body p-5 text-center">
+                <div class="login-logo mb-3">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+                <h4 class="fw-bold mb-1 gradient-text" id="login-app-name">HR Performance Suite</h4>
+                <h6 class="fw-semibold text-muted mb-1" id="login-company">Company</h6>
+                <p class="text-muted small mb-4">Employee Assessment & KPI System<br><span
+                        class="badge bg-light text-muted border">Restricted Access</span></p>
+
+                <div class="form-floating mb-3 text-start">
+                    <input type="email" class="form-control" id="login-user" placeholder="Email">
+                    <label for="login-user"><i class="bi bi-envelope me-1"></i>Email Address</label>
+                </div>
+                <div class="form-floating mb-3 text-start">
+                    <input type="password" class="form-control" id="login-pass" placeholder="Password"
+                        onkeyup="if(event.key==='Enter') window.__app.attemptLogin()">
+                    <label for="login-pass"><i class="bi bi-lock me-1"></i>Password</label>
+                </div>
+
+                <button id="login-btn" class="btn btn-primary w-100 py-2 fw-semibold btn-gradient"
+                    onclick="window.__app.attemptLogin()">
+                    <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+                </button>
+                <p id="login-error" class="text-danger small mt-3 hidden"></p>
+                <p class="text-muted small mt-3 mb-0"><i class="bi bi-shield-lock"></i> Secured by Supabase
+                    Authentication</p>
+            </div>
+        </div>
+    </div>

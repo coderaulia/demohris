@@ -1,0 +1,91 @@
+        <!-- ==================== TAB: RECORDS ==================== -->
+        <div id="tab-records" class="content-section">
+            <ul class="nav nav-pills mb-3 records-pills" id="recordsPills">
+                <li class="nav-item">
+                    <button class="nav-link active" data-target="records-assessment"
+                        onclick="window.__app.toggleRecordsView('records-assessment', this)">
+                        <i class="bi bi-clipboard-data me-1"></i>Assessment Records
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-target="records-kpi"
+                        onclick="window.__app.toggleRecordsView('records-kpi', this)">
+                        <i class="bi bi-graph-up-arrow me-1"></i>KPI Records
+                    </button>
+                </li>
+            </ul>
+
+            <!-- ASSESSMENT RECORDS VIEW -->
+            <div id="records-assessment">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="m-0 fw-bold"><i class="bi bi-table me-1"></i> Assessment Records</h6>
+                            <div class="input-group" style="max-width: 300px;">
+                                <input type="text" class="form-control form-control-sm" id="search-input"
+                                    placeholder="Search name, ID, position..." oninput="window.__app.searchRecords()">
+                                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Role & Level</th>
+                                        <th>Date</th>
+                                        <th>Score</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="records-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI RECORDS VIEW -->
+            <div id="records-kpi" class="hidden">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="m-0 fw-bold"><i class="bi bi-graph-up-arrow me-1"></i> KPI Achievement Records
+                            </h6>
+                            <div class="d-flex gap-2 align-items-center">
+                                <div class="input-group" style="max-width: 200px;">
+                                    <select id="kpi-records-filter-emp" class="form-select form-select-sm"
+                                        onchange="window.__app.renderKpiHistory()">
+                                        <option value="">All Employees</option>
+                                    </select>
+                                </div>
+                                <div class="input-group" style="max-width: 160px;">
+                                    <input type="month" id="kpi-records-filter-period"
+                                        class="form-control form-control-sm" onchange="window.__app.renderKpiHistory()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm align-middle mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>KPI</th>
+                                        <th class="text-center">Period</th>
+                                        <th class="text-center">Value</th>
+                                        <th class="text-center">Target</th>
+                                        <th class="text-center">Achievement</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kpi-history-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>

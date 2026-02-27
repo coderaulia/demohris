@@ -1,0 +1,57 @@
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+            <div>
+                <h4 class="fw-bold m-0 gradient-text" id="app-header-title">HR Performance Suite</h4>
+                <small class="text-muted" id="app-header-subtitle">
+                    Human Resources Department &middot; <span id="user-display-name" class="fw-bold"></span>
+                    <span id="user-role-badge" class="badge bg-secondary ms-2">Employee</span>
+                </small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" id="theme-toggle" onclick="window.__app.toggleTheme()"
+                    title="Toggle Dark Mode">
+                    <i class="bi bi-moon-stars"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm" onclick="window.__app.doLogout()">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="card shadow-sm border-0 mb-4 nav-card">
+            <div class="card-body p-2">
+                <div class="nav nav-pills nav-fill gap-1 flex-nowrap overflow-auto">
+                    <div class="nav-item" data-role="admin-manager">
+                        <button class="nav-link nav-tab" id="nav-dashboard"
+                            onclick="window.__app.switchTab('tab-dashboard')">
+                            <i class="bi bi-speedometer2 me-1"></i><span class="nav-label">Dashboard</span>
+                        </button>
+                    </div>
+                    <div class="nav-item" data-role="admin">
+                        <button class="nav-link nav-tab" id="nav-employees"
+                            onclick="window.__app.switchTab('tab-employees')">
+                            <i class="bi bi-people-fill me-1"></i><span class="nav-label">Employees</span>
+                        </button>
+                    </div>
+                    <div class="nav-item" data-role="admin-manager">
+                        <button class="nav-link nav-tab" id="nav-assessment"
+                            onclick="window.__app.switchTab('tab-assessment')">
+                            <i class="bi bi-clipboard-check me-1"></i><span class="nav-label">Assessment & KPI</span>
+                        </button>
+                    </div>
+                    <div class="nav-item" data-role="all">
+                        <button class="nav-link nav-tab" id="nav-records"
+                            onclick="window.__app.switchTab('tab-records')">
+                            <i class="bi bi-table me-1"></i><span class="nav-label">Records</span>
+                        </button>
+                    </div>
+                    <div class="nav-item" data-role="admin">
+                        <button class="nav-link nav-tab" id="nav-settings"
+                            onclick="window.__app.switchTab('tab-settings')">
+                            <i class="bi bi-sliders me-1"></i><span class="nav-label">Settings</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>

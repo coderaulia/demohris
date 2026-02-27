@@ -6,11 +6,10 @@ import { state, emit } from '../lib/store.js';
 import { escapeHTML, formatPeriod } from '../lib/utils.js';
 import { saveKpiDefinition, deleteKpiDefinition, saveKpiRecord, deleteKpiRecord, fetchKpiRecords } from './data.js';
 
-// ---- RENDER KPI TAB ----
+// ---- RENDER KPI SETTINGS TAB ----
 export function renderKpiManager() {
     renderKpiDefinitions();
     renderKpiTargetConfig();
-    renderKpiHistory();
 }
 
 // ---- KPI DEFINITIONS (Admin only) ----
@@ -235,13 +234,31 @@ export function startKpiInput() {
     }
 }
 
-// ---- KPI HISTORY TABLE ----
-async function renderKpiHistory() {
+// ---- KPI HISTORY TABLE (now in Records tab) ----
+export async function renderKpiHistory() {
     const tbody = document.getElementById('kpi-history-body');
     if (!tbody) return;
     tbody.innerHTML = '';
 
     const { currentUser, db, kpiRecords, kpiConfig } = state;
+
+    // Populate employee filter dropdown
+    const empFilter = document.getElementById('kpi-records-filter-emp');
+    if (empFilter && empFilter.options.length <= 1) {
+        let keys = Object.keys(db);
+        if (currentUser.role === 'manager') {
+            const mgrRec = db[currentUser.id];
+            if (mgrRec?.department) {
+                keys = keys.filter(id => db[id].department === mgrRec.department);
+            }
+        } else if (currentUser.role === 'employee') {
+            keys = [currentUser.id];
+        }
+        keys.sort((a, b) => (db[a].name || '').localeCompare(db[b].name || ''));
+        keys.forEach(id => {
+            empFilter.innerHTML += `<option value="${escapeHTML(id)}">${escapeHTML(db[id].name)}</option>`;
+        });
+    }
 
     let records = kpiRecords || [];
 
@@ -256,8 +273,23 @@ async function renderKpiHistory() {
         }
     }
 
+    // Apply employee filter
+    const filterEmp = document.getElementById('kpi-records-filter-emp')?.value;
+    if (filterEmp) {
+        records = records.filter(r => r.employee_id === filterEmp);
+    }
+
+    // Apply period filter
+    const filterPeriod = document.getElementById('kpi-records-filter-period')?.value;
+    if (filterPeriod) {
+        records = records.filter(r => r.period === filterPeriod);
+    }
+
+    // Sort by most recent first
+    records.sort((a, b) => (b.submitted_at || '').localeCompare(a.submitted_at || ''));
+
     if (records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No KPI records yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No KPI records found.</td></tr>';
         return;
     }
 
