@@ -80,12 +80,14 @@ CREATE OR REPLACE FUNCTION auth_employee_id()
 RETURNS TEXT
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT e.employee_id
-  FROM employees e
-  WHERE e.auth_id = auth.uid()::text
+  FROM public.employees e
+  WHERE e.auth_id::text = auth.uid()::text
      OR (e.auth_email IS NOT NULL AND lower(e.auth_email) = lower(coalesce(auth.jwt() ->> 'email', '')))
-  ORDER BY CASE WHEN e.auth_id = auth.uid()::text THEN 0 ELSE 1 END
+  ORDER BY CASE WHEN e.auth_id::text = auth.uid()::text THEN 0 ELSE 1 END
   LIMIT 1;
 $$;
 
@@ -93,9 +95,11 @@ CREATE OR REPLACE FUNCTION auth_department()
 RETURNS TEXT
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT e.department
-  FROM employees e
+  FROM public.employees e
   WHERE e.employee_id = auth_employee_id()
   LIMIT 1;
 $$;
@@ -104,9 +108,11 @@ CREATE OR REPLACE FUNCTION is_superadmin()
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT EXISTS (
-    SELECT 1 FROM employees e
+    SELECT 1 FROM public.employees e
     WHERE e.employee_id = auth_employee_id()
       AND e.role = 'superadmin'
   );
@@ -116,9 +122,11 @@ CREATE OR REPLACE FUNCTION is_manager()
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT EXISTS (
-    SELECT 1 FROM employees e
+    SELECT 1 FROM public.employees e
     WHERE e.employee_id = auth_employee_id()
       AND e.role IN ('manager', 'superadmin')
   );

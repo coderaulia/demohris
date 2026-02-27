@@ -258,8 +258,12 @@
             </div>
             <div class="modal-footer border-0 px-4 pb-4">
                 <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary px-4" onclick="window.__app.exportDeptKpiPDF()">Download
-                    Report</button>
+                <button type="button" class="btn btn-success px-3" onclick="window.__app.exportDeptKpiExcel()">
+                    <i class="bi bi-file-earmark-excel me-1"></i> Export Excel
+                </button>
+                <button type="button" class="btn btn-primary px-3" onclick="window.__app.exportDeptKpiPDF()">
+                    <i class="bi bi-file-earmark-pdf me-1"></i> Export PDF
+                </button>
             </div>
         </div>
     </div>
