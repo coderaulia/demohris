@@ -24,7 +24,7 @@ document.getElementById('component-records').innerHTML = recordsHTML;
 document.getElementById('component-settings').innerHTML = settingsHTML;
 document.getElementById('component-overlays').innerHTML = overlaysHTML;
 
-import { state, subscribe, emit, isAdmin, isManager, isEmployee } from './lib/store.js';
+import { state, subscribe, emit, isAdmin, isManager, isEmployee, setReportFilters } from './lib/store.js';
 import { restoreSession, signIn, signOut } from './modules/auth.js';
 import { syncAll } from './modules/data.js';
 import { renderDashboard, openDeptKpiModal, renderDeptKpiTable, exportDeptKpiExcel, exportDeptKpiPDF, exportEmployeeKpiPDF, searchDeptKpiModal } from './modules/dashboard.js';
@@ -34,7 +34,8 @@ import { renderAdminList, savePositionConfig, loadPositionForEdit, deletePositio
 import { renderEmployeeManager, saveEmployeeData, loadEmployeeForEdit, resetEmployeeForm, deleteEmployeeData, exportEmployeeCSV, importEmployeeCSV } from './modules/employees.js';
 import { renderKpiManager, submitKpiRecord, saveKpiDef, editKpiDef, copyKpiDef, removeKpiDef, editKpiRecord, removeKpiRecord, clearKpiDefForm, onKpiMetricChange, calcKpiPercentage, onKpiEmployeeChange, exportKpiJSON, importKpiJSON, startKpiInput, saveKpiTargets, renderKpiHistory } from './modules/kpi.js';
 import { renderSettings, saveAppSettings, applyBranding, editUserRole, setupUserLogin, saveOrgConfig, addOrgDepartment, addOrgPosition } from './modules/settings.js';
-import { debugError } from './lib/utils.js';
+import { debugError, escapeHTML } from './lib/utils.js';
+import { getRoleScopedEmployeeIds } from './lib/reportFilters.js';
 
 // ---- Expose functions to onclick handlers ----
 window.__app = {
@@ -42,7 +43,7 @@ window.__app = {
     attemptLogin, doLogout: signOut,
 
     // Navigation
-    switchTab, toggleTheme, toggleDashboardView,
+    switchTab, toggleTheme, toggleDashboardView, updateReportFilters, clearReportFilters,
 
     // Assessment
     renderPendingList, loadPendingEmployee, startAssessment, renderQuestions,
@@ -110,6 +111,108 @@ function switchTab(tabId) {
         renderAdminList();
         renderKpiManager();
     }
+}
+
+function refreshActiveReports() {
+    const activeTab = document.querySelector('.content-section.active')?.id;
+    if (activeTab === 'tab-dashboard') renderDashboard();
+    if (activeTab === 'tab-records') {
+        renderRecordsTable();
+        renderKpiHistory();
+    }
+}
+
+function renderReportFilterOptions() {
+    const card = document.getElementById('report-filters-card');
+    const deptSel = document.getElementById('report-filter-department');
+    const mgrSel = document.getElementById('report-filter-manager');
+    const periodInput = document.getElementById('report-filter-period');
+    if (!card || !deptSel || !mgrSel || !periodInput) return;
+
+    const { currentUser, db, reportFilters } = state;
+    if (!currentUser || currentUser.role === 'employee') {
+        card.classList.add('hidden');
+        return;
+    }
+    card.classList.remove('hidden');
+
+    const scopedIds = getRoleScopedEmployeeIds();
+    const currentDept = reportFilters.department || '';
+    const currentMgr = reportFilters.manager_id || '';
+
+    const departments = [...new Set(scopedIds.map(id => db[id]?.department).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    deptSel.innerHTML = '<option value="">All Departments</option>';
+    departments.forEach(dept => {
+        deptSel.innerHTML += `<option value="${escapeHTML(dept)}">${escapeHTML(dept)}</option>`;
+    });
+
+    const managerIds = new Set();
+    scopedIds.forEach(id => {
+        const rec = db[id];
+        if (rec?.manager_id) managerIds.add(rec.manager_id);
+    });
+    Object.keys(db).forEach(id => {
+        if (db[id]?.role === 'manager' || db[id]?.role === 'superadmin') managerIds.add(id);
+    });
+    const managers = [...managerIds]
+        .map(id => ({ id, name: db[id]?.name || id }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    mgrSel.innerHTML = '<option value="">All Managers</option>';
+    managers.forEach(mgr => {
+        mgrSel.innerHTML += `<option value="${escapeHTML(mgr.id)}">${escapeHTML(mgr.name)}</option>`;
+    });
+
+    if (currentUser.role === 'manager') {
+        const ownDept = db[currentUser.id]?.department || '';
+        deptSel.value = ownDept;
+        deptSel.disabled = true;
+        if (currentMgr && managers.some(m => m.id === currentMgr)) {
+            mgrSel.value = currentMgr;
+        }
+    } else {
+        deptSel.disabled = false;
+        if (currentDept) deptSel.value = currentDept;
+        if (currentMgr) mgrSel.value = currentMgr;
+    }
+
+    periodInput.value = reportFilters.period || '';
+}
+
+function updateReportFilters() {
+    const deptSel = document.getElementById('report-filter-department');
+    const mgrSel = document.getElementById('report-filter-manager');
+    const periodInput = document.getElementById('report-filter-period');
+    if (!deptSel || !mgrSel || !periodInput) return;
+
+    const deptVal = deptSel.value || '';
+    const mgrVal = mgrSel.value || '';
+    const periodVal = periodInput.value || '';
+    setReportFilters({
+        department: deptVal,
+        manager_id: mgrVal,
+        period: periodVal,
+    });
+    refreshActiveReports();
+}
+
+function clearReportFilters() {
+    const deptSel = document.getElementById('report-filter-department');
+    const mgrSel = document.getElementById('report-filter-manager');
+    const periodInput = document.getElementById('report-filter-period');
+    const isMgr = state.currentUser?.role === 'manager';
+    const ownDept = state.db[state.currentUser?.id]?.department || '';
+
+    if (deptSel) deptSel.value = isMgr ? ownDept : '';
+    if (mgrSel) mgrSel.value = '';
+    if (periodInput) periodInput.value = '';
+
+    setReportFilters({
+        department: isMgr ? ownDept : '',
+        manager_id: '',
+        period: '',
+    });
+    refreshActiveReports();
 }
 
 // ---- Sub-View Toggle (Settings) ----
@@ -231,6 +334,9 @@ function showApp() {
         roleEl.className = 'badge ms-2 ' + (role === 'superadmin' ? 'bg-danger' : role === 'manager' ? 'bg-warning text-dark' : 'bg-secondary');
     }
 
+    renderReportFilterOptions();
+    clearReportFilters();
+
     // Default tab
     if (role === 'superadmin' || role === 'manager') {
         switchTab('tab-dashboard');
@@ -241,6 +347,9 @@ function showApp() {
 
 // ---- Subscribe to events ----
 subscribe('nav:switchTab', switchTab);
+subscribe('data:employees', () => {
+    renderReportFilterOptions();
+});
 
 // ---- Initialize ----
 document.addEventListener('DOMContentLoaded', async function () {

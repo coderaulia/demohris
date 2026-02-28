@@ -5,7 +5,7 @@
 
 import { state, emit, isAdmin } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg, debugError } from '../lib/utils.js';
-import { saveConfig, deleteConfig } from './data.js';
+import { saveConfig, deleteConfig, logActivity } from './data.js';
 import * as notify from '../lib/notify.js';
 
 let editingPosition = null; // Track which position is being edited
@@ -161,7 +161,18 @@ export async function savePositionConfig() {
     if (competencies.length === 0) { await notify.warn('Please add at least one competency.'); return; }
 
     try {
-        await saveConfig(posName, competencies);
+        await notify.withLoading(async () => {
+            await saveConfig(posName, competencies);
+        }, 'Saving Configuration', `Updating competencies for ${posName}...`);
+        await logActivity({
+            action: 'competency.config.save',
+            entityType: 'competency_config',
+            entityId: posName,
+            details: {
+                position: posName,
+                competencies: competencies.length,
+            },
+        });
         await notify.success(`Configuration saved! ${competencies.length} competencies for "${posName}".`);
         editingPosition = posName;
         renderAdminList();
@@ -175,7 +186,15 @@ export async function savePositionConfig() {
 export async function deletePositionConfig(posName) {
     if (!isAdmin()) return;
     if (await notify.confirm(`Delete configuration for "${posName}"?`, { confirmButtonText: 'Delete' })) {
-        await deleteConfig(posName);
+        await notify.withLoading(async () => {
+            await deleteConfig(posName);
+        }, 'Deleting Configuration', `Removing competency config for ${posName}...`);
+        await logActivity({
+            action: 'competency.config.delete',
+            entityType: 'competency_config',
+            entityId: posName,
+            details: { position: posName },
+        });
         if (editingPosition === posName) clearAdminForm();
         renderAdminList();
     }
@@ -217,13 +236,72 @@ export async function importConfigJSON(input) {
     reader.onload = async function (e) {
         try {
             const json = JSON.parse(e.target.result);
-            let count = 0;
-            for (const posName in json) {
-                await saveConfig(posName, json[posName].competencies || []);
-                count++;
+            const posNames = Object.keys(json || {});
+            const errors = [];
+            const normalized = [];
+
+            posNames.forEach(posName => {
+                const row = json[posName] || {};
+                const competencies = Array.isArray(row.competencies) ? row.competencies : [];
+                if (!posName.trim()) {
+                    errors.push('Position name cannot be empty.');
+                    return;
+                }
+                const invalid = competencies.find(c => !c || !String(c.name || '').trim());
+                if (invalid) {
+                    errors.push(`Position "${posName}" has competency row without "name".`);
+                    return;
+                }
+                normalized.push({ posName, competencies });
+            });
+
+            if (errors.length > 0) {
+                await notify.error(`Import validation failed:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more error(s)` : ''}`);
+                return;
             }
+
+            const previewRows = normalized.slice(0, 10).map(row => `
+                <tr>
+                    <td>${escapeHTML(row.posName)}</td>
+                    <td>${row.competencies.length}</td>
+                </tr>
+            `).join('');
+
+            const proceed = await notify.confirm('', {
+                title: 'Confirm Competency Import',
+                confirmButtonText: 'Import Now',
+                html: `
+                    <div class="text-start small">
+                        <div class="mb-2"><strong>Total positions:</strong> ${normalized.length}</div>
+                        <div class="table-responsive" style="max-height:220px;">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead><tr><th>Position</th><th>Competencies</th></tr></thead>
+                                <tbody>${previewRows || '<tr><td colspan="2" class="text-center text-muted">No rows</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                `,
+            });
+            if (!proceed) return;
+
+            await notify.withLoading(async () => {
+                for (const row of normalized) {
+                    await saveConfig(row.posName, row.competencies || []);
+                }
+            }, 'Importing Config', 'Applying validated position configs...');
+
+            await logActivity({
+                action: 'competency.config.import',
+                entityType: 'competency_config',
+                entityId: 'bulk',
+                details: {
+                    total_positions: normalized.length,
+                    total_competencies: normalized.reduce((sum, row) => sum + row.competencies.length, 0),
+                },
+            });
+
             renderAdminList();
-            await notify.success(`Imported ${count} position configs successfully!`);
+            await notify.success(`Imported ${normalized.length} position configs successfully!`);
         } catch (err) {
             await notify.error('Invalid JSON file.');
             debugError(err);

@@ -3,9 +3,10 @@
 // ==================================================
 
 import { state, emit } from '../lib/store.js';
-import { escapeHTML, escapeInlineArg, formatPeriod, formatNumber, debugError } from '../lib/utils.js';
-import { saveKpiDefinition, deleteKpiDefinition, saveKpiRecord, deleteKpiRecord, fetchKpiRecords } from './data.js';
+import { escapeHTML, escapeInlineArg, formatPeriod, formatNumber, debugError, formatDateTime } from '../lib/utils.js';
+import { saveKpiDefinition, deleteKpiDefinition, saveKpiRecord, deleteKpiRecord, fetchKpiRecords, logActivity } from './data.js';
 import * as notify from '../lib/notify.js';
+import { getFilteredEmployeeIds } from '../lib/reportFilters.js';
 
 // ---- RENDER KPI SETTINGS TAB ----
 export function renderKpiManager() {
@@ -167,7 +168,18 @@ export async function saveKpiTargets() {
         emp.kpi_targets = targets;
         try {
             const { saveEmployee } = await import('./data.js');
-            await saveEmployee(emp);
+            await notify.withLoading(async () => {
+                await saveEmployee(emp);
+            }, 'Saving KPI Targets', `Updating personalized targets for ${emp.name}...`);
+            await logActivity({
+                action: 'kpi.targets.update',
+                entityType: 'employee',
+                entityId: emp.id,
+                details: {
+                    employee_name: emp.name,
+                    targets: Object.keys(targets).length,
+                },
+            });
             await notify.success('Employee personalized KPI targets saved successfully!');
         } catch (e) {
             await notify.error('Error saving custom targets: ' + e.message);
@@ -253,34 +265,20 @@ export async function renderKpiHistory() {
 
     // Populate employee filter dropdown
     const empFilter = document.getElementById('kpi-records-filter-emp');
-    if (empFilter && empFilter.options.length <= 1) {
-        let keys = Object.keys(db);
-        if (currentUser.role === 'manager') {
-            const mgrRec = db[currentUser.id];
-            if (mgrRec?.department) {
-                keys = keys.filter(id => db[id].department === mgrRec.department);
-            }
-        } else if (currentUser.role === 'employee') {
-            keys = [currentUser.id];
-        }
-        keys.sort((a, b) => (db[a].name || '').localeCompare(db[b].name || ''));
+    if (empFilter) {
+        const selectedEmp = empFilter.value || '';
+        empFilter.innerHTML = '<option value="">All Employees</option>';
+        const keys = getFilteredEmployeeIds().sort((a, b) => (db[a].name || '').localeCompare(db[b].name || ''));
         keys.forEach(id => {
             empFilter.innerHTML += `<option value = "${escapeHTML(id)}" > ${escapeHTML(db[id].name)}</option> `;
         });
-    }
-
-    let records = kpiRecords || [];
-
-    // Filter by role
-    if (currentUser.role === 'employee') {
-        records = records.filter(r => r.employee_id === currentUser.id);
-    } else if (currentUser.role === 'manager') {
-        const mgrRec = db[currentUser.id];
-        if (mgrRec?.department) {
-            const deptIds = Object.keys(db).filter(id => db[id].department === mgrRec.department);
-            records = records.filter(r => deptIds.includes(r.employee_id));
+        if (selectedEmp && keys.includes(selectedEmp)) {
+            empFilter.value = selectedEmp;
         }
     }
+
+    const scopedIds = new Set(getFilteredEmployeeIds());
+    let records = (kpiRecords || []).filter(r => scopedIds.has(r.employee_id));
 
     // Apply employee filter
     const filterEmp = document.getElementById('kpi-records-filter-emp')?.value;
@@ -293,12 +291,16 @@ export async function renderKpiHistory() {
     if (filterPeriod) {
         records = records.filter(r => r.period === filterPeriod);
     }
+    const globalPeriod = state.reportFilters?.period || '';
+    if (globalPeriod) {
+        records = records.filter(r => r.period === globalPeriod);
+    }
 
     // Sort by most recent first
     records.sort((a, b) => (b.submitted_at || '').localeCompare(a.submitted_at || ''));
 
     if (records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No KPI records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">No KPI records found.</td></tr>';
         return;
     }
 
@@ -323,6 +325,10 @@ export async function renderKpiHistory() {
         <td class="text-center fw-bold">${formatNumber(record.value)} ${escapeHTML(kpiDef?.unit || '')}</td>
         <td class="text-center">${formatNumber(target)} ${escapeHTML(kpiDef?.unit || '')}</td>
         <td class="text-center"><span class="badge ${achBadge}">${achievement}%</span></td>
+        <td class="small text-muted">
+          <div>${escapeHTML(state.db[record.updated_by || record.submitted_by]?.name || record.updated_by || record.submitted_by || '-')}</div>
+          <div>${escapeHTML(formatDateTime(record.updated_at || record.submitted_at))}</div>
+        </td>
         <td class="text-end">
           ${currentUser.role !== 'employee' ? `
             <div class="btn-group btn-group-sm" role="group">
@@ -359,7 +365,20 @@ export async function submitKpiRecord() {
     };
 
     try {
-        await saveKpiRecord(record);
+        await notify.withLoading(async () => {
+            await saveKpiRecord(record);
+        }, 'Saving KPI Record', 'Submitting KPI achievement...');
+        await logActivity({
+            action: 'kpi.record.create',
+            entityType: 'kpi_record',
+            entityId: `${record.employee_id}:${record.kpi_id}:${record.period}`,
+            details: {
+                employee_id: record.employee_id,
+                kpi_id: record.kpi_id,
+                period: record.period,
+                value: record.value,
+            },
+        });
         await notify.success('KPI record saved successfully!');
 
         // Clear form
@@ -394,7 +413,20 @@ export async function saveKpiDef() {
     if (editingId) kpi.id = editingId;
 
     try {
-        await saveKpiDefinition(kpi);
+        const saved = await notify.withLoading(async () => {
+            return await saveKpiDefinition(kpi);
+        }, 'Saving KPI Definition', 'Updating KPI definition...');
+        await logActivity({
+            action: editingId ? 'kpi.definition.update' : 'kpi.definition.create',
+            entityType: 'kpi_definition',
+            entityId: saved?.id || editingId || name,
+            details: {
+                name,
+                category: category || 'General',
+                target,
+                unit,
+            },
+        });
         await notify.success('KPI Definition saved!');
         clearKpiDefForm();
         renderKpiManager();
@@ -440,7 +472,18 @@ export function copyKpiDef(id) {
 export async function removeKpiDef(id) {
     if (!(await notify.confirm('Delete this KPI definition?', { confirmButtonText: 'Delete' }))) return;
     try {
-        await deleteKpiDefinition(id);
+        const kpi = state.kpiConfig.find(k => k.id === id);
+        await notify.withLoading(async () => {
+            await deleteKpiDefinition(id);
+        }, 'Deleting KPI Definition', 'Removing KPI definition...');
+        await logActivity({
+            action: 'kpi.definition.delete',
+            entityType: 'kpi_definition',
+            entityId: id,
+            details: {
+                name: kpi?.name || id,
+            },
+        });
         renderKpiManager();
     } catch (err) {
         await notify.error('Error: ' + err.message);
@@ -450,7 +493,15 @@ export async function removeKpiDef(id) {
 export async function removeKpiRecord(id) {
     if (!(await notify.confirm('Delete this KPI record?', { confirmButtonText: 'Delete' }))) return;
     try {
-        await deleteKpiRecord(id);
+        await notify.withLoading(async () => {
+            await deleteKpiRecord(id);
+        }, 'Deleting KPI Record', 'Removing KPI record...');
+        await logActivity({
+            action: 'kpi.record.delete',
+            entityType: 'kpi_record',
+            entityId: id,
+            details: {},
+        });
         renderKpiHistory();
     } catch (err) {
         await notify.error('Error: ' + err.message);
@@ -518,7 +569,20 @@ export async function editKpiRecord(id) {
     };
 
     try {
-        await saveKpiRecord(updated);
+        await notify.withLoading(async () => {
+            await saveKpiRecord(updated);
+        }, 'Updating KPI Record', 'Saving KPI changes...');
+        await logActivity({
+            action: 'kpi.record.update',
+            entityType: 'kpi_record',
+            entityId: id,
+            details: {
+                employee_id: updated.employee_id,
+                kpi_id: updated.kpi_id,
+                period: updated.period,
+                value: updated.value,
+            },
+        });
         await fetchKpiRecords();
         renderKpiHistory();
         await notify.success('KPI record updated successfully!');
@@ -607,16 +671,79 @@ export async function importKpiJSON(input) {
         try {
             const json = JSON.parse(e.target.result);
             if (!Array.isArray(json)) throw new Error("Expected an array of KPI definitions.");
-
-            let count = 0;
-            for (const kpi of json) {
-                // Remove ID if present to force insert
+            const errors = [];
+            const normalized = [];
+            json.forEach((kpi, idx) => {
+                const rowNo = idx + 1;
+                const name = String(kpi?.name || '').trim();
+                if (!name) {
+                    errors.push(`Row ${rowNo}: KPI name is required.`);
+                    return;
+                }
+                const targetRaw = kpi?.target ?? 0;
+                const targetNum = Number(targetRaw);
+                if (Number.isNaN(targetNum)) {
+                    errors.push(`Row ${rowNo}: target must be numeric.`);
+                    return;
+                }
                 const { id, ...cleanKpi } = kpi;
-                await saveKpiDefinition(cleanKpi);
-                count++;
+                normalized.push({
+                    ...cleanKpi,
+                    name,
+                    target: targetNum,
+                    category: String(cleanKpi.category || 'General'),
+                    unit: String(cleanKpi.unit || ''),
+                });
+            });
+
+            if (errors.length > 0) {
+                await notify.error(`Import validation failed:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more error(s)` : ''}`);
+                return;
             }
+
+            const previewRows = normalized.slice(0, 10).map(kpi => `
+                <tr>
+                    <td>${escapeHTML(kpi.name)}</td>
+                    <td>${escapeHTML(kpi.category || 'General')}</td>
+                    <td>${formatNumber(kpi.target)}</td>
+                    <td>${escapeHTML(kpi.unit || '-')}</td>
+                </tr>
+            `).join('');
+
+            const proceed = await notify.confirm('', {
+                title: 'Confirm KPI Import',
+                confirmButtonText: 'Import Now',
+                html: `
+                    <div class="text-start small">
+                        <div class="mb-2"><strong>Total KPI rows:</strong> ${normalized.length}</div>
+                        <div class="table-responsive" style="max-height:220px;">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead><tr><th>Name</th><th>Category</th><th>Target</th><th>Unit</th></tr></thead>
+                                <tbody>${previewRows || '<tr><td colspan="4" class="text-center text-muted">No rows</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                `,
+            });
+            if (!proceed) return;
+
+            await notify.withLoading(async () => {
+                for (const kpi of normalized) {
+                    await saveKpiDefinition(kpi);
+                }
+            }, 'Importing KPI Definitions', 'Applying validated KPI rows...');
+
+            await logActivity({
+                action: 'kpi.definition.import',
+                entityType: 'kpi_definition',
+                entityId: 'bulk',
+                details: {
+                    total: normalized.length,
+                },
+            });
+
             renderKpiManager();
-            await notify.success(`Imported ${count} KPIs successfully!`);
+            await notify.success(`Imported ${normalized.length} KPIs successfully!`);
         } catch (err) {
             await notify.error('Invalid JSON file. Error: ' + err.message);
             debugError(err);

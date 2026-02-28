@@ -1,0 +1,53 @@
+name: Supabase Backup Export
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Validate backup secret
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "Missing secret: SUPABASE_DB_URL"
+            exit 1
+          fi
+
+      - name: Export database backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p backups
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+
+          pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges --file "backups/supabase_${TS}.dump"
+          pg_dump "$SUPABASE_DB_URL" --format=plain --no-owner --no-privileges > "backups/supabase_${TS}.sql"
+
+          HAS_LOG_TABLE="$(psql "$SUPABASE_DB_URL" -Atc "select to_regclass('public.admin_activity_log') is not null;")"
+          if [ "$HAS_LOG_TABLE" = "t" ]; then
+            psql "$SUPABASE_DB_URL" -c "\copy (select * from public.admin_activity_log order by created_at desc) to 'backups/admin_activity_log_${TS}.csv' csv header"
+          fi
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ github.run_number }}
+          path: backups/
+          retention-days: 30

@@ -4,7 +4,7 @@
 
 import { state, emit, isEmployee, isManager } from '../lib/store.js';
 import { escapeHTML, getDepartment } from '../lib/utils.js';
-import { saveEmployee } from './data.js';
+import { saveEmployee, logActivity } from './data.js';
 import * as notify from '../lib/notify.js';
 
 // ---- SELF ASSESSMENT (Employee fast-track) ----
@@ -349,11 +349,14 @@ export async function finalSubmit() {
     const rec = db[currentSession.id];
     rec.training_history = rec.training_history || [];
     if (!rec.department) rec.department = getDepartment(rec.position);
+    const nowIso = new Date().toISOString();
 
     if (isEmployee()) {
         rec.self_scores = currentSession.scores;
         rec.self_percentage = pct;
         rec.self_date = new Date().toLocaleDateString();
+        rec.self_assessment_updated_by = currentUser?.id || '';
+        rec.self_assessment_updated_at = nowIso;
         await notify.success('Self-Assessment Submitted Successfully!');
     } else {
         // Manager/Superadmin Assessment
@@ -370,12 +373,27 @@ export async function finalSubmit() {
         rec.percentage = pct;
         rec.scores = currentSession.scores;
         rec.date_updated = new Date().toLocaleDateString();
+        rec.assessment_updated_by = currentUser?.id || '';
+        rec.assessment_updated_at = nowIso;
         if (!rec.date_created || rec.date_created === '-') rec.date_created = rec.date_updated;
         await notify.success('Assessment Submitted!');
     }
 
     db[rec.id] = rec;
-    await saveEmployee(rec);
+    await notify.withLoading(async () => {
+        await saveEmployee(rec);
+    }, 'Saving Assessment', 'Writing assessment changes to database...');
+
+    await logActivity({
+        action: isEmployee() ? 'assessment.self.submit' : 'assessment.manager.submit',
+        entityType: 'assessment',
+        entityId: rec.id,
+        details: {
+            employee_name: rec.name,
+            score: pct,
+            total_competencies: currentSession.scores.length,
+        },
+    });
 
     state.currentSession = {};
     emit('data:employees', db);

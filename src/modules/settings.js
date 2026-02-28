@@ -4,17 +4,18 @@
 // ==================================================
 
 import { state, emit, isAdmin } from '../lib/store.js';
-import { escapeHTML, escapeInlineArg } from '../lib/utils.js';
-import { saveSetting, saveEmployee, deleteEmployee, fetchEmployees } from './data.js';
+import { escapeHTML, escapeInlineArg, formatDateTime } from '../lib/utils.js';
+import { saveSetting, saveEmployee, fetchActivityLogs, logActivity } from './data.js';
 import { createAuthUser } from './auth.js';
 import * as notify from '../lib/notify.js';
 
 // ---- RENDER SETTINGS PAGE ----
-export function renderSettings() {
+export async function renderSettings() {
     if (!isAdmin()) return;
     renderAppSettings();
     renderUserManagement();
     renderOrgSettings();
+    await renderActivityLog();
 
     // Default to general tab if none active
     setTimeout(() => {
@@ -51,14 +52,33 @@ function renderAppSettings() {
 
 export async function saveAppSettings() {
     const fields = ['app_name', 'company_name', 'company_short', 'department_label', 'assessment_scale_max', 'assessment_threshold'];
+    const changed = {};
 
     try {
-        for (const key of fields) {
-            const el = document.getElementById(`setting-${key}`);
-            if (el) await saveSetting(key, el.value.trim());
+        await notify.withLoading(async () => {
+            for (const key of fields) {
+                const el = document.getElementById(`setting-${key}`);
+                if (!el) continue;
+                const newVal = el.value.trim();
+                const prevVal = state.appSettings[key] || '';
+                if (newVal !== prevVal) {
+                    changed[key] = { from: prevVal, to: newVal };
+                }
+                await saveSetting(key, newVal);
+            }
+        }, 'Saving Settings', 'Updating application settings...');
+
+        if (Object.keys(changed).length > 0) {
+            await logActivity({
+                action: 'settings.update',
+                entityType: 'app_settings',
+                entityId: 'global',
+                details: changed,
+            });
         }
         await notify.success('Settings saved successfully!');
         applyBranding();
+        await renderActivityLog();
     } catch (err) {
         await notify.error('Error saving settings: ' + err.message);
     }
@@ -205,17 +225,28 @@ function collectDeptPositions() {
 export async function saveOrgConfig() {
     try {
         const levels = document.getElementById('settings-levels').value.trim();
-        await saveSetting('levels', levels);
-
-        // Save department→positions mapping as JSON
         const deptMap = collectDeptPositions();
-        await saveSetting('dept_positions', JSON.stringify(deptMap));
-
-        // Also save a flat departments list for backward compat
         const deptNames = Object.keys(deptMap).join(', ');
-        await saveSetting('departments', deptNames);
+
+        await notify.withLoading(async () => {
+            await saveSetting('levels', levels);
+            await saveSetting('dept_positions', JSON.stringify(deptMap));
+            await saveSetting('departments', deptNames);
+        }, 'Saving Organization', 'Updating department and position map...');
+
+        await logActivity({
+            action: 'organization.config.update',
+            entityType: 'organization',
+            entityId: 'dept_positions',
+            details: {
+                levels,
+                departments: Object.keys(deptMap),
+                total_departments: Object.keys(deptMap).length,
+            },
+        });
 
         await notify.success('Organization settings saved successfully!');
+        await renderActivityLog();
     } catch (err) {
         await notify.error('Error saving organization settings: ' + err.message);
     }
@@ -283,11 +314,25 @@ export async function editUserRole(empId) {
 
     if (role === null) return;
 
+    const oldRole = rec.role;
     rec.role = role;
     try {
-        await saveEmployee(rec);
+        await notify.withLoading(async () => {
+            await saveEmployee(rec);
+        }, 'Updating Role', `Applying role change for ${rec.name}...`);
+        await logActivity({
+            action: 'user.role.change',
+            entityType: 'employee',
+            entityId: rec.id,
+            details: {
+                employee_name: rec.name,
+                previous_role: oldRole,
+                new_role: role,
+            },
+        });
         await notify.success(`${rec.name} is now "${role}"`);
         renderUserManagement();
+        await renderActivityLog();
     } catch (err) {
         await notify.error('Error: ' + err.message);
     }
@@ -331,23 +376,74 @@ export async function setupUserLogin(empId) {
     const passwordVal = String(password);
 
     try {
-        const authData = await createAuthUser(emailVal, passwordVal);
+        const authData = await notify.withLoading(async () => {
+            return await createAuthUser(emailVal, passwordVal);
+        }, 'Creating Login', `Provisioning auth account for ${rec.name}...`);
 
         rec.auth_email = emailVal;
         if (authData?.user?.id) rec.auth_id = authData.user.id;
         await saveEmployee(rec);
+        await logActivity({
+            action: 'user.login.setup',
+            entityType: 'employee',
+            entityId: rec.id,
+            details: {
+                employee_name: rec.name,
+                auth_email: emailVal,
+                auth_user_id: authData?.user?.id || null,
+            },
+        });
 
         await notify.success(`Login created for ${rec.name}.\nEmail: ${emailVal}\nTemporary password has been set.\n\nAsk the user to change the password immediately.`);
         renderUserManagement();
+        await renderActivityLog();
     } catch (err) {
         // If user already exists, just update the email
         if (err.message?.includes('already registered') || err.message?.includes('already been registered')) {
             rec.auth_email = emailVal;
             await saveEmployee(rec);
+            await logActivity({
+                action: 'user.login.email_update',
+                entityType: 'employee',
+                entityId: rec.id,
+                details: {
+                    employee_name: rec.name,
+                    auth_email: emailVal,
+                    reason: 'auth_user_exists',
+                },
+            });
             await notify.info(`Email updated for ${rec.name}. User already exists in auth system.`);
             renderUserManagement();
+            await renderActivityLog();
         } else {
             await notify.error('Error creating login: ' + err.message);
         }
     }
+}
+
+async function renderActivityLog() {
+    const tbody = document.getElementById('activity-log-tbody');
+    if (!tbody) return;
+
+    await fetchActivityLogs(120);
+    const logs = state.activityLogs || [];
+    if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No activity logs found.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = '';
+    logs.forEach(log => {
+        const actor = state.db[log.actor_employee_id]?.name || log.actor_employee_id || '-';
+        const details = log.details && typeof log.details === 'object'
+            ? Object.entries(log.details).slice(0, 3).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(' | ')
+            : '-';
+        tbody.innerHTML += `
+      <tr>
+        <td class="small">${escapeHTML(formatDateTime(log.created_at))}</td>
+        <td class="small fw-bold">${escapeHTML(actor)}</td>
+        <td class="small"><span class="badge bg-light text-dark border">${escapeHTML(log.action || '-')}</span></td>
+        <td class="small text-muted">${escapeHTML(details || '-')}</td>
+      </tr>`;
+    });
 }

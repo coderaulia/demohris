@@ -4,8 +4,9 @@
 
 import { Chart } from 'chart.js/auto';
 import { state } from '../lib/store.js';
-import { getDepartment, formatPeriod, escapeHTML, escapeInlineArg, formatNumber } from '../lib/utils.js';
+import { getDepartment, formatPeriod, escapeHTML, escapeInlineArg, formatNumber, toPeriodKey } from '../lib/utils.js';
 import * as notify from '../lib/notify.js';
+import { getFilteredEmployeeIds } from '../lib/reportFilters.js';
 
 let chartDistInstance = null;
 let chartStatusInstance = null;
@@ -31,7 +32,14 @@ export function renderDashboard() {
 // ==================================================
 function renderAssessmentSummary() {
     const { db } = state;
-    const keys = Object.keys(db);
+    let keys = getFilteredEmployeeIds();
+    const selectedPeriod = state.reportFilters?.period || '';
+    if (selectedPeriod) {
+        keys = keys.filter(id => {
+            const rec = db[id];
+            return toPeriodKey(rec?.assessment_updated_at || rec?.date_updated || rec?.date_created) === selectedPeriod;
+        });
+    }
 
     let totalEmp = keys.length;
     let pendingCount = 0, completedCount = 0, totalScore = 0;
@@ -160,19 +168,24 @@ function renderAssessmentSummary() {
 // ==================================================
 function renderKpiSummary() {
     const { kpiRecords, kpiConfig, db } = state;
+    const visibleIds = new Set(getFilteredEmployeeIds());
 
     const today = new Date();
     const currentMonth = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
-
-    const currentQ = Math.floor(today.getMonth() / 3);
+    const selectedMonth = state.reportFilters?.period || currentMonth;
+    const [selYearRaw, selMonthRaw] = selectedMonth.split('-');
+    const selYear = parseInt(selYearRaw || String(today.getFullYear()), 10);
+    const selMonth = parseInt(selMonthRaw || String(today.getMonth() + 1), 10);
+    const currentQ = Math.floor((selMonth - 1) / 3);
     const qPeriods = [
-        today.getFullYear() + '-' + String(currentQ * 3 + 1).padStart(2, '0'),
-        today.getFullYear() + '-' + String(currentQ * 3 + 2).padStart(2, '0'),
-        today.getFullYear() + '-' + String(currentQ * 3 + 3).padStart(2, '0')
+        selYear + '-' + String(currentQ * 3 + 1).padStart(2, '0'),
+        selYear + '-' + String(currentQ * 3 + 2).padStart(2, '0'),
+        selYear + '-' + String(currentQ * 3 + 3).padStart(2, '0')
     ];
 
-    const monthlyRecords = kpiRecords.filter(r => r.period === currentMonth);
-    const quarterlyRecords = kpiRecords.filter(r => qPeriods.includes(r.period));
+    const scopedRecords = kpiRecords.filter(r => visibleIds.has(r.employee_id));
+    const monthlyRecords = scopedRecords.filter(r => r.period === selectedMonth);
+    const quarterlyRecords = scopedRecords.filter(r => qPeriods.includes(r.period));
 
     // KPI Overview Cards (Current Month)
     const totalKpis = kpiConfig.length;
@@ -292,10 +305,12 @@ function renderDeptKpiCards(records) {
     if (!container) return;
 
     const { db, kpiConfig } = state;
+    const filteredIds = new Set(getFilteredEmployeeIds());
 
     // Group employees by department
     const deptMap = {};
     Object.keys(db).forEach(id => {
+        if (!filteredIds.has(id)) return;
         const emp = db[id];
         const dept = emp.department || 'Other';
         if (!deptMap[dept]) deptMap[dept] = [];
@@ -342,6 +357,10 @@ function renderDeptKpiCards(records) {
 
     const sortedDepts = Object.keys(deptStats).sort();
     container.innerHTML = '';
+    if (sortedDepts.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center text-muted small py-3 fst-italic">No department data for current filters.</div>';
+        return;
+    }
 
     sortedDepts.forEach((dept, i) => {
         const st = deptStats[dept];
@@ -386,9 +405,10 @@ export function openDeptKpiModal(dept) {
     const { db, kpiRecords } = state;
 
     _currentDeptName = dept;
+    const filteredIds = new Set(getFilteredEmployeeIds());
 
     // Get employees in this department
-    _currentDeptEmpIds = Object.keys(db).filter(id => db[id].department === dept);
+    _currentDeptEmpIds = Object.keys(db).filter(id => db[id].department === dept && filteredIds.has(id));
     _currentDeptRecords = kpiRecords.filter(r => _currentDeptEmpIds.includes(r.employee_id));
 
     // Get unique months in the department records + current month

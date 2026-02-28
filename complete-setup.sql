@@ -26,6 +26,10 @@ ON CONFLICT (key) DO NOTHING;
 DO $$ BEGIN
   ALTER TABLE employees ADD COLUMN IF NOT EXISTS auth_email TEXT;
   ALTER TABLE employees ADD COLUMN IF NOT EXISTS kpi_targets JSONB DEFAULT '{}'::jsonb;
+  ALTER TABLE employees ADD COLUMN IF NOT EXISTS assessment_updated_by TEXT;
+  ALTER TABLE employees ADD COLUMN IF NOT EXISTS assessment_updated_at TIMESTAMPTZ;
+  ALTER TABLE employees ADD COLUMN IF NOT EXISTS self_assessment_updated_by TEXT;
+  ALTER TABLE employees ADD COLUMN IF NOT EXISTS self_assessment_updated_at TIMESTAMPTZ;
 EXCEPTION WHEN others THEN NULL;
 END $$;
 
@@ -68,12 +72,37 @@ CREATE TABLE IF NOT EXISTS kpi_records (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE kpi_records
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS updated_by TEXT;
+
+CREATE TABLE IF NOT EXISTS admin_activity_log (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  actor_employee_id TEXT REFERENCES employees(employee_id) ON DELETE SET NULL,
+  actor_role TEXT,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL DEFAULT 'general',
+  entity_id TEXT,
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$ BEGIN
+  ALTER TABLE admin_activity_log ALTER COLUMN actor_employee_id DROP NOT NULL;
+  ALTER TABLE admin_activity_log DROP CONSTRAINT IF EXISTS admin_activity_log_actor_employee_id_fkey;
+  ALTER TABLE admin_activity_log
+    ADD CONSTRAINT admin_activity_log_actor_employee_id_fkey
+    FOREIGN KEY (actor_employee_id) REFERENCES employees(employee_id) ON DELETE SET NULL;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
 -- 3. RLS — role-aware policies (superadmin / manager / employee)
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE competency_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE kpi_definitions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE kpi_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_activity_log ENABLE ROW LEVEL SECURITY;
 
 -- Helper functions for policy checks
 CREATE OR REPLACE FUNCTION auth_employee_id()
@@ -301,6 +330,27 @@ USING (
       )
   )
 );
+
+-- Activity Log
+DROP POLICY IF EXISTS "Read activity logs by leadership" ON admin_activity_log;
+DROP POLICY IF EXISTS "Insert own activity logs" ON admin_activity_log;
+DROP POLICY IF EXISTS "Superadmin manage activity logs" ON admin_activity_log;
+
+CREATE POLICY "Read activity logs by leadership"
+ON admin_activity_log FOR SELECT TO authenticated
+USING (
+  is_manager()
+  OR actor_employee_id = auth_employee_id()
+);
+
+CREATE POLICY "Insert own activity logs"
+ON admin_activity_log FOR INSERT TO authenticated
+WITH CHECK (actor_employee_id = auth_employee_id());
+
+CREATE POLICY "Superadmin manage activity logs"
+ON admin_activity_log FOR ALL TO authenticated
+USING (is_superadmin())
+WITH CHECK (is_superadmin());
 -- 4. INDEXES
 CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(department);
 CREATE INDEX IF NOT EXISTS idx_employees_auth_id ON employees(auth_id);
@@ -308,6 +358,9 @@ CREATE INDEX IF NOT EXISTS idx_employees_auth_email ON employees(auth_email);
 CREATE INDEX IF NOT EXISTS idx_kpi_records_employee ON kpi_records(employee_id);
 CREATE INDEX IF NOT EXISTS idx_kpi_records_period ON kpi_records(period);
 CREATE INDEX IF NOT EXISTS idx_kpi_records_kpi_id ON kpi_records(kpi_id);
+CREATE INDEX IF NOT EXISTS idx_kpi_records_updated_at ON kpi_records(updated_at);
+CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON admin_activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_log_actor ON admin_activity_log(actor_employee_id);
 
 -- 5. TRIGGERS
 CREATE OR REPLACE FUNCTION update_modified_column()
@@ -351,6 +404,9 @@ CREATE TRIGGER update_kpi_defs_modtime BEFORE UPDATE ON kpi_definitions FOR EACH
 
 DROP TRIGGER IF EXISTS update_settings_modtime ON app_settings;
 CREATE TRIGGER update_settings_modtime BEFORE UPDATE ON app_settings FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+DROP TRIGGER IF EXISTS update_kpi_records_modtime ON kpi_records;
+CREATE TRIGGER update_kpi_records_modtime BEFORE UPDATE ON kpi_records FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
 
 -- ==================================================

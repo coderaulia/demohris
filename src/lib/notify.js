@@ -12,27 +12,41 @@ function fire(options = {}) {
     return Swal.fire({ ...defaults, ...options });
 }
 
+const toast = Swal.mixin({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 2800,
+    timerProgressBar: true,
+    heightAuto: false,
+});
+
 export async function success(message, title = 'Success') {
-    return fire({ icon: 'success', title, text: message });
+    toast.fire({ icon: 'success', title, text: message });
+    return true;
 }
 
 export async function info(message, title = 'Information') {
-    return fire({ icon: 'info', title, text: message });
+    toast.fire({ icon: 'info', title, text: message });
+    return true;
 }
 
 export async function warn(message, title = 'Warning') {
-    return fire({ icon: 'warning', title, text: message });
+    toast.fire({ icon: 'warning', title, text: message });
+    return true;
 }
 
 export async function error(message, title = 'Error') {
-    return fire({ icon: 'error', title, text: message });
+    toast.fire({ icon: 'error', title, text: message, timer: 4500 });
+    return true;
 }
 
 export async function confirm(message, options = {}) {
     const result = await fire({
         icon: options.icon || 'warning',
         title: options.title || 'Please Confirm',
-        text: message,
+        text: options.html ? undefined : message,
+        html: options.html || undefined,
         showCancelButton: true,
         confirmButtonText: options.confirmButtonText || 'Yes',
         cancelButtonText: options.cancelButtonText || 'Cancel',
@@ -70,4 +84,30 @@ export async function input(options = {}) {
 
     if (!result.isConfirmed) return null;
     return result.value;
+}
+
+export function showLoading(title = 'Please wait...', text = 'Processing request...') {
+    Swal.fire({
+        title,
+        text,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => {
+            Swal.showLoading();
+        },
+    });
+}
+
+export function hideLoading() {
+    Swal.close();
+}
+
+export async function withLoading(task, title = 'Please wait...', text = 'Processing request...') {
+    showLoading(title, text);
+    try {
+        return await task();
+    } finally {
+        hideLoading();
+    }
 }

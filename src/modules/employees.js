@@ -5,7 +5,7 @@
 
 import { state, emit, isAdmin } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg, getInputValue, getDepartment, safeCSV } from '../lib/utils.js';
-import { saveEmployee, deleteEmployee as deleteEmpFromDB } from './data.js';
+import { saveEmployee, deleteEmployee as deleteEmpFromDB, logActivity } from './data.js';
 import * as notify from '../lib/notify.js';
 
 export function renderEmployeeManager() {
@@ -140,6 +140,7 @@ export async function saveEmployeeData() {
         self_scores: [], self_percentage: 0, self_date: '',
         kpi_targets: {}
     };
+    const oldSnapshot = isEdit ? { ...rec } : null;
 
     rec.name = name;
     rec.position = pos;
@@ -150,8 +151,29 @@ export async function saveEmployeeData() {
     rec.auth_email = authEmail;
     rec.role = role;
 
-    state.db[id] = rec;
-    await saveEmployee(rec);
+    await notify.withLoading(async () => {
+        state.db[id] = rec;
+        await saveEmployee(rec);
+    }, isEdit ? 'Updating Employee' : 'Adding Employee', 'Saving employee data...');
+
+    await logActivity({
+        action: isEdit ? 'employee.update' : 'employee.create',
+        entityType: 'employee',
+        entityId: rec.id,
+        details: {
+            employee_name: rec.name,
+            old: oldSnapshot ? {
+                role: oldSnapshot.role,
+                department: oldSnapshot.department,
+                manager_id: oldSnapshot.manager_id,
+            } : null,
+            next: {
+                role: rec.role,
+                department: rec.department,
+                manager_id: rec.manager_id,
+            },
+        },
+    });
 
     await notify.success(isEdit ? 'Employee Updated!' : 'Employee Added!');
     resetEmployeeForm();
@@ -209,7 +231,20 @@ export function resetEmployeeForm() {
 export async function deleteEmployeeData(id) {
     if (!isAdmin()) { await notify.error('Access Denied'); return; }
     if (await notify.confirm(`Delete ${state.db[id]?.name}? This removes all their data.`, { confirmButtonText: 'Delete' })) {
-        await deleteEmpFromDB(id);
+        const deleted = state.db[id];
+        await notify.withLoading(async () => {
+            await deleteEmpFromDB(id);
+        }, 'Deleting Employee', 'Removing employee record...');
+        await logActivity({
+            action: 'employee.delete',
+            entityType: 'employee',
+            entityId: id,
+            details: {
+                employee_name: deleted?.name || id,
+                role: deleted?.role || '-',
+                department: deleted?.department || '-',
+            },
+        });
         renderEmployeeManager();
     }
 }
@@ -241,43 +276,143 @@ export async function importEmployeeCSV(input) {
 
     const reader = new FileReader();
     reader.onload = async function (e) {
-        const lines = e.target.result.split(/\r\n|\n/);
-        let count = 0;
-        let startRow = lines[0]?.toLowerCase().includes('id') ? 1 : 0;
+        try {
+            const text = String(e.target.result || '');
+            const lines = text.split(/\r\n|\n/);
+            const startRow = lines[0]?.toLowerCase().includes('id') ? 1 : 0;
+            const validRoles = new Set(['employee', 'manager', 'superadmin']);
+            const ops = [];
+            const errors = [];
+            const warnings = [];
+            const seen = new Set();
 
-        for (let i = startRow; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
+            for (let i = startRow; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
 
-            const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.replace(/^"|"$/g, '').trim());
-
-            if (parts.length >= 2) {
+                const rowNo = i + 1;
+                const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.replace(/^"|"$/g, '').trim());
                 const id = parts[0];
-                const existing = state.db[id] || {
+                const name = parts[1];
+                if (!id || !name) {
+                    errors.push(`Row ${rowNo}: ID and Name are required.`);
+                    continue;
+                }
+                if (seen.has(id)) {
+                    warnings.push(`Row ${rowNo}: Duplicate ID "${id}" in import file (latest row will be used).`);
+                }
+                seen.add(id);
+
+                const role = (parts[7] || 'employee').toLowerCase();
+                if (!validRoles.has(role)) {
+                    errors.push(`Row ${rowNo}: Invalid role "${parts[7]}".`);
+                    continue;
+                }
+
+                const authEmail = parts[8] || '';
+                if (authEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail)) {
+                    errors.push(`Row ${rowNo}: Invalid email "${authEmail}".`);
+                    continue;
+                }
+
+                const existing = state.db[id] ? { ...state.db[id] } : {
                     id, percentage: 0, scores: [], history: [], training_history: [],
                     date_created: '-', date_updated: '-', date_next: '-',
                     self_scores: [], self_percentage: 0, self_date: '',
-                    kpi_targets: {}
+                    kpi_targets: {},
                 };
 
-                existing.name = parts[1];
+                existing.name = name;
                 existing.position = parts[2] || '';
                 existing.seniority = parts[3] || 'Junior';
                 existing.join_date = parts[4] || '';
                 existing.department = parts[5] || getDepartment(existing.position);
                 existing.manager_id = parts[6] || '';
-                existing.role = parts[7] || 'employee';
-                existing.auth_email = parts[8] || '';
+                existing.role = role;
+                existing.auth_email = authEmail;
 
-                state.db[id] = existing;
-                await saveEmployee(existing);
-                count++;
+                ops.push({
+                    id,
+                    rec: existing,
+                    isNew: !state.db[id],
+                });
             }
-        }
 
-        renderEmployeeManager();
-        await notify.success(`Imported ${count} employees successfully!`);
-        input.value = '';
+            if (errors.length > 0) {
+                await notify.error(`Import validation failed:\n${errors.slice(0, 6).join('\n')}${errors.length > 6 ? `\n...and ${errors.length - 6} more error(s)` : ''}`);
+                input.value = '';
+                return;
+            }
+
+            const knownIds = new Set([...Object.keys(state.db), ...ops.map(x => x.id)]);
+            ops.forEach(op => {
+                if (op.rec.manager_id && !knownIds.has(op.rec.manager_id)) {
+                    warnings.push(`Employee ${op.id}: manager_id "${op.rec.manager_id}" not found.`);
+                }
+            });
+
+            const inserts = ops.filter(x => x.isNew).length;
+            const updates = ops.length - inserts;
+            const previewRows = ops.slice(0, 10).map(op => `
+                <tr>
+                    <td>${escapeHTML(op.rec.id)}</td>
+                    <td>${escapeHTML(op.rec.name)}</td>
+                    <td>${escapeHTML(op.rec.department || '-')}</td>
+                    <td>${escapeHTML(op.rec.role || 'employee')}</td>
+                    <td><span class="badge ${op.isNew ? 'bg-success' : 'bg-warning text-dark'}">${op.isNew ? 'New' : 'Update'}</span></td>
+                </tr>
+            `).join('');
+
+            const proceed = await notify.confirm('', {
+                title: 'Confirm Employee Import',
+                confirmButtonText: 'Import Now',
+                cancelButtonText: 'Cancel',
+                html: `
+                    <div class="text-start small">
+                        <div class="mb-2"><strong>Total rows:</strong> ${ops.length}</div>
+                        <div class="mb-2"><strong>New:</strong> ${inserts} | <strong>Updates:</strong> ${updates}</div>
+                        <div class="mb-2"><strong>Warnings:</strong> ${warnings.length}</div>
+                        ${warnings.length > 0 ? `<div class="alert alert-warning py-2 mb-2">${escapeHTML(warnings.slice(0, 3).join(' | '))}${warnings.length > 3 ? ' ...' : ''}</div>` : ''}
+                        <div class="table-responsive" style="max-height:220px;">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Role</th><th>Status</th></tr></thead>
+                                <tbody>${previewRows || '<tr><td colspan="5" class="text-center text-muted">No rows</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                `,
+            });
+            if (!proceed) {
+                input.value = '';
+                return;
+            }
+
+            await notify.withLoading(async () => {
+                for (const op of ops) {
+                    state.db[op.id] = op.rec;
+                    await saveEmployee(op.rec);
+                }
+            }, 'Importing Employees', 'Applying validated rows...');
+
+            await logActivity({
+                action: 'employee.import.csv',
+                entityType: 'employee',
+                entityId: 'bulk',
+                details: {
+                    total: ops.length,
+                    inserted: inserts,
+                    updated: updates,
+                    warnings: warnings.length,
+                },
+            });
+
+            renderEmployeeManager();
+            await notify.success(`Imported ${ops.length} employees successfully!`);
+        } catch (err) {
+            await notify.error('Import failed: ' + err.message);
+        } finally {
+            input.value = '';
+        }
     };
     reader.readAsText(file);
 }

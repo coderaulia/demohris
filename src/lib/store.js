@@ -7,7 +7,13 @@ export const state = {
     appConfig: {},    // Competency config { positionName: { competencies: [...] } }
     kpiConfig: [],    // KPI definitions
     kpiRecords: [],   // KPI records
+    activityLogs: [], // Admin/activity logs
     appSettings: {},  // App settings { app_name, company_name, ... }
+    reportFilters: {
+        department: '',
+        manager_id: '',
+        period: '',
+    },
     currentUser: null,
     currentSession: {},
 };
@@ -23,6 +29,15 @@ export function emit(event, data) {
     if (listeners[event]) {
         listeners[event].forEach(fn => fn(data));
     }
+}
+
+export function setReportFilters(partial = {}) {
+    state.reportFilters = {
+        ...state.reportFilters,
+        ...partial,
+    };
+    emit('filters:report', state.reportFilters);
+    return state.reportFilters;
 }
 
 // Helper to check permissions

@@ -21,6 +21,7 @@ This system replaces older, disconnected spreadsheets by centralizing authentica
 ### **3. Robust Analytics Dashboard**
 - **Actionable Insights:** Tracks overall organizational skill averages, highest/lowest-scoring groups, and KPI top performers continuously.
 - **Data Exporting:** Every table and visualization can be instantly exported to Excel (`.xlsx`) or PDF.
+- **Traceability:** Activity logs track admin-sensitive changes and KPI/assessment edits with actor + timestamp metadata.
 
 ---
 
@@ -30,7 +31,7 @@ This system replaces older, disconnected spreadsheets by centralizing authentica
 - **Bundler:** Vite
 - **Backend & Database:** Supabase (PostgreSQL + Auth)
 - **Charting Engine:** Chart.js
-- **PDF/Excel Exporting:** jspdf + xlsx
+- **PDF/Excel Exporting:** jspdf + exceljs
 
 ### Project Structure
 ```text
@@ -133,6 +134,7 @@ Add these secrets:
 - `HOSTINGER_FTP_REMOTE_DIR` (example: `/public_html/`)
 - `VITE_SUPABASE_URL` (example: `https://your-project-id.supabase.co`)
 - `VITE_SUPABASE_ANON_KEY` (your Supabase anon public key)
+- `SUPABASE_DB_URL` (for scheduled backup workflow, format: `postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`)
 
 ### 2) Push to `main`
 
@@ -143,6 +145,18 @@ Every push to `main` will automatically deploy the latest `dist/` build to your 
 - Ensure FTP account has write access to your target directory.
 - Ensure `HOSTINGER_FTP_REMOTE_DIR` points to the correct site root (for most cases: `/public_html/`).
 - If your repo default branch is not `main`, change the branch in `.github/workflows/deploy-hostinger.yml`.
+
+### 4) Scheduled Supabase backup/export
+
+This repository includes `.github/workflows/supabase-backup.yml`:
+
+- Trigger: every Sunday (`02:00 UTC`) and manual trigger from Actions tab.
+- Output: compressed database dump (`.dump`), plain SQL (`.sql`), and activity log CSV artifact (if table exists).
+- Retention: 30 days in GitHub Action artifacts.
+
+Required secret:
+
+- `SUPABASE_DB_URL`
 
 ---
 

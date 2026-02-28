@@ -93,3 +93,20 @@ export function formatPeriod(period) {
     }
     return period;
 }
+
+export function toPeriodKey(value) {
+    if (!value || value === '-') return '';
+    const raw = String(value).trim();
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(raw)) return raw;
+
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function formatDateTime(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString();
+}

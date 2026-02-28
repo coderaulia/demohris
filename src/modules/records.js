@@ -4,10 +4,11 @@
 
 import { Chart } from 'chart.js/auto';
 import { state, emit, isAdmin, isEmployee, isManager } from '../lib/store.js';
-import { escapeHTML, escapeInlineArg, getDisplayDate } from '../lib/utils.js';
-import { saveEmployee } from './data.js';
+import { escapeHTML, escapeInlineArg, getDisplayDate, toPeriodKey } from '../lib/utils.js';
+import { saveEmployee, logActivity } from './data.js';
 import { startAssessment, renderPendingList, initiateSelfAssessment as _initSelfAssess } from './assessment.js';
 import * as notify from '../lib/notify.js';
+import { getFilteredEmployeeIds } from '../lib/reportFilters.js';
 
 let competencyChart = null;
 let historyChart = null;
@@ -23,19 +24,21 @@ export function renderRecordsTable(filterKeys = null) {
     const { currentUser, db } = state;
     if (!currentUser) return;
 
-    let keys = filterKeys ? filterKeys : Object.keys(db);
-
-    if (currentUser.role === 'manager') {
-        const mgrRec = db[currentUser.id];
-        if (mgrRec && mgrRec.department) {
-            keys = keys.filter(id => db[id].department === mgrRec.department);
-        } else {
-            keys = keys.filter(id => db[id].manager_id === currentUser.id);
-        }
-    } else if (currentUser.role === 'employee') {
-        keys = keys.filter(id => id == currentUser.id);
+    const scopedSet = new Set(getFilteredEmployeeIds());
+    let keys = Object.keys(db).filter(id => scopedSet.has(id));
+    if (filterKeys) {
+        const filterSet = new Set(filterKeys);
+        keys = keys.filter(id => filterSet.has(id));
     }
-    // superadmin sees all
+
+    const periodFilter = state.reportFilters?.period || '';
+    if (periodFilter) {
+        keys = keys.filter(id => {
+            const rec = db[id];
+            const period = toPeriodKey(rec.assessment_updated_at || rec.date_updated || rec.date_created);
+            return period === periodFilter;
+        });
+    }
 
     if (keys.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No records found.</td></tr>';
@@ -109,7 +112,8 @@ export function renderRecordsTable(filterKeys = null) {
           <span class="badge ${levelClass}">${escapeHTML(seniorTxt)}</span>
         </td>
         <td>
-          <div class="small">${escapeHTML(rec.date_created || rec.date || '-')}</div>
+          <div class="small">${escapeHTML(getDisplayDate(rec.assessment_updated_at || rec.date_updated || rec.date_created || rec.date || '-'))}</div>
+          <div class="text-muted" style="font-size:11px;">by ${escapeHTML(state.db[rec.assessment_updated_by]?.name || rec.assessment_updated_by || '-')}</div>
         </td>
         <td>
           <span class="badge ${badgeColor}">${pct > 0 ? pct + '%' : 'N/A'}</span>
@@ -388,7 +392,9 @@ export async function saveTrainingLog() {
         rec.training_history[editingTrainingIndex] = newItem;
     }
 
-    await saveEmployee(rec);
+    await notify.withLoading(async () => {
+        await saveEmployee(rec);
+    }, 'Saving Training Log', 'Updating training history...');
     renderTrainingHistory();
     resetTrainingForm();
 
@@ -400,7 +406,9 @@ export async function saveTrainingLog() {
 export async function approveTraining(index) {
     const rec = state.db[currentTrainingId];
     rec.training_history[index].status = 'approved';
-    await saveEmployee(rec);
+    await notify.withLoading(async () => {
+        await saveEmployee(rec);
+    }, 'Approving Training', 'Updating training status...');
     renderTrainingHistory();
 }
 
@@ -424,7 +432,9 @@ export async function deleteTrainingItem(index) {
     if (!(await notify.confirm('Remove this item?', { confirmButtonText: 'Remove' }))) return;
     const rec = state.db[currentTrainingId];
     rec.training_history.splice(index, 1);
-    await saveEmployee(rec);
+    await notify.withLoading(async () => {
+        await saveEmployee(rec);
+    }, 'Removing Training Item', 'Updating training history...');
     renderTrainingHistory();
 }
 
@@ -464,7 +474,9 @@ export function toggleOngoing() {
 
 export function searchRecords() {
     const term = document.getElementById('search-input')?.value?.toLowerCase() || '';
+    const scoped = new Set(getFilteredEmployeeIds());
     const keys = Object.keys(state.db).filter(id => {
+        if (!scoped.has(id)) return false;
         const rec = state.db[id];
         return rec.name.toLowerCase().includes(term) || rec.id.toLowerCase().includes(term) || rec.position.toLowerCase().includes(term);
     });
@@ -483,8 +495,20 @@ export async function deleteRecordSafe(id) {
         rec.percentage = 0; rec.scores = []; rec.history = [];
         rec.self_scores = []; rec.self_percentage = 0; rec.self_date = '';
         rec.date_created = '-'; rec.date_updated = '-'; rec.date_next = '-';
+        rec.assessment_updated_at = new Date().toISOString();
+        rec.assessment_updated_by = state.currentUser?.id || '';
         state.db[id] = rec;
-        await saveEmployee(rec);
+        await notify.withLoading(async () => {
+            await saveEmployee(rec);
+        }, 'Deleting Assessment', 'Removing assessment record...');
+        await logActivity({
+            action: 'assessment.delete',
+            entityType: 'assessment',
+            entityId: id,
+            details: {
+                employee_name: rec.name,
+            },
+        });
         renderRecordsTable();
         await notify.success('Assessment deleted.');
     }
