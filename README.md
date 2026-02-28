@@ -44,7 +44,7 @@ TNA/
 ├── index.html               ← Application Entry Point
 ├── vite.config.js           ← Vite Bundler Configurations
 ├── package.json             ← Project Dependencies
-├── supabase-schema.sql      ← Complete Supabase Database Architecture
+├── complete-setup.sql       ← Complete Supabase Database Architecture
 ├── src/
 │   ├── main.js              ← Core Routing, Event Wirings, and Initializer
 │   ├── lib/
