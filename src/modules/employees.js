@@ -6,6 +6,7 @@
 import { state, emit, isAdmin } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg, getInputValue, getDepartment, safeCSV } from '../lib/utils.js';
 import { saveEmployee, deleteEmployee as deleteEmpFromDB } from './data.js';
+import * as notify from '../lib/notify.js';
 
 export function renderEmployeeManager() {
     const { appConfig, db, currentUser } = state;
@@ -110,7 +111,7 @@ export function renderEmployeeManager() {
 }
 
 export async function saveEmployeeData() {
-    if (!isAdmin()) { alert('Access Denied. Superadmin only.'); return; }
+    if (!isAdmin()) { await notify.error('Access Denied. Superadmin only.'); return; }
 
     const id = document.getElementById('emp-id').value.trim();
     const name = document.getElementById('emp-name').value.trim();
@@ -124,12 +125,12 @@ export async function saveEmployeeData() {
     const role = document.getElementById('emp-role')?.value || 'employee';
 
     if (!id || !name || !pos || !joinDate) {
-        alert('Please fill in ID, Name, Position, and Join Date.');
+        await notify.warn('Please fill in ID, Name, Position, and Join Date.');
         return;
     }
 
     if (!isEdit && state.db[id]) {
-        alert('ID ' + id + ' already exists.');
+        await notify.warn('ID ' + id + ' already exists.');
         return;
     }
 
@@ -152,7 +153,7 @@ export async function saveEmployeeData() {
     state.db[id] = rec;
     await saveEmployee(rec);
 
-    alert(isEdit ? 'Employee Updated!' : 'Employee Added!');
+    await notify.success(isEdit ? 'Employee Updated!' : 'Employee Added!');
     resetEmployeeForm();
     renderEmployeeManager();
 }
@@ -206,8 +207,8 @@ export function resetEmployeeForm() {
 }
 
 export async function deleteEmployeeData(id) {
-    if (!isAdmin()) { alert('Access Denied'); return; }
-    if (confirm(`Delete ${state.db[id]?.name}? This removes all their data.`)) {
+    if (!isAdmin()) { await notify.error('Access Denied'); return; }
+    if (await notify.confirm(`Delete ${state.db[id]?.name}? This removes all their data.`, { confirmButtonText: 'Delete' })) {
         await deleteEmpFromDB(id);
         renderEmployeeManager();
     }
@@ -234,7 +235,7 @@ export function exportEmployeeCSV() {
 }
 
 export async function importEmployeeCSV(input) {
-    if (!isAdmin()) { alert('Access Denied'); return; }
+    if (!isAdmin()) { await notify.error('Access Denied'); return; }
     const file = input.files[0];
     if (!file) return;
 
@@ -275,7 +276,7 @@ export async function importEmployeeCSV(input) {
         }
 
         renderEmployeeManager();
-        alert(`Imported ${count} employees successfully!`);
+        await notify.success(`Imported ${count} employees successfully!`);
         input.value = '';
     };
     reader.readAsText(file);

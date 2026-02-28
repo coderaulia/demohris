@@ -6,6 +6,7 @@
 import { state, emit, isAdmin } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg, debugError } from '../lib/utils.js';
 import { saveConfig, deleteConfig } from './data.js';
+import * as notify from '../lib/notify.js';
 
 let editingPosition = null; // Track which position is being edited
 
@@ -151,29 +152,29 @@ export function loadPositionForEdit(posName) {
 
 // ---- SAVE POSITION CONFIG ----
 export async function savePositionConfig() {
-    if (!isAdmin()) { alert('Access Denied'); return; }
+    if (!isAdmin()) { await notify.error('Access Denied'); return; }
 
     const posName = document.getElementById('admin-pos-name').value.trim();
-    if (!posName) { alert('Please enter a Position Name.'); return; }
+    if (!posName) { await notify.warn('Please enter a Position Name.'); return; }
 
     const competencies = collectCompetenciesFromEditor();
-    if (competencies.length === 0) { alert('Please add at least one competency.'); return; }
+    if (competencies.length === 0) { await notify.warn('Please add at least one competency.'); return; }
 
     try {
         await saveConfig(posName, competencies);
-        alert(`Configuration saved! ${competencies.length} competencies for "${posName}".`);
+        await notify.success(`Configuration saved! ${competencies.length} competencies for "${posName}".`);
         editingPosition = posName;
         renderAdminList();
         renderCompetencyEditor(); // Re-render to show clean state
     } catch (err) {
-        alert('Error: ' + err.message);
+        await notify.error('Error: ' + err.message);
     }
 }
 
 // ---- DELETE POSITION CONFIG ----
 export async function deletePositionConfig(posName) {
     if (!isAdmin()) return;
-    if (confirm(`Delete configuration for "${posName}"?`)) {
+    if (await notify.confirm(`Delete configuration for "${posName}"?`, { confirmButtonText: 'Delete' })) {
         await deleteConfig(posName);
         if (editingPosition === posName) clearAdminForm();
         renderAdminList();
@@ -208,7 +209,7 @@ export function triggerConfigImport() {
 }
 
 export async function importConfigJSON(input) {
-    if (!isAdmin()) { alert('Access Denied'); return; }
+    if (!isAdmin()) { await notify.error('Access Denied'); return; }
     const file = input.files[0];
     if (!file) return;
 
@@ -222,9 +223,9 @@ export async function importConfigJSON(input) {
                 count++;
             }
             renderAdminList();
-            alert(`Imported ${count} position configs successfully!`);
+            await notify.success(`Imported ${count} position configs successfully!`);
         } catch (err) {
-            alert('Invalid JSON file.');
+            await notify.error('Invalid JSON file.');
             debugError(err);
         }
         input.value = '';

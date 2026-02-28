@@ -7,6 +7,7 @@ import { state, emit, isAdmin, isEmployee, isManager } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg, getDisplayDate } from '../lib/utils.js';
 import { saveEmployee } from './data.js';
 import { startAssessment, renderPendingList, initiateSelfAssessment as _initSelfAssess } from './assessment.js';
+import * as notify from '../lib/notify.js';
 
 let competencyChart = null;
 let historyChart = null;
@@ -373,7 +374,7 @@ export async function saveTrainingLog() {
     let end = document.getElementById('t-date-end').value;
     const isOngoing = document.getElementById('t-ongoing').checked;
 
-    if (!course) { alert('Please enter a course name.'); return; }
+    if (!course) { await notify.warn('Please enter a course name.'); return; }
     if (isOngoing) end = '';
     if (!rec.training_history) rec.training_history = [];
 
@@ -392,7 +393,7 @@ export async function saveTrainingLog() {
     resetTrainingForm();
 
     if (isEmployee() && editingTrainingIndex === -1) {
-        alert('Training Request submitted to Manager.');
+        await notify.success('Training Request submitted to Manager.');
     }
 }
 
@@ -420,7 +421,7 @@ export function editTrainingItem(index) {
 }
 
 export async function deleteTrainingItem(index) {
-    if (!confirm('Remove this item?')) return;
+    if (!(await notify.confirm('Remove this item?', { confirmButtonText: 'Remove' }))) return;
     const rec = state.db[currentTrainingId];
     rec.training_history.splice(index, 1);
     await saveEmployee(rec);
@@ -475,24 +476,25 @@ export function closeReport() {
 }
 
 export async function deleteRecordSafe(id) {
-    if (!isAdmin()) { alert('Access Denied'); return; }
+    if (!isAdmin()) { await notify.error('Access Denied'); return; }
     const rec = state.db[id];
     if (!rec) return;
-    if (confirm(`Delete assessment results for ${rec.name}?`)) {
+    if (await notify.confirm(`Delete assessment results for ${rec.name}?`, { confirmButtonText: 'Delete' })) {
         rec.percentage = 0; rec.scores = []; rec.history = [];
         rec.self_scores = []; rec.self_percentage = 0; rec.self_date = '';
         rec.date_created = '-'; rec.date_updated = '-'; rec.date_next = '-';
         state.db[id] = rec;
         await saveEmployee(rec);
         renderRecordsTable();
-        alert('Assessment deleted.');
+        await notify.success('Assessment deleted.');
     }
 }
 
-export function editRecordSafe(id) {
-    if (isEmployee()) { alert('Access Denied'); return; }
+export async function editRecordSafe(id) {
+    if (isEmployee()) { await notify.error('Access Denied'); return; }
     const rec = state.db[id];
-    if (!rec || !confirm(`Edit assessment for ${rec.name}?`)) return;
+    if (!rec) return;
+    if (!(await notify.confirm(`Edit assessment for ${rec.name}?`, { confirmButtonText: 'Edit' }))) return;
 
     state.currentSession = JSON.parse(JSON.stringify(rec));
     state.currentSession.isEditing = true;
@@ -503,7 +505,7 @@ export function editRecordSafe(id) {
     document.getElementById('inp-join-date').value = rec.join_date || '';
 
     emit('nav:switchTab', 'tab-assessment');
-    startAssessment();
+    await startAssessment();
 }
 
 export function initiateSelfAssessment(id) {

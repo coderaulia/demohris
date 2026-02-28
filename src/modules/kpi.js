@@ -5,6 +5,7 @@
 import { state, emit } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg, formatPeriod, formatNumber, debugError } from '../lib/utils.js';
 import { saveKpiDefinition, deleteKpiDefinition, saveKpiRecord, deleteKpiRecord, fetchKpiRecords } from './data.js';
+import * as notify from '../lib/notify.js';
 
 // ---- RENDER KPI SETTINGS TAB ----
 export function renderKpiManager() {
@@ -167,9 +168,9 @@ export async function saveKpiTargets() {
         try {
             const { saveEmployee } = await import('./data.js');
             await saveEmployee(emp);
-            alert('Employee personalized KPI targets saved successfully!');
+            await notify.success('Employee personalized KPI targets saved successfully!');
         } catch (e) {
-            alert('Error saving custom targets: ' + e.message);
+            await notify.error('Error saving custom targets: ' + e.message);
         }
     }
 }
@@ -177,10 +178,10 @@ export async function saveKpiTargets() {
 // ---- START KPI INPUT (from Assessment Tab) ----
 export function startKpiInput() {
     const targetId = document.getElementById('inp-id')?.value?.trim();
-    if (!targetId) { alert('Error: No Employee ID identified.'); return; }
+    if (!targetId) { notify.error('Error: No Employee ID identified.'); return; }
 
     const rec = state.db[targetId];
-    if (!rec) { alert('Employee Record not found in database.'); return; }
+    if (!rec) { notify.error('Employee Record not found in database.'); return; }
 
     document.getElementById('step-login').classList.add('hidden');
     document.getElementById('step-kpi-input').classList.remove('hidden');
@@ -343,7 +344,7 @@ export async function submitKpiRecord() {
     const notes = document.getElementById('kpi-notes')?.value?.trim() || '';
 
     if (!empId || !kpiId || !period || isNaN(value)) {
-        alert('Please fill in all required fields.');
+        await notify.warn('Please fill in all required fields.');
         return;
     }
 
@@ -359,7 +360,7 @@ export async function submitKpiRecord() {
 
     try {
         await saveKpiRecord(record);
-        alert('KPI record saved successfully!');
+        await notify.success('KPI record saved successfully!');
 
         // Clear form
         document.getElementById('kpi-value').value = '';
@@ -371,7 +372,7 @@ export async function submitKpiRecord() {
         renderKpiHistory();
         startKpiInput(); // Refresh target history
     } catch (err) {
-        alert('Error saving KPI record: ' + err.message);
+        await notify.error('Error saving KPI record: ' + err.message);
     }
 }
 
@@ -383,7 +384,7 @@ export async function saveKpiDef() {
     const target = parseFloat(document.getElementById('kpi-def-target')?.value) || 0;
     const unit = document.getElementById('kpi-def-unit')?.value?.trim() || '';
 
-    if (!name) { alert('Please enter a KPI name.'); return; }
+    if (!name) { await notify.warn('Please enter a KPI name.'); return; }
 
     const editingId = document.getElementById('kpi-def-edit-id')?.value;
 
@@ -394,11 +395,11 @@ export async function saveKpiDef() {
 
     try {
         await saveKpiDefinition(kpi);
-        alert('KPI Definition saved!');
+        await notify.success('KPI Definition saved!');
         clearKpiDefForm();
         renderKpiManager();
     } catch (err) {
-        alert('Error saving KPI: ' + err.message);
+        await notify.error('Error saving KPI: ' + err.message);
     }
 }
 
@@ -437,61 +438,74 @@ export function copyKpiDef(id) {
 }
 
 export async function removeKpiDef(id) {
-    if (!confirm('Delete this KPI definition?')) return;
+    if (!(await notify.confirm('Delete this KPI definition?', { confirmButtonText: 'Delete' }))) return;
     try {
         await deleteKpiDefinition(id);
         renderKpiManager();
     } catch (err) {
-        alert('Error: ' + err.message);
+        await notify.error('Error: ' + err.message);
     }
 }
 
 export async function removeKpiRecord(id) {
-    if (!confirm('Delete this KPI record?')) return;
+    if (!(await notify.confirm('Delete this KPI record?', { confirmButtonText: 'Delete' }))) return;
     try {
         await deleteKpiRecord(id);
         renderKpiHistory();
     } catch (err) {
-        alert('Error: ' + err.message);
+        await notify.error('Error: ' + err.message);
     }
 }
 
 export async function editKpiRecord(id) {
-    if (state.currentUser?.role === 'employee') { alert('Access Denied'); return; }
+    if (state.currentUser?.role === 'employee') { await notify.error('Access Denied'); return; }
 
     const record = state.kpiRecords.find(r => r.id === id);
-    if (!record) { alert('Record not found.'); return; }
+    if (!record) { await notify.error('Record not found.'); return; }
 
     const emp = state.db[record.employee_id];
     const kpiDef = state.kpiConfig.find(k => k.id === record.kpi_id);
     const unit = kpiDef?.unit ? ` ${kpiDef.unit}` : '';
 
-    const newValueRaw = prompt(
-        `Edit KPI Value\nEmployee: ${emp?.name || record.employee_id}\nKPI: ${kpiDef?.name || 'Unknown KPI'}\n\nEnter new value${unit}:`,
-        String(record.value ?? '')
-    );
+    const newValueRaw = await notify.input({
+        title: 'Edit KPI Value',
+        text: `Employee: ${emp?.name || record.employee_id}\nKPI: ${kpiDef?.name || 'Unknown KPI'}`,
+        input: 'number',
+        inputLabel: `Enter new value${unit}:`,
+        inputValue: String(record.value ?? ''),
+        confirmButtonText: 'Next',
+        validate: value => {
+            const parsed = parseFloat(value);
+            if (value === '' || Number.isNaN(parsed)) return 'Invalid value. Please enter a numeric KPI value.';
+            return null;
+        },
+    });
     if (newValueRaw === null) return;
     const newValue = parseFloat(newValueRaw);
-    if (isNaN(newValue)) {
-        alert('Invalid value. Please enter a numeric KPI value.');
-        return;
-    }
+    if (isNaN(newValue)) return;
 
-    const newPeriod = prompt(
-        'Edit KPI Period (YYYY-MM):',
-        String(record.period || '')
-    );
+    const newPeriod = await notify.input({
+        title: 'Edit KPI Period',
+        input: 'text',
+        inputPlaceholder: 'YYYY-MM',
+        inputValue: String(record.period || ''),
+        confirmButtonText: 'Next',
+        validate: value => {
+            const periodVal = String(value || '').trim();
+            if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodVal)) return 'Invalid period format. Use YYYY-MM.';
+            return null;
+        },
+    });
     if (newPeriod === null) return;
     const period = newPeriod.trim();
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
-        alert('Invalid period format. Use YYYY-MM.');
-        return;
-    }
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return;
 
-    const newNotes = prompt(
-        'Edit Notes (optional):',
-        String(record.notes || '')
-    );
+    const newNotes = await notify.input({
+        title: 'Edit Notes (optional)',
+        input: 'textarea',
+        inputValue: String(record.notes || ''),
+        confirmButtonText: 'Save',
+    });
     if (newNotes === null) return;
 
     const updated = {
@@ -507,9 +521,9 @@ export async function editKpiRecord(id) {
         await saveKpiRecord(updated);
         await fetchKpiRecords();
         renderKpiHistory();
-        alert('KPI record updated successfully!');
+        await notify.success('KPI record updated successfully!');
     } catch (err) {
-        alert('Error updating KPI record: ' + err.message);
+        await notify.error('Error updating KPI record: ' + err.message);
     }
 }
 
@@ -584,7 +598,7 @@ export function exportKpiJSON() {
 }
 
 export async function importKpiJSON(input) {
-    if (state.currentUser?.role !== 'superadmin') { alert('Access Denied'); return; }
+    if (state.currentUser?.role !== 'superadmin') { await notify.error('Access Denied'); return; }
     const file = input.files[0];
     if (!file) return;
 
@@ -602,9 +616,9 @@ export async function importKpiJSON(input) {
                 count++;
             }
             renderKpiManager();
-            alert(`Imported ${count} KPIs successfully!`);
+            await notify.success(`Imported ${count} KPIs successfully!`);
         } catch (err) {
-            alert('Invalid JSON file. Error: ' + err.message);
+            await notify.error('Invalid JSON file. Error: ' + err.message);
             debugError(err);
         }
         input.value = '';

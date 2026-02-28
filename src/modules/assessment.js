@@ -5,6 +5,7 @@
 import { state, emit, isEmployee, isManager } from '../lib/store.js';
 import { escapeHTML, getDepartment } from '../lib/utils.js';
 import { saveEmployee } from './data.js';
+import * as notify from '../lib/notify.js';
 
 // ---- SELF ASSESSMENT (Employee fast-track) ----
 export function initiateSelfAssessment(clickedId) {
@@ -12,22 +13,22 @@ export function initiateSelfAssessment(clickedId) {
     const currentId = String(state.currentUser.id).trim();
 
     if (targetId !== currentId) {
-        alert(`Security Violation: You are logged in as ID ${currentId}, but tried to assess ID ${targetId}.`);
+        notify.error(`Security Violation: You are logged in as ID ${currentId}, but tried to assess ID ${targetId}.`);
         return;
     }
 
     const rec = state.db[targetId];
-    if (!rec) { alert('Error: Employee Record not found.'); return; }
+    if (!rec) { notify.error('Error: Employee Record not found.'); return; }
 
     // Employee must have been assessed by manager first
     if ((!rec.scores || rec.scores.length === 0) && rec.percentage === 0) {
-        alert('Your manager has not completed your assessment yet. Please wait for manager assessment before self-assessing.');
+        notify.warn('Your manager has not completed your assessment yet. Please wait for manager assessment before self-assessing.');
         return;
     }
 
     // One-time self assessment: do not allow re-submission/edit once submitted.
     if ((rec.self_scores && rec.self_scores.length > 0) || (rec.self_percentage && rec.self_percentage > 0)) {
-        alert('You have already submitted your self-assessment. Re-submission is disabled.');
+        notify.info('You have already submitted your self-assessment. Re-submission is disabled.');
         return;
     }
 
@@ -51,7 +52,7 @@ export function initiateSelfAssessment(clickedId) {
                 posSelect.disabled = true;
                 renderQuestions(state.currentSession.isEditing);
             } else {
-                alert(`Warning: The position "${rec.position}" was not found in the Competency Config.`);
+                notify.warn(`Warning: The position "${rec.position}" was not found in the Competency Config.`);
                 posSelect.disabled = false;
             }
         }
@@ -170,7 +171,7 @@ export function loadPendingEmployee() {
 }
 
 // ---- START ASSESSMENT ----
-export function startAssessment() {
+export async function startAssessment() {
     const { currentUser, db } = state;
     let targetId = null;
 
@@ -180,19 +181,19 @@ export function startAssessment() {
         targetId = document.getElementById('inp-id').value.trim();
     }
 
-    if (!targetId) { alert('Error: No Employee ID identified.'); return; }
+    if (!targetId) { await notify.error('Error: No Employee ID identified.'); return; }
 
     const rec = db[targetId];
-    if (!rec) { alert('Employee Record not found in database.'); return; }
+    if (!rec) { await notify.error('Employee Record not found in database.'); return; }
 
     if (isEmployee() && ((rec.self_scores && rec.self_scores.length > 0) || (rec.self_percentage && rec.self_percentage > 0))) {
-        alert('You have already submitted your self-assessment. Re-submission is disabled.');
+        await notify.info('You have already submitted your self-assessment. Re-submission is disabled.');
         return;
     }
 
     if (!state.currentSession.isEditing) {
         if (isManager() && !isEmployee() && rec.percentage > 0) {
-            if (!confirm(`Warning: ${rec.name} has already been assessed. Overwrite?`)) return;
+            if (!(await notify.confirm(`Warning: ${rec.name} has already been assessed. Overwrite?`, { confirmButtonText: 'Overwrite' }))) return;
         }
 
         state.currentSession = {
@@ -296,7 +297,7 @@ export function renderQuestions(isEdit = false) {
 // ---- REVIEW ----
 export function reviewAssessment() {
     const pos = document.getElementById('inp-position').value;
-    if (!pos || !state.appConfig[pos]) { alert('Error: Position is missing.'); return; }
+    if (!pos || !state.appConfig[pos]) { notify.error('Error: Position is missing.'); return; }
 
     const comps = state.appConfig[pos].competencies;
     let tempScores = [];
@@ -336,7 +337,7 @@ export function reviewAssessment() {
 export async function finalSubmit() {
     const { currentSession, currentUser, db } = state;
     if (!currentSession.scores || currentSession.scores.length === 0) {
-        alert('Error: No scores found.'); return;
+        await notify.error('Error: No scores found.'); return;
     }
 
     const maxScale = parseInt(state.appSettings?.assessment_scale_max || '10');
@@ -353,7 +354,7 @@ export async function finalSubmit() {
         rec.self_scores = currentSession.scores;
         rec.self_percentage = pct;
         rec.self_date = new Date().toLocaleDateString();
-        alert('Self-Assessment Submitted Successfully!');
+        await notify.success('Self-Assessment Submitted Successfully!');
     } else {
         // Manager/Superadmin Assessment
         let history = rec.history || [];
@@ -370,7 +371,7 @@ export async function finalSubmit() {
         rec.scores = currentSession.scores;
         rec.date_updated = new Date().toLocaleDateString();
         if (!rec.date_created || rec.date_created === '-') rec.date_created = rec.date_updated;
-        alert('Assessment Submitted!');
+        await notify.success('Assessment Submitted!');
     }
 
     db[rec.id] = rec;

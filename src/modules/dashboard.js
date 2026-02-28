@@ -5,6 +5,7 @@
 import { Chart } from 'chart.js/auto';
 import { state } from '../lib/store.js';
 import { getDepartment, formatPeriod, escapeHTML, escapeInlineArg, formatNumber } from '../lib/utils.js';
+import * as notify from '../lib/notify.js';
 
 let chartDistInstance = null;
 let chartStatusInstance = null;
@@ -842,7 +843,7 @@ function groupRowsByEmployee(rows) {
 }
 
 export async function exportDeptKpiExcel() {
-    const XLSX = await import('xlsx');
+    const ExcelJS = await import('exceljs');
     const report = getDeptReportSnapshot();
 
     const detailRows = report.rows.map((r, i) => {
@@ -881,35 +882,49 @@ export async function exportDeptKpiExcel() {
         ...detailRows,
     ];
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet((_currentDeptName || 'Department').substring(0, 31));
 
-    // Template polish: merged title rows + readable column widths.
-    ws['!merges'] = [
-        { s: { c: 0, r: 0 }, e: { c: 8, r: 0 } },
-        { s: { c: 0, r: 1 }, e: { c: 8, r: 1 } },
-        { s: { c: 0, r: 2 }, e: { c: 8, r: 2 } },
-        { s: { c: 0, r: 3 }, e: { c: 8, r: 3 } },
+    wsData.forEach(row => ws.addRow(row));
+
+    // Merge top heading rows across all report columns.
+    ws.mergeCells('A1:I1');
+    ws.mergeCells('A2:I2');
+    ws.mergeCells('A3:I3');
+    ws.mergeCells('A4:I4');
+
+    ws.columns = [
+        { width: 6 },   // No
+        { width: 28 },  // Employee
+        { width: 24 },  // Position
+        { width: 28 },  // KPI
+        { width: 10 },  // Unit
+        { width: 14 },  // Target
+        { width: 14 },  // Actual
+        { width: 16 },  // Achievement
+        { width: 14 },  // Status
     ];
 
-    ws['!cols'] = [
-        { wch: 6 },  // No
-        { wch: 28 }, // Employee
-        { wch: 24 }, // Position
-        { wch: 28 }, // KPI
-        { wch: 10 }, // Unit
-        { wch: 14 }, // Target
-        { wch: 14 }, // Actual
-        { wch: 16 }, // Achievement
-        { wch: 14 }, // Status
-    ];
-
-    const tableHeadRow = 13;
+    const tableHeadRow = 14;
     const tableLastRow = Math.max(tableHeadRow, tableHeadRow + detailRows.length);
-    ws['!autofilter'] = { ref: `A${tableHeadRow}:I${tableLastRow}` };
+    ws.autoFilter = {
+        from: { row: tableHeadRow, column: 1 },
+        to: { row: tableLastRow, column: 9 },
+    };
 
-    XLSX.utils.book_append_sheet(wb, ws, _currentDeptName.substring(0, 31));
-    XLSX.writeFile(wb, `KPI_Report_${_currentDeptName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob(
+        [buffer],
+        { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `KPI_Report_${_currentDeptName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
 }
 
 // ==================================================
@@ -1045,7 +1060,7 @@ export async function exportEmployeeKpiPDF(employeeId) {
     const report = getDeptReportSnapshot();
     const empRows = report.rows.filter(r => String(r.employee_id) === String(employeeId));
     if (empRows.length === 0) {
-        alert('No KPI records found for this employee in the selected period.');
+        await notify.info('No KPI records found for this employee in the selected period.');
         return;
     }
 

@@ -7,6 +7,7 @@ import { state, emit, isAdmin } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg } from '../lib/utils.js';
 import { saveSetting, saveEmployee, deleteEmployee, fetchEmployees } from './data.js';
 import { createAuthUser } from './auth.js';
+import * as notify from '../lib/notify.js';
 
 // ---- RENDER SETTINGS PAGE ----
 export function renderSettings() {
@@ -56,10 +57,10 @@ export async function saveAppSettings() {
             const el = document.getElementById(`setting-${key}`);
             if (el) await saveSetting(key, el.value.trim());
         }
-        alert('Settings saved successfully!');
+        await notify.success('Settings saved successfully!');
         applyBranding();
     } catch (err) {
-        alert('Error saving settings: ' + err.message);
+        await notify.error('Error saving settings: ' + err.message);
     }
 }
 
@@ -214,9 +215,9 @@ export async function saveOrgConfig() {
         const deptNames = Object.keys(deptMap).join(', ');
         await saveSetting('departments', deptNames);
 
-        alert('Organization settings saved successfully!');
+        await notify.success('Organization settings saved successfully!');
     } catch (err) {
-        alert('Error saving organization settings: ' + err.message);
+        await notify.error('Error saving organization settings: ' + err.message);
     }
 }
 
@@ -266,24 +267,29 @@ export async function editUserRole(empId) {
     const rec = state.db[empId];
     if (!rec) return;
 
-    const role = prompt(
-        `Change role for ${rec.name}:\n\nCurrent: ${rec.role}\n\nEnter new role:\n- superadmin\n- manager\n- employee`,
-        rec.role
-    );
+    const role = await notify.input({
+        title: `Change role for ${rec.name}`,
+        input: 'select',
+        inputLabel: `Current role: ${rec.role}`,
+        inputValue: rec.role,
+        inputOptions: {
+            superadmin: 'superadmin',
+            manager: 'manager',
+            employee: 'employee',
+        },
+        confirmButtonText: 'Update Role',
+        cancelButtonText: 'Cancel',
+    });
 
-    if (!role) return;
-    if (!['superadmin', 'manager', 'employee'].includes(role)) {
-        alert('Invalid role. Must be: superadmin, manager, or employee');
-        return;
-    }
+    if (role === null) return;
 
     rec.role = role;
     try {
         await saveEmployee(rec);
-        alert(`${rec.name} is now "${role}"`);
+        await notify.success(`${rec.name} is now "${role}"`);
         renderUserManagement();
     } catch (err) {
-        alert('Error: ' + err.message);
+        await notify.error('Error: ' + err.message);
     }
 }
 
@@ -292,33 +298,56 @@ export async function setupUserLogin(empId) {
     const rec = state.db[empId];
     if (!rec) return;
 
-    const email = prompt(`Setup login for ${rec.name}\n\nEnter email address:`, rec.auth_email || '');
-    if (!email) return;
+    const email = await notify.input({
+        title: `Setup login for ${rec.name}`,
+        input: 'email',
+        inputLabel: 'Email address',
+        inputValue: rec.auth_email || '',
+        inputPlaceholder: 'name@company.com',
+        confirmButtonText: 'Continue',
+        validate: value => {
+            const v = String(value || '').trim();
+            if (!v) return 'Email address is required.';
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Enter a valid email address.';
+            return null;
+        },
+    });
+    if (email === null) return;
+    const emailVal = String(email).trim();
 
-    const password = prompt(`Enter temporary password for ${rec.name}\n(min 6 characters):`);
-    if (!password || password.length < 6) {
-        alert('Password must be at least 6 characters.');
-        return;
-    }
+    const password = await notify.input({
+        title: `Temporary password for ${rec.name}`,
+        input: 'password',
+        inputLabel: 'Minimum 6 characters',
+        confirmButtonText: 'Create Login',
+        inputAttributes: { autocapitalize: 'off', autocorrect: 'off' },
+        validate: value => {
+            const v = String(value || '');
+            if (!v || v.length < 6) return 'Password must be at least 6 characters.';
+            return null;
+        },
+    });
+    if (password === null) return;
+    const passwordVal = String(password);
 
     try {
-        const authData = await createAuthUser(email, password);
+        const authData = await createAuthUser(emailVal, passwordVal);
 
-        rec.auth_email = email;
+        rec.auth_email = emailVal;
         if (authData?.user?.id) rec.auth_id = authData.user.id;
         await saveEmployee(rec);
 
-        alert(`Login created for ${rec.name}.\nEmail: ${email}\nTemporary password has been set.\n\nAsk the user to change the password immediately.`);
+        await notify.success(`Login created for ${rec.name}.\nEmail: ${emailVal}\nTemporary password has been set.\n\nAsk the user to change the password immediately.`);
         renderUserManagement();
     } catch (err) {
         // If user already exists, just update the email
         if (err.message?.includes('already registered') || err.message?.includes('already been registered')) {
-            rec.auth_email = email;
+            rec.auth_email = emailVal;
             await saveEmployee(rec);
-            alert(`Email updated for ${rec.name}. User already exists in auth system.`);
+            await notify.info(`Email updated for ${rec.name}. User already exists in auth system.`);
             renderUserManagement();
         } else {
-            alert('Error creating login: ' + err.message);
+            await notify.error('Error creating login: ' + err.message);
         }
     }
 }
