@@ -46,9 +46,38 @@ function toDateLabel(value, fallback = '-') {
     return dt.toLocaleDateString();
 }
 
+function randomHex(len) {
+    let out = '';
+    while (out.length < len) out += Math.floor(Math.random() * 16).toString(16);
+    return out.slice(0, len);
+}
+
+function generateUuid() {
+    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+        return globalThis.crypto.randomUUID();
+    }
+    // RFC 4122 v4-like fallback when crypto.randomUUID is unavailable.
+    return `${randomHex(8)}-${randomHex(4)}-4${randomHex(3)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${randomHex(3)}-${randomHex(12)}`;
+}
+
 function isMissingRelationError(error) {
-    const msg = String(error?.message || error || '').toLowerCase();
-    return msg.includes('does not exist') || msg.includes('relation') || msg.includes('42p01');
+    const code = String(error?.code || '').toUpperCase();
+    if (code === '42P01' || code === 'PGRST205') return true;
+
+    const msg = [
+        error?.message,
+        error?.details,
+        error?.hint,
+    ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+    if (!msg) return false;
+    if (/relation\s+\"?[\w.]+\"?\s+does not exist/.test(msg)) return true;
+    if (/table\s+\"?[\w.]+\"?\s+does not exist/.test(msg)) return true;
+    if (/could not find the table\s+'?[\w.]+'?\s+in the schema cache/.test(msg)) return true;
+    return false;
 }
 
 function normalizeScoreRows(items = []) {
@@ -1464,20 +1493,27 @@ export async function saveProbationReview(review, qualitativeItems = []) {
 
 export async function saveProbationMonthlyScores(reviewId, rows = []) {
     const normalized = asArray(rows)
-        .map(raw => ({
-            id: raw?.id || undefined,
-            probation_review_id: reviewId,
-            month_no: Math.max(1, Math.min(3, Math.round(toNumber(raw?.month_no, 0)))),
-            period_start: raw?.period_start || null,
-            period_end: raw?.period_end || null,
-            work_performance_score: roundScore(clamp(toNumber(raw?.work_performance_score, 0), 0, 50)),
-            managing_task_score: roundScore(clamp(toNumber(raw?.managing_task_score, 0), 0, 30)),
-            manager_qualitative_text: String(raw?.manager_qualitative_text || '').trim(),
-            manager_note: String(raw?.manager_note || '').trim(),
-            attendance_deduction: roundScore(Math.max(0, toNumber(raw?.attendance_deduction, 0))),
-            attitude_score: roundScore(clamp(toNumber(raw?.attitude_score, 20), 0, 20)),
-            monthly_total: roundScore(clamp(toNumber(raw?.monthly_total, 0), 0, 100)),
-        }))
+        .map(raw => {
+            const monthNo = Math.max(1, Math.min(3, Math.round(toNumber(raw?.month_no, 0))));
+            const existing = asArray(state.probationMonthlyScores).find(item =>
+                item.probation_review_id === reviewId && Number(item.month_no) === monthNo
+            );
+            const rowId = raw?.id || existing?.id || generateUuid();
+            return {
+                id: rowId,
+                probation_review_id: reviewId,
+                month_no: monthNo,
+                period_start: raw?.period_start || null,
+                period_end: raw?.period_end || null,
+                work_performance_score: roundScore(clamp(toNumber(raw?.work_performance_score, 0), 0, 50)),
+                managing_task_score: roundScore(clamp(toNumber(raw?.managing_task_score, 0), 0, 30)),
+                manager_qualitative_text: String(raw?.manager_qualitative_text || '').trim(),
+                manager_note: String(raw?.manager_note || '').trim(),
+                attendance_deduction: roundScore(Math.max(0, toNumber(raw?.attendance_deduction, 0))),
+                attitude_score: roundScore(clamp(toNumber(raw?.attitude_score, 20), 0, 20)),
+                monthly_total: roundScore(clamp(toNumber(raw?.monthly_total, 0), 0, 100)),
+            };
+        })
         .filter(row => row.probation_review_id && row.month_no >= 1 && row.month_no <= 3 && row.period_start && row.period_end);
 
     if (normalized.length === 0) return [];
@@ -1519,7 +1555,7 @@ export async function saveProbationMonthlyScores(reviewId, rows = []) {
 
 export async function saveProbationAttendanceRecord(record) {
     const payload = {
-        id: record?.id || undefined,
+        id: record?.id || generateUuid(),
         probation_review_id: record?.probation_review_id,
         month_no: Math.max(1, Math.min(3, Math.round(toNumber(record?.month_no, 0)))),
         event_date: record?.event_date || null,
@@ -1708,9 +1744,6 @@ export async function syncAll() {
     await Promise.all(tasks);
     emit('data:synced');
 }
-
-
-
 
 
 
