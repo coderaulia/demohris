@@ -83,6 +83,7 @@ function renderAppSettings() {
         { key: 'department_label', label: 'Department Label', placeholder: 'e.g. Human Resources Department' },
         { key: 'assessment_scale_max', label: 'Assessment Scale Max', placeholder: '10' },
         { key: 'assessment_threshold', label: 'Training Threshold (score below this triggers recommendation)', placeholder: '7' },
+        { key: 'probation_pass_threshold', label: 'Probation Pass Threshold (minimum final score)', placeholder: '75' },
     ];
 
     const container = document.getElementById('settings-app-fields');
@@ -101,7 +102,7 @@ function renderAppSettings() {
 
 export async function saveAppSettings() {
     if (!(await requireRecentAuth('saving application settings'))) return;
-    const fields = ['app_name', 'company_name', 'company_short', 'department_label', 'assessment_scale_max', 'assessment_threshold'];
+    const fields = ['app_name', 'company_name', 'company_short', 'department_label', 'assessment_scale_max', 'assessment_threshold', 'probation_pass_threshold'];
     const changed = {};
 
     try {
@@ -517,3 +518,4 @@ async function renderActivityLog() {
       </tr>`;
     });
 }
+

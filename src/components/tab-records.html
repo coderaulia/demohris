@@ -105,8 +105,16 @@
                             <div class="d-flex gap-2 align-items-center flex-wrap">
                                 <input type="month" id="probation-period-filter" class="form-control form-control-sm" style="max-width:160px;"
                                     onchange="window.__app.renderProbationPipView()" title="KPI period for PIP generation">
-                                <input type="number" id="pip-threshold-input" class="form-control form-control-sm" style="max-width:120px;" min="0" max="200" step="1" value="70"
-                                    title="Score threshold (below this creates PIP)">
+                                <div class="input-group input-group-sm" style="max-width:230px;" title="Minimum KPI score target. Employees below this value will be included in Generate PIP.">
+                                    <span class="input-group-text">PIP Threshold</span>
+                                    <input type="number" id="pip-threshold-input" class="form-control form-control-sm" style="max-width:95px;" min="0" max="200" step="1" value="70"
+                                        aria-label="PIP minimum score threshold">
+                                </div>
+                                <div class="input-group input-group-sm" style="max-width:230px;" title="Minimum final probation score required for Pass decision.">
+                                    <span class="input-group-text">Pass Min</span>
+                                    <input type="number" id="probation-pass-threshold-input" class="form-control form-control-sm" style="max-width:95px;" min="0" max="200" step="1" value="75"
+                                        aria-label="Probation pass minimum score threshold">
+                                </div>
                                 <button class="btn btn-sm btn-outline-primary" onclick="window.__app.generateProbationDrafts()">
                                     <i class="bi bi-magic me-1"></i>Generate Probation Drafts
                                 </button>
@@ -116,9 +124,13 @@
                                 <button id="probation-attendance-btn" class="btn btn-sm btn-outline-dark" onclick="window.__app.addProbationAttendanceEntry()">
                                     <i class="bi bi-calendar-plus me-1"></i>Add Attendance Entry
                                 </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="window.__app.exportProbationPdf()">
+                                    <i class="bi bi-filetype-pdf me-1"></i>Export Probation PDF
+                                </button>
                                 <button class="btn btn-sm btn-outline-success" onclick="window.__app.exportProbationCsv()">
                                     <i class="bi bi-download me-1"></i>Export Probation Excel
                                 </button>
+                                <div class="w-100 small text-muted">Generate PIP includes employees with KPI score below PIP Threshold. Pass decision requires final score >= Pass Min.</div>
                             </div>
                         </div>
                     </div>
@@ -171,4 +183,8 @@
                 </div>
             </div>
         </div>
+
+
+
+
 

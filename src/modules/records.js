@@ -6,7 +6,7 @@ import { Chart } from 'chart.js/auto';
 import Swal from 'sweetalert2';
 import { state, emit, isAdmin, isEmployee, isManager } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg, getDisplayDate, toPeriodKey, formatPeriod, formatNumber } from '../lib/utils.js';
-import { saveEmployee, logActivity, buildProbationDraft, saveProbationReview, saveProbationMonthlyScores, saveProbationAttendanceRecord, savePipPlan, savePipActions, calculateEmployeeWeightedKpiScore } from './data.js';
+import { saveEmployee, logActivity, buildProbationDraft, saveProbationReview, saveProbationMonthlyScores, saveProbationAttendanceRecord, savePipPlan, savePipActions, calculateEmployeeWeightedKpiScore, getEmployeeKpiTarget } from './data.js';
 import { requireRecentAuth } from './auth.js';
 import { startAssessment, renderPendingList, initiateSelfAssessment as _initSelfAssess } from './assessment.js';
 import * as notify from '../lib/notify.js';
@@ -558,6 +558,12 @@ function getPipThreshold() {
     return Number(state.appSettings?.pip_threshold || 70) || 70;
 }
 
+function getProbationPassThreshold() {
+    const raw = document.getElementById('probation-pass-threshold-input')?.value;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    return Number(state.appSettings?.probation_pass_threshold || 75) || 75;
+}
 function scoreBadgeClass(score) {
     if (score >= 90) return 'bg-success';
     if (score >= 75) return 'bg-primary';
@@ -786,6 +792,11 @@ export function renderProbationPipView() {
     if (thresholdInput && !thresholdInput.value) {
         thresholdInput.value = String(Number(state.appSettings?.pip_threshold || 70) || 70);
     }
+
+    const passThresholdInput = document.getElementById('probation-pass-threshold-input');
+    if (passThresholdInput && !passThresholdInput.value) {
+        passThresholdInput.value = String(Number(state.appSettings?.probation_pass_threshold || 75) || 75);
+    }
 }
 
 export async function generateProbationDrafts() {
@@ -870,6 +881,7 @@ export async function reviewProbation(reviewId) {
 
     const seeded = await ensureProbationMonthlyRows(review);
     const rows = seeded.monthly_rows || [];
+    const passThreshold = getProbationPassThreshold();
 
     const htmlRows = rows.map(row => `
         <tr>
@@ -878,18 +890,18 @@ export async function reviewProbation(reviewId) {
                 <div class="text-muted">${escapeHTML(row.period_start)} to ${escapeHTML(row.period_end)}</div>
             </td>
             <td><input id="pr-work-${row.month_no}" class="form-control form-control-sm text-end" value="${toFixedScore(row.work_performance_score, 2)}" readonly></td>
-            <td><input id="pr-manage-${row.month_no}" class="form-control form-control-sm text-end" type="number" min="0" max="30" step="0.1" value="${toFixedScore(row.managing_task_score, 2)}"></td>
+            <td><input id="pr-manage-${row.month_no}" class="form-control form-control-sm text-end" type="number" min="0" max="30" step="0.1" value="${toFixedScore(row.managing_task_score, 2)}" placeholder="0-30" title="Manager input (0-30). Suggested rubric: Responsibility 0-12, Innovation 0-12, Communication 0-6."></td>
             <td><input id="pr-att-${row.month_no}" class="form-control form-control-sm text-end" value="${toFixedScore(row.attitude_score, 2)}" readonly></td>
             <td><input id="pr-ded-${row.month_no}" class="form-control form-control-sm text-end" value="${toFixedScore(row.attendance_deduction, 2)}" readonly></td>
-            <td><textarea id="pr-qual-${row.month_no}" class="form-control form-control-sm" rows="2" placeholder="Manager qualitative assessment">${escapeHTML(row.manager_qualitative_text || '')}</textarea></td>
-            <td><textarea id="pr-note-${row.month_no}" class="form-control form-control-sm" rows="2" placeholder="Manager notes">${escapeHTML(row.manager_note || '')}</textarea></td>
+            <td><textarea id="pr-qual-${row.month_no}" class="form-control form-control-sm" rows="2" placeholder="Qualitative summary: achievements, behavior, and quality of execution">${escapeHTML(row.manager_qualitative_text || '')}</textarea></td>
+            <td><textarea id="pr-note-${row.month_no}" class="form-control form-control-sm" rows="2" placeholder="Evidence notes: key tasks, blockers, and follow-up actions">${escapeHTML(row.manager_note || '')}</textarea></td>
             <td><input id="pr-total-${row.month_no}" class="form-control form-control-sm text-end" value="${toFixedScore(row.monthly_total, 2)}" readonly></td>
         </tr>
     `).join('');
 
         const modalResult = await Swal.fire({
         title: 'Probation Review Form',
-        width: 1200,
+        width: 1450,
         heightAuto: false,
         showCancelButton: true,
         confirmButtonText: 'Save Review',
@@ -899,18 +911,26 @@ export async function reviewProbation(reviewId) {
             <div class="text-start small">
                 <div class="mb-2"><strong>Employee:</strong> ${escapeHTML(state.db[review.employee_id]?.name || review.employee_id)}</div>
                 <div class="mb-2"><strong>Window:</strong> ${escapeHTML(seeded.review_period_start || '-')} to ${escapeHTML(seeded.review_period_end || '-')}</div>
-                <div class="table-responsive border rounded mb-3" style="max-height:320px; overflow:auto;">
-                    <table class="table table-sm align-middle mb-0">
+                <div class="alert alert-light border py-2 px-3 mb-3">
+                    <div class="fw-bold mb-1">Manager Scoring Hints</div>
+                    <div class="small mb-1"><strong>Work (50):</strong> auto-generated from KPI records in each probation window (read-only).</div>
+                    <div class="small mb-1"><strong>Managing (30):</strong> manager input. Suggested rubric: Responsibility 0-12, Innovation 0-12, Communication 0-6.</div>
+                    <div class="small mb-1"><strong>Attitude (20):</strong> auto-calculated from attendance deductions (read-only).</div>
+                    <div class="small mb-1"><strong>Qualitative Score (summary):</strong> average of monthly (Managing + Attitude).</div>
+                    <div class="small"><strong>Pass Rule:</strong> decision <strong>Pass</strong> requires final score >= ${toFixedScore(passThreshold, 1)}.</div>
+                </div>
+                <div class="table-responsive border rounded mb-3" style="max-height:380px; overflow:auto;">
+                    <table class="table table-sm align-middle mb-0" style="table-layout:fixed; min-width:1640px;">
                         <thead class="table-light sticky-top">
                             <tr>
-                                <th>Month</th>
-                                <th>Work<br><span class="text-muted">(50)</span></th>
-                                <th>Managing<br><span class="text-muted">(30)</span></th>
-                                <th>Attitude<br><span class="text-muted">(20)</span></th>
-                                <th>Deduction</th>
-                                <th>Qualitative Text</th>
-                                <th>Manager Note</th>
-                                <th>Total</th>
+                                <th style="width:190px;">Month</th>
+                                <th style="width:115px;">Work<br><span class="text-muted">(50)</span></th>
+                                <th style="width:115px;">Managing<br><span class="text-muted">(30)</span></th>
+                                <th style="width:115px;">Attitude<br><span class="text-muted">(20)</span></th>
+                                <th style="width:115px;">Deduction</th>
+                                <th style="width:380px;">Qualitative Text</th>
+                                <th style="width:330px;">Manager Note</th>
+                                <th style="width:115px;">Total</th>
                             </tr>
                         </thead>
                         <tbody>${htmlRows}</tbody>
@@ -926,8 +946,8 @@ export async function reviewProbation(reviewId) {
                     </select>
                 </div>
                 <div class="mb-2">
-                    <label class="form-label fw-bold mb-1">Summary Notes</label>
-                    <textarea id="pr-summary" class="form-control form-control-sm" rows="3" placeholder="Overall probation summary">${escapeHTML(review.manager_notes || '')}</textarea>
+                    <label class="form-label fw-bold mb-1">Overall Performance Report (Manager)</label>
+                    <textarea id="pr-summary" class="form-control form-control-sm" rows="3" placeholder="Write overall qualitative recap for probation result, strengths, weaknesses, and salary adjustment recommendation">${escapeHTML(review.manager_notes || '')}</textarea>
                 </div>
                 ${canManageAttendance() ? '<div class="text-muted small">Tip: use Attendance Entry button to update attitude score deductions.</div>' : ''}
             </div>
@@ -953,6 +973,22 @@ export async function reviewProbation(reviewId) {
 
             const decision = (document.getElementById('pr-decision')?.value || 'pending').trim();
             const summary = (document.getElementById('pr-summary')?.value || '').trim();
+
+            const projectedTotals = collectedRows.map(item => {
+                const work = Number(item.work_performance_score || 0);
+                const manageScore = Number(item.managing_task_score || 0);
+                const attitude = Number(item.attitude_score || 0);
+                return Math.max(0, Math.min(100, work + manageScore + attitude));
+            });
+            const projectedFinal = projectedTotals.length
+                ? projectedTotals.reduce((sum, score) => sum + score, 0) / projectedTotals.length
+                : 0;
+
+            if (decision === 'pass' && projectedFinal < passThreshold) {
+                Swal.showValidationMessage(`Pass requires final score >= ${toFixedScore(passThreshold, 1)}. Current projected final: ${toFixedScore(projectedFinal, 2)}.`);
+                return false;
+            }
+
             return { collectedRows, decision, summary };
         },
     });
@@ -1126,6 +1162,313 @@ export async function addProbationAttendanceEntry(reviewId = '') {
     await notify.success('Attendance entry saved and probation score updated.');
 }
 
+function getPdfTableRunner(doc, autoTableMod) {
+    const autoTable = autoTableMod?.default || autoTableMod?.autoTable;
+    return opts => {
+        if (typeof autoTable === 'function') {
+            autoTable(doc, opts);
+            return;
+        }
+        if (typeof doc.autoTable === 'function') {
+            doc.autoTable(opts);
+            return;
+        }
+        throw new Error('jspdf-autotable failed to load.');
+    };
+}
+
+export async function exportProbationPdf() {
+    const reviews = getScopedProbationReviews();
+    if (reviews.length === 0) {
+        await notify.warn('No probation review to export.');
+        return;
+    }
+
+    const options = {};
+    reviews.forEach(r => {
+        const emp = state.db[r.employee_id];
+        options[r.id] = `${emp?.name || r.employee_id} (${r.review_period_start || '-'})`;
+    });
+
+    const selected = await notify.input({
+        title: 'Select Probation Review to Export',
+        input: 'select',
+        inputOptions: options,
+        inputValue: reviews[0]?.id || '',
+        confirmButtonText: 'Export PDF',
+    });
+    if (selected === null) return;
+
+    const review = reviews.find(r => r.id === selected);
+    if (!review) {
+        await notify.error('Probation review not found.');
+        return;
+    }
+
+    const draft = await ensureProbationMonthlyRows(review);
+    const employee = state.db[review.employee_id] || { id: review.employee_id, name: review.employee_id, position: '-' };
+    const managerName = state.db[employee.manager_id || '']?.name || 'Manager';
+    const directorName = state.appSettings?.director_name || 'Director';
+    const company = state.appSettings?.company_name || 'Company';
+    const appName = state.appSettings?.app_name || 'HR Performance Suite';
+    const generatedAt = new Date();
+    const generatedDate = generatedAt.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+    });
+    const passThreshold = Number(state.appSettings?.probation_pass_threshold || 75) || 75;
+
+    const { jsPDF } = await import('jspdf');
+    const autoTableMod = await import('jspdf-autotable');
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const runAutoTable = getPdfTableRunner(doc, autoTableMod);
+
+    // ---- Page 1: Summary + Signatures ----
+    doc.setFillColor(17, 24, 39);
+    doc.rect(0, 0, 210, 24, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text(`${company} - Probation Assessment Report`, 14, 11);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(appName, 14, 17);
+    doc.text(`Generated Date: ${generatedDate}`, 196, 17, { align: 'right' });
+
+    doc.setTextColor(20, 20, 20);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Employee Information', 14, 31);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.text(`Name: ${employee.name || '-'}`, 14, 37);
+    doc.text(`Position: ${employee.position || '-'}`, 14, 42);
+    doc.text(`Probation Window: ${review.review_period_start || draft.review_period_start || '-'} to ${review.review_period_end || draft.review_period_end || '-'}`, 14, 47);
+
+    const monthRows = (draft.monthly_rows || []).map(row => [
+        `Month ${row.month_no}`,
+        `${row.period_start} to ${row.period_end}`,
+        toFixedScore(row.work_performance_score, 2),
+        toFixedScore(row.managing_task_score, 2),
+        toFixedScore(row.attitude_score, 2),
+        toFixedScore(row.attendance_deduction, 2),
+        toFixedScore(row.monthly_total, 2),
+        row.manager_qualitative_text || row.manager_note || review.manager_notes || '-',
+        row.manager_note || review.manager_notes || '-',
+    ]);
+
+    runAutoTable({
+        startY: 52,
+        head: [[
+            'Month',
+            'Period',
+            'Work (50)',
+            'Managing (30)',
+            'Attitude (20)',
+            'Deduction',
+            'Total',
+            'Qualitative',
+            'Manager Note',
+        ]],
+        body: monthRows,
+        theme: 'grid',
+        headStyles: { fillColor: [31, 41, 55], fontSize: 8, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 8, valign: 'top' },
+        styles: { overflow: 'linebreak', cellPadding: 1.4 },
+        columnStyles: {
+            0: { cellWidth: 16, halign: 'center' },
+            1: { cellWidth: 34 },
+            2: { cellWidth: 16, halign: 'right' },
+            3: { cellWidth: 18, halign: 'right' },
+            4: { cellWidth: 16, halign: 'right' },
+            5: { cellWidth: 16, halign: 'right' },
+            6: { cellWidth: 14, halign: 'right', fontStyle: 'bold' },
+            7: { cellWidth: 30 },
+            8: { cellWidth: 30 },
+        },
+        margin: { left: 14, right: 14 },
+    });
+
+    const summaryY = (doc.lastAutoTable?.finalY || 52) + 6;
+    runAutoTable({
+        startY: summaryY,
+        head: [['Quantitative', 'Managing+Attitude Avg', 'Final Score', 'Pass Min', 'Decision']],
+        body: [[
+            toFixedScore(draft.quantitative_score, 2),
+            toFixedScore(draft.qualitative_score, 2),
+            toFixedScore(review.final_score || draft.final_score, 2),
+            toFixedScore(passThreshold, 1),
+            String(review.decision || 'pending').toUpperCase(),
+        ]],
+        theme: 'grid',
+        headStyles: { fillColor: [229, 231, 235], textColor: [31, 41, 55], fontStyle: 'bold', halign: 'center' },
+        bodyStyles: { fontSize: 9, halign: 'center' },
+        margin: { left: 14, right: 14 },
+    });
+
+    let recapTop = (doc.lastAutoTable?.finalY || summaryY) + 10;
+    if (recapTop > 220) {
+        doc.addPage();
+        recapTop = 20;
+    }
+
+    const recapText = String(review.manager_notes || '-').trim() || '-';
+    const recapLines = doc.splitTextToSize(recapText, 176);
+    const recapBoxHeight = Math.max(18, (recapLines.length * 4.3) + 8);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.text('Overall Performance Report (Manager)', 14, recapTop);
+
+    const recapBoxY = recapTop + 3;
+    doc.setDrawColor(140, 140, 140);
+    doc.rect(14, recapBoxY, 182, recapBoxHeight);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(recapLines, 16, recapBoxY + 6);
+
+    let signatureTop = recapBoxY + recapBoxHeight + 18;
+    if (signatureTop > 248) {
+        doc.addPage();
+        signatureTop = 35;
+    }
+
+    const lineY = signatureTop;
+    const labelY = lineY + 7;
+    const nameY = lineY + 13;
+
+    doc.setDrawColor(100, 100, 100);
+    doc.line(18, lineY, 66, lineY);
+    doc.line(81, lineY, 129, lineY);
+    doc.line(144, lineY, 192, lineY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('Employee', 42, labelY, { align: 'center' });
+    doc.text('Manager', 105, labelY, { align: 'center' });
+    doc.text('Director', 168, labelY, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text(employee.name || '-', 42, nameY, { align: 'center' });
+    doc.text(managerName, 105, nameY, { align: 'center' });
+    doc.text(directorName, 168, nameY, { align: 'center' });
+
+    // ---- Page 2: KPI detail basis for Work score ----
+    doc.addPage('a4', 'landscape');
+
+    doc.setFillColor(17, 24, 39);
+    doc.rect(0, 0, 297, 20, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('KPI Performance Detail (Work Score Basis)', 14, 11);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`${employee.name || '-'} | ${review.review_period_start || draft.review_period_start || '-'} to ${review.review_period_end || draft.review_period_end || '-'}`, 14, 17);
+    doc.text(`Generated Date: ${generatedDate}`, 283, 17, { align: 'right' });
+
+    const kpiDetailRows = [];
+    (draft.monthly_rows || []).forEach(monthRow => {
+        const contributions = Array.isArray(monthRow.contributions) ? monthRow.contributions : [];
+        if (contributions.length === 0) {
+            kpiDetailRows.push([
+                `Month ${monthRow.month_no}`,
+                `${monthRow.period_start} to ${monthRow.period_end}`,
+                '-',
+                '-',
+                '-',
+                '-',
+                '-',
+                '-',
+                'No KPI contribution rows',
+            ]);
+            return;
+        }
+
+        contributions.forEach(contrib => {
+            const period = String(contrib.period || '').trim();
+            const periodRecords = (state.kpiRecords || []).filter(r => r.employee_id === review.employee_id && r.period === period);
+            if (periodRecords.length === 0) {
+                kpiDetailRows.push([
+                    `Month ${monthRow.month_no}`,
+                    `${monthRow.period_start} to ${monthRow.period_end}`,
+                    period || '-',
+                    '-',
+                    '-',
+                    '-',
+                    '-',
+                    `${Number(contrib.overlap_days || 0)}d`,
+                    'No KPI records on this period',
+                ]);
+                return;
+            }
+
+            periodRecords.forEach(record => {
+                const kpiDef = (state.kpiConfig || []).find(k => k.id === record.kpi_id);
+                const unit = kpiDef?.unit || '';
+                const target = getEmployeeKpiTarget(employee, record.kpi_id, record.period);
+                const actual = Number(record.value || 0);
+                const achievement = target > 0 ? (actual / target) * 100 : 0;
+
+                kpiDetailRows.push([
+                    `Month ${monthRow.month_no}`,
+                    `${monthRow.period_start} to ${monthRow.period_end}`,
+                    period || '-',
+                    kpiDef?.name || record.kpi_id || '-',
+                    `${formatNumber(target)} ${unit}`.trim(),
+                    `${formatNumber(actual)} ${unit}`.trim(),
+                    target > 0 ? `${toFixedScore(achievement, 2)}%` : '-',
+                    `${Number(contrib.overlap_days || 0)}d`,
+                    record.notes || '-',
+                ]);
+            });
+        });
+    });
+
+    runAutoTable({
+        startY: 24,
+        head: [[
+            'Month',
+            'Probation Window',
+            'KPI Period',
+            'KPI Metric',
+            'Target',
+            'Actual',
+            'Ach%',
+            'Overlap',
+            'Record Note',
+        ]],
+        body: kpiDetailRows.length > 0 ? kpiDetailRows : [['-', '-', '-', '-', '-', '-', '-', '-', '-']],
+        theme: 'grid',
+        headStyles: { fillColor: [31, 41, 55], fontSize: 8, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 7.8, valign: 'top' },
+        styles: { overflow: 'linebreak', cellPadding: 1.2 },
+        columnStyles: {
+            0: { cellWidth: 14, halign: 'center' },
+            1: { cellWidth: 28 },
+            2: { cellWidth: 16, halign: 'center' },
+            3: { cellWidth: 58 },
+            4: { cellWidth: 28, halign: 'right' },
+            5: { cellWidth: 28, halign: 'right' },
+            6: { cellWidth: 14, halign: 'right', fontStyle: 'bold' },
+            7: { cellWidth: 16, halign: 'center' },
+            8: { cellWidth: 55 },
+        },
+        margin: { left: 14, right: 14 },
+        didDrawPage: data => {
+            doc.setFontSize(8);
+            doc.setTextColor(120);
+            doc.text(`Page ${data.pageNumber}`, 283, 205, { align: 'right' });
+        },
+    });
+
+    const safeName = String(employee.name || review.employee_id || 'employee').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const todayIso = `${generatedAt.getFullYear()}-${String(generatedAt.getMonth() + 1).padStart(2, '0')}-${String(generatedAt.getDate()).padStart(2, '0')}`;
+    doc.save(`probation_report_${safeName}_${todayIso}.pdf`);
+}
 export async function exportProbationCsv() {
     const reviews = getScopedProbationReviews();
     if (reviews.length === 0) {
@@ -1238,7 +1581,7 @@ export async function exportProbationCsv() {
             Number(row.managing_task_score || 0),
             Number(row.attitude_score || 0),
             Number(row.monthly_total || 0),
-            row.manager_qualitative_text || '-',
+            row.manager_qualitative_text || row.manager_note || review.manager_notes || '-',
         ]);
     });
 
@@ -1423,4 +1766,21 @@ export async function updatePipPlanStatus(planId) {
     renderProbationPipView();
     await notify.success('PIP plan updated.');
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

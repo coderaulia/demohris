@@ -1498,7 +1498,22 @@ export async function saveProbationMonthlyScores(reviewId, rows = []) {
         return data || [];
     } catch (error) {
         if (!isMissingRelationError(error)) throw error;
-        return [];
+
+        // Fallback for environments where migration has not been applied yet.
+        // Keep values in local state so review/export still reflects manager inputs.
+        const fallbackRows = normalized.map(row => ({
+            ...row,
+            id: row.id || `local-${reviewId}-${row.month_no}`,
+            updated_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            _local_only: true,
+        }));
+        const untouched = state.probationMonthlyScores.filter(item => item.probation_review_id !== reviewId);
+        state.probationMonthlyScores = [...untouched, ...fallbackRows];
+        emit('data:probationMonthlyScores', state.probationMonthlyScores);
+
+        debugError('probation_monthly_scores table missing. Run migration: 20260308_probation_monthly_attendance.sql');
+        return fallbackRows;
     }
 }
 
@@ -1533,7 +1548,22 @@ export async function saveProbationAttendanceRecord(record) {
         return data;
     } catch (error) {
         if (!isMissingRelationError(error)) throw error;
-        return null;
+
+        // Local fallback if table is not available yet.
+        const fallback = {
+            ...payload,
+            id: payload.id || `local-attendance-${Date.now()}`,
+            updated_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            _local_only: true,
+        };
+        const idx = state.probationAttendanceRecords.findIndex(item => item.id === fallback.id);
+        if (idx >= 0) state.probationAttendanceRecords[idx] = fallback;
+        else state.probationAttendanceRecords.push(fallback);
+        emit('data:probationAttendanceRecords', state.probationAttendanceRecords);
+
+        debugError('probation_attendance_records table missing. Run migration: 20260308_probation_monthly_attendance.sql');
+        return fallback;
     }
 }
 
@@ -1678,6 +1708,8 @@ export async function syncAll() {
     await Promise.all(tasks);
     emit('data:synced');
 }
+
+
 
 
 
