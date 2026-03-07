@@ -3,9 +3,10 @@
 // ==================================================
 
 import { Chart } from 'chart.js/auto';
+import Swal from 'sweetalert2';
 import { state, emit, isAdmin, isEmployee, isManager } from '../lib/store.js';
 import { escapeHTML, escapeInlineArg, getDisplayDate, toPeriodKey, formatPeriod, formatNumber } from '../lib/utils.js';
-import { saveEmployee, logActivity, buildProbationDraft, saveProbationReview, savePipPlan, savePipActions, calculateEmployeeWeightedKpiScore } from './data.js';
+import { saveEmployee, logActivity, buildProbationDraft, saveProbationReview, saveProbationMonthlyScores, saveProbationAttendanceRecord, savePipPlan, savePipActions, calculateEmployeeWeightedKpiScore } from './data.js';
 import { requireRecentAuth } from './auth.js';
 import { startAssessment, renderPendingList, initiateSelfAssessment as _initSelfAssess } from './assessment.js';
 import * as notify from '../lib/notify.js';
@@ -558,10 +559,119 @@ function getPipThreshold() {
 }
 
 function scoreBadgeClass(score) {
-    if (score >= 100) return 'bg-success';
+    if (score >= 90) return 'bg-success';
     if (score >= 75) return 'bg-primary';
-    if (score >= 50) return 'bg-warning text-dark';
+    if (score >= 60) return 'bg-warning text-dark';
     return 'bg-danger';
+}
+
+function toFixedScore(value, digits = 2) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '0';
+    return num.toFixed(digits);
+}
+
+function isHrOperator() {
+    const role = String(state.currentUser?.role || '').toLowerCase();
+    const deptRaw = state.currentUser?.department || state.db[state.currentUser?.id]?.department || '';
+    const dept = String(deptRaw).toLowerCase();
+    return role === 'hr'
+        || dept === 'hr'
+        || dept.includes('human resource')
+        || dept.includes('human resources');
+}
+
+function canManageAttendance() {
+    return isAdmin() || isHrOperator();
+}
+
+function getScopedProbationReviews() {
+    const sourceRows = state.probationReviews || [];
+    if (canManageAttendance()) return sourceRows;
+
+    const scoped = new Set(getFilteredEmployeeIds());
+    return sourceRows.filter(row => scoped.has(row.employee_id));
+}
+
+function getMonthlyRows(reviewId) {
+    return (state.probationMonthlyScores || [])
+        .filter(row => row.probation_review_id === reviewId)
+        .sort((a, b) => Number(a.month_no || 0) - Number(b.month_no || 0));
+}
+
+function getAttendanceRows(reviewId) {
+    return (state.probationAttendanceRecords || []).filter(row => row.probation_review_id === reviewId);
+}
+
+function monthAttendanceSummary(reviewId, monthNo) {
+    const items = getAttendanceRows(reviewId).filter(row => Number(row.month_no) === Number(monthNo));
+    if (items.length === 0) return '-';
+    return items
+        .map(row => `${row.event_date || '-'} ${row.event_type || 'attendance'} x${Number(row.qty || 1)} (-${toFixedScore(row.deduction_points || 0, 1)})`)
+        .join('; ');
+}
+
+function suggestAttendanceDeduction(eventType, qty) {
+    const amount = Math.max(0, Math.round(Number(qty) || 0));
+    if (eventType === 'late_in' || eventType === 'missed_clock_out') {
+        if (amount >= 15) return 5;
+        if (amount >= 9) return 3;
+        if (amount >= 3) return 1;
+        return 0;
+    }
+    if (eventType === 'discipline') {
+        return Math.min(10, amount * 2);
+    }
+    if (eventType === 'event_absent') {
+        return Math.min(10, amount);
+    }
+    if (eventType === 'absent') {
+        if (amount >= 5) return 5;
+        if (amount >= 3) return 3;
+        if (amount >= 1) return 1;
+        return 0;
+    }
+    return 0;
+}
+
+async function ensureProbationMonthlyRows(review) {
+    const existing = getMonthlyRows(review.id);
+    const attendance = getAttendanceRows(review.id);
+    const draft = buildProbationDraft(review.employee_id, existing, attendance);
+    const payloadRows = draft.monthly_rows.map(row => ({
+        ...row,
+        probation_review_id: review.id,
+    }));
+    await saveProbationMonthlyScores(review.id, payloadRows);
+    return buildProbationDraft(review.employee_id, getMonthlyRows(review.id), attendance);
+}
+
+async function recomputeProbationReview(review, overrideRows = null, decisionOverride = null, summaryNoteOverride = null) {
+    const attendance = getAttendanceRows(review.id);
+    const baseRows = overrideRows || getMonthlyRows(review.id);
+    const draft = buildProbationDraft(review.employee_id, baseRows, attendance);
+
+    const payloadRows = draft.monthly_rows.map(row => ({
+        ...row,
+        probation_review_id: review.id,
+    }));
+    await saveProbationMonthlyScores(review.id, payloadRows);
+
+    const updatedReview = await saveProbationReview({
+        ...review,
+        review_period_start: draft.review_period_start,
+        review_period_end: draft.review_period_end,
+        quantitative_score: draft.quantitative_score,
+        qualitative_score: draft.qualitative_score,
+        final_score: draft.final_score,
+        decision: decisionOverride !== null ? decisionOverride : (review.decision || 'pending'),
+        manager_notes: summaryNoteOverride !== null ? summaryNoteOverride : (review.manager_notes || ''),
+    }, []);
+
+    return {
+        review: updatedReview,
+        draft,
+    };
 }
 
 export function renderProbationPipView() {
@@ -569,10 +679,11 @@ export function renderProbationPipView() {
     const pipBody = document.getElementById('pip-plans-body');
     if (!probationBody || !pipBody) return;
 
-    const scoped = new Set(getFilteredEmployeeIds());
+    const attendanceBtn = document.getElementById('probation-attendance-btn');
+    if (attendanceBtn) attendanceBtn.classList.toggle('d-none', !canManageAttendance());
 
-    const probationRows = (state.probationReviews || [])
-        .filter(row => scoped.has(row.employee_id))
+    const probationRows = getScopedProbationReviews()
+        .slice()
         .sort((a, b) => String(b.reviewed_at || b.created_at || '').localeCompare(String(a.reviewed_at || a.created_at || '')));
 
     probationBody.innerHTML = '';
@@ -581,6 +692,8 @@ export function renderProbationPipView() {
     } else {
         probationRows.forEach(row => {
             const emp = state.db[row.employee_id];
+            const monthly = buildProbationDraft(row.employee_id, getMonthlyRows(row.id), getAttendanceRows(row.id));
+            const finalScore = Number(row.final_score ?? monthly.final_score ?? 0);
             const decision = String(row.decision || 'pending').toLowerCase();
             const decisionClass = decision === 'pass'
                 ? 'bg-success'
@@ -590,25 +703,38 @@ export function renderProbationPipView() {
                         ? 'bg-danger'
                         : 'bg-secondary';
 
+            const monthlyPills = (monthly.monthly_rows || [])
+                .map(m => `<span class="badge bg-light text-dark border me-1">M${m.month_no}: ${toFixedScore(m.monthly_total, 1)}</span>`)
+                .join('');
+
             probationBody.innerHTML += `
             <tr>
                 <td>
                     <div class="fw-bold">${escapeHTML(emp?.name || row.employee_id)}</div>
-                    <div class="small text-muted">${escapeHTML(row.review_period_start || '-')} to ${escapeHTML(row.review_period_end || '-')}</div>
+                    <div class="small text-muted">${escapeHTML(row.review_period_start || monthly.review_period_start || '-')} to ${escapeHTML(row.review_period_end || monthly.review_period_end || '-')}</div>
+                    <div class="small mt-1">${monthlyPills}</div>
                 </td>
                 <td class="text-center">
-                    <span class="badge ${scoreBadgeClass(Number(row.final_score || 0))}">${formatNumber(Number(row.final_score || 0).toFixed(1))}</span>
+                    <span class="badge ${scoreBadgeClass(finalScore)}">${toFixedScore(finalScore, 1)}</span>
                 </td>
                 <td class="text-center"><span class="badge ${decisionClass}">${escapeHTML(decision)}</span></td>
                 <td class="text-end">
-                    <button class="btn btn-sm btn-outline-primary" onclick="window.__app.reviewProbation('${escapeInlineArg(row.id)}')" title="Review">
-                        <i class="bi bi-pencil"></i>
-                    </button>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" onclick="window.__app.reviewProbation('${escapeInlineArg(row.id)}')" title="Review Form">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        ${canManageAttendance() ? `
+                        <button class="btn btn-outline-dark" onclick="window.__app.addProbationAttendanceEntry('${escapeInlineArg(row.id)}')" title="Attendance Entry">
+                            <i class="bi bi-calendar-plus"></i>
+                        </button>
+                        ` : ''}
+                    </div>
                 </td>
             </tr>`;
         });
     }
 
+    const scoped = new Set(getFilteredEmployeeIds());
     const pipRows = (state.pipPlans || [])
         .filter(row => scoped.has(row.employee_id))
         .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
@@ -680,21 +806,14 @@ export async function generateProbationDrafts() {
             continue;
         }
 
-        const join = new Date(emp.join_date);
-        if (Number.isNaN(join.getTime())) {
-            skipped++;
-            continue;
-        }
-
-        const probationEnd = new Date(join);
-        probationEnd.setMonth(probationEnd.getMonth() + 3);
-        if (now < probationEnd) {
-            skipped++;
-            continue;
-        }
-
         const draft = buildProbationDraft(empId);
         if (!draft.review_period_start || draft.metric_count <= 0) {
+            skipped++;
+            continue;
+        }
+
+        const reviewEnd = new Date(`${draft.review_period_end}T23:59:59`);
+        if (Number.isNaN(reviewEnd.getTime()) || now < reviewEnd) {
             skipped++;
             continue;
         }
@@ -707,16 +826,21 @@ export async function generateProbationDrafts() {
             continue;
         }
 
-        await saveProbationReview({
+        const savedReview = await saveProbationReview({
             employee_id: empId,
             review_period_start: draft.review_period_start,
             review_period_end: draft.review_period_end,
             quantitative_score: draft.quantitative_score,
-            qualitative_score: 0,
-            final_score: draft.quantitative_score,
+            qualitative_score: draft.qualitative_score,
+            final_score: draft.final_score,
             decision: 'pending',
-            manager_notes: 'Auto-generated probation draft from first 3 months KPI result.',
+            manager_notes: 'Auto-generated probation draft from first 3-month review window.',
         }, []);
+
+        await saveProbationMonthlyScores(savedReview.id, draft.monthly_rows.map(row => ({
+            ...row,
+            probation_review_id: savedReview.id,
+        })));
 
         created++;
     }
@@ -744,65 +868,110 @@ export async function reviewProbation(reviewId) {
         return;
     }
 
-    const qualitativeRaw = await notify.input({
-        title: 'Qualitative Score',
-        input: 'number',
-        inputLabel: 'Manager qualitative score (0-100)',
-        inputValue: String(Number(review.qualitative_score || 0)),
-        confirmButtonText: 'Next',
-        validate: value => {
-            const n = Number(value);
-            if (!Number.isFinite(n) || n < 0 || n > 100) return 'Score must be 0-100.';
-            return null;
+    const seeded = await ensureProbationMonthlyRows(review);
+    const rows = seeded.monthly_rows || [];
+
+    const htmlRows = rows.map(row => `
+        <tr>
+            <td class="small">
+                <div class="fw-bold">Month ${row.month_no}</div>
+                <div class="text-muted">${escapeHTML(row.period_start)} to ${escapeHTML(row.period_end)}</div>
+            </td>
+            <td><input id="pr-work-${row.month_no}" class="form-control form-control-sm text-end" value="${toFixedScore(row.work_performance_score, 2)}" readonly></td>
+            <td><input id="pr-manage-${row.month_no}" class="form-control form-control-sm text-end" type="number" min="0" max="30" step="0.1" value="${toFixedScore(row.managing_task_score, 2)}"></td>
+            <td><input id="pr-att-${row.month_no}" class="form-control form-control-sm text-end" value="${toFixedScore(row.attitude_score, 2)}" readonly></td>
+            <td><input id="pr-ded-${row.month_no}" class="form-control form-control-sm text-end" value="${toFixedScore(row.attendance_deduction, 2)}" readonly></td>
+            <td><textarea id="pr-qual-${row.month_no}" class="form-control form-control-sm" rows="2" placeholder="Manager qualitative assessment">${escapeHTML(row.manager_qualitative_text || '')}</textarea></td>
+            <td><textarea id="pr-note-${row.month_no}" class="form-control form-control-sm" rows="2" placeholder="Manager notes">${escapeHTML(row.manager_note || '')}</textarea></td>
+            <td><input id="pr-total-${row.month_no}" class="form-control form-control-sm text-end" value="${toFixedScore(row.monthly_total, 2)}" readonly></td>
+        </tr>
+    `).join('');
+
+        const modalResult = await Swal.fire({
+        title: 'Probation Review Form',
+        width: 1200,
+        heightAuto: false,
+        showCancelButton: true,
+        confirmButtonText: 'Save Review',
+        cancelButtonText: 'Cancel',
+        focusConfirm: false,
+        html: `
+            <div class="text-start small">
+                <div class="mb-2"><strong>Employee:</strong> ${escapeHTML(state.db[review.employee_id]?.name || review.employee_id)}</div>
+                <div class="mb-2"><strong>Window:</strong> ${escapeHTML(seeded.review_period_start || '-')} to ${escapeHTML(seeded.review_period_end || '-')}</div>
+                <div class="table-responsive border rounded mb-3" style="max-height:320px; overflow:auto;">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Month</th>
+                                <th>Work<br><span class="text-muted">(50)</span></th>
+                                <th>Managing<br><span class="text-muted">(30)</span></th>
+                                <th>Attitude<br><span class="text-muted">(20)</span></th>
+                                <th>Deduction</th>
+                                <th>Qualitative Text</th>
+                                <th>Manager Note</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>${htmlRows}</tbody>
+                    </table>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold mb-1">Decision</label>
+                    <select id="pr-decision" class="form-select form-select-sm">
+                        <option value="pending" ${String(review.decision || 'pending') === 'pending' ? 'selected' : ''}>Pending</option>
+                        <option value="pass" ${String(review.decision || '') === 'pass' ? 'selected' : ''}>Pass</option>
+                        <option value="extend" ${String(review.decision || '') === 'extend' ? 'selected' : ''}>Extend</option>
+                        <option value="fail" ${String(review.decision || '') === 'fail' ? 'selected' : ''}>Fail</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold mb-1">Summary Notes</label>
+                    <textarea id="pr-summary" class="form-control form-control-sm" rows="3" placeholder="Overall probation summary">${escapeHTML(review.manager_notes || '')}</textarea>
+                </div>
+                ${canManageAttendance() ? '<div class="text-muted small">Tip: use Attendance Entry button to update attitude score deductions.</div>' : ''}
+            </div>
+        `,
+        preConfirm: () => {
+            const collectedRows = [];
+            for (const row of rows) {
+                const manage = Number(document.getElementById(`pr-manage-${row.month_no}`)?.value);
+                const qual = (document.getElementById(`pr-qual-${row.month_no}`)?.value || '').trim();
+                const note = (document.getElementById(`pr-note-${row.month_no}`)?.value || '').trim();
+                if (!Number.isFinite(manage) || manage < 0 || manage > 30) {
+                    Swal.showValidationMessage(`Managing Task score for Month ${row.month_no} must be between 0 and 30.`);
+                    return false;
+                }
+                collectedRows.push({
+                    ...row,
+                    probation_review_id: review.id,
+                    managing_task_score: Math.max(0, Math.min(30, manage)),
+                    manager_qualitative_text: qual,
+                    manager_note: note,
+                });
+            }
+
+            const decision = (document.getElementById('pr-decision')?.value || 'pending').trim();
+            const summary = (document.getElementById('pr-summary')?.value || '').trim();
+            return { collectedRows, decision, summary };
         },
     });
-    if (qualitativeRaw === null) return;
+    if (!modalResult.isConfirmed || !modalResult.value) return;
 
-    const decision = await notify.input({
-        title: 'Probation Decision',
-        input: 'select',
-        inputOptions: {
-            pending: 'Pending',
-            pass: 'Pass',
-            extend: 'Extend',
-            fail: 'Fail',
-        },
-        inputValue: String(review.decision || 'pending'),
-        confirmButtonText: 'Next',
-    });
-    if (decision === null) return;
+    const updatedRows = modalResult.value.collectedRows;
+    const decision = modalResult.value.decision;
+    const summary = modalResult.value.summary;
 
-    const notes = await notify.input({
-        title: 'Manager Notes',
-        input: 'textarea',
-        inputValue: String(review.manager_notes || ''),
-        confirmButtonText: 'Save',
-    });
-    if (notes === null) return;
-
-    const qualitativeScore = Number(qualitativeRaw);
-    const finalScore = (Number(review.quantitative_score || 0) * 0.7) + (qualitativeScore * 0.3);
-
-    await saveProbationReview({
-        ...review,
-        qualitative_score: qualitativeScore,
-        final_score: finalScore,
-        decision,
-        manager_notes: notes,
-    }, [
-        {
-            item_name: 'Manager Qualitative Assessment',
-            score: qualitativeScore,
-            note: notes,
-        },
-    ]);
+    const refreshed = await recomputeProbationReview(review, updatedRows, decision, summary);
 
     await logActivity({
         action: 'probation.review.update',
         entityType: 'probation_review',
         entityId: reviewId,
         details: {
-            qualitative_score: qualitativeScore,
+            quantitative_score: refreshed.draft.quantitative_score,
+            qualitative_score: refreshed.draft.qualitative_score,
+            final_score: refreshed.draft.final_score,
             decision,
         },
     });
@@ -811,54 +980,294 @@ export async function reviewProbation(reviewId) {
     await notify.success('Probation review updated.');
 }
 
-export function exportProbationCsv() {
-    const scoped = new Set(getFilteredEmployeeIds());
-    const rows = (state.probationReviews || []).filter(r => scoped.has(r.employee_id));
+export async function addProbationAttendanceEntry(reviewId = '') {
+    if (!canManageAttendance()) {
+        await notify.error('Only HR/Superadmin can add attendance entries.');
+        return;
+    }
 
-    const header = [
-        'Review_ID',
-        'Employee_ID',
-        'Employee_Name',
-        'Review_Period_Start',
-        'Review_Period_End',
-        'Quantitative_Score',
-        'Qualitative_Score',
-        'Final_Score',
-        'Decision',
-        'Manager_Notes',
-        'Reviewed_At',
-    ];
+    const reviews = getScopedProbationReviews();
+    if (reviews.length === 0) {
+        await notify.warn('No probation review available. Generate drafts first.');
+        return;
+    }
 
-    const lines = [header.join(',')];
-    rows.forEach(row => {
-        const emp = state.db[row.employee_id];
-        const vals = [
-            row.id || '',
-            row.employee_id || '',
-            emp?.name || row.employee_id || '',
-            row.review_period_start || '',
-            row.review_period_end || '',
-            row.quantitative_score ?? 0,
-            row.qualitative_score ?? 0,
-            row.final_score ?? 0,
-            row.decision || '',
-            (row.manager_notes || '').replace(/\r?\n/g, ' '),
-            row.reviewed_at || '',
-        ].map(v => {
-            const s = String(v ?? '');
-            if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-                return `"${s.replace(/"/g, '""')}"`;
-            }
-            return s;
+    let selectedReviewId = reviewId;
+    if (!selectedReviewId) {
+        const options = {};
+        reviews.forEach(r => {
+            const emp = state.db[r.employee_id];
+            options[r.id] = `${emp?.name || r.employee_id} (${r.review_period_start || '-'})`;
         });
-        lines.push(vals.join(','));
+        selectedReviewId = await notify.input({
+            title: 'Select Probation Review',
+            input: 'select',
+            inputOptions: options,
+            inputValue: Object.keys(options)[0],
+            confirmButtonText: 'Next',
+        });
+        if (selectedReviewId === null) return;
+    }
+
+    const review = reviews.find(r => r.id === selectedReviewId);
+    if (!review) {
+        await notify.error('Probation review not found.');
+        return;
+    }
+
+    const seeded = await ensureProbationMonthlyRows(review);
+    const monthOptions = {};
+    (seeded.monthly_rows || []).forEach(row => {
+        monthOptions[String(row.month_no)] = `Month ${row.month_no} (${row.period_start} to ${row.period_end})`;
     });
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const monthRaw = await notify.input({
+        title: 'Select Probation Month',
+        input: 'select',
+        inputOptions: monthOptions,
+        inputValue: '1',
+        confirmButtonText: 'Next',
+    });
+    if (monthRaw === null) return;
+    const monthNo = Number(monthRaw);
+
+    const targetMonth = (seeded.monthly_rows || []).find(r => Number(r.month_no) === monthNo);
+    const eventDate = await notify.input({
+        title: 'Attendance Event Date',
+        input: 'text',
+        inputPlaceholder: 'YYYY-MM-DD',
+        inputValue: targetMonth?.period_start || '',
+        confirmButtonText: 'Next',
+        validate: value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim()) ? null : 'Use YYYY-MM-DD format.',
+    });
+    if (eventDate === null) return;
+
+    const eventType = await notify.input({
+        title: 'Attendance Event Type',
+        input: 'select',
+        inputOptions: {
+            late_in: 'Late Clock In',
+            missed_clock_out: 'Missed Clock Out',
+            absent: 'Absence',
+            event_absent: 'Event/Meeting Absence',
+            discipline: 'Discipline Violation',
+            other: 'Other',
+        },
+        inputValue: 'late_in',
+        confirmButtonText: 'Next',
+    });
+    if (eventType === null) return;
+
+    const qtyRaw = await notify.input({
+        title: 'Event Quantity',
+        input: 'number',
+        inputValue: '1',
+        inputLabel: 'How many occurrences?',
+        confirmButtonText: 'Next',
+        validate: value => {
+            const n = Number(value);
+            if (!Number.isFinite(n) || n < 0) return 'Quantity must be >= 0';
+            return null;
+        },
+    });
+    if (qtyRaw === null) return;
+    const qty = Number(qtyRaw);
+
+    const suggested = suggestAttendanceDeduction(String(eventType), qty);
+    const deductionRaw = await notify.input({
+        title: 'Deduction Points',
+        input: 'number',
+        inputValue: String(suggested),
+        inputLabel: 'You can override suggested deduction points.',
+        confirmButtonText: 'Next',
+        validate: value => {
+            const n = Number(value);
+            if (!Number.isFinite(n) || n < 0) return 'Deduction must be >= 0';
+            return null;
+        },
+    });
+    if (deductionRaw === null) return;
+
+    const note = await notify.input({
+        title: 'Attendance Note',
+        input: 'textarea',
+        inputValue: '',
+        confirmButtonText: 'Save Entry',
+    });
+    if (note === null) return;
+
+    await saveProbationAttendanceRecord({
+        probation_review_id: review.id,
+        month_no: monthNo,
+        event_date: String(eventDate).trim(),
+        event_type: String(eventType).trim(),
+        qty,
+        deduction_points: Number(deductionRaw),
+        note: String(note || '').trim(),
+        entered_by: state.currentUser?.id || null,
+    });
+
+    const currentReview = (state.probationReviews || []).find(r => r.id === review.id) || review;
+    await recomputeProbationReview(currentReview);
+
+    await logActivity({
+        action: 'probation.attendance.add',
+        entityType: 'probation_attendance',
+        entityId: review.id,
+        details: {
+            month_no: monthNo,
+            event_type: eventType,
+            qty,
+            deduction: Number(deductionRaw),
+        },
+    });
+
+    renderProbationPipView();
+    await notify.success('Attendance entry saved and probation score updated.');
+}
+
+export async function exportProbationCsv() {
+    const reviews = getScopedProbationReviews();
+    if (reviews.length === 0) {
+        await notify.warn('No probation review to export.');
+        return;
+    }
+
+    const options = {};
+    reviews.forEach(r => {
+        const emp = state.db[r.employee_id];
+        options[r.id] = `${emp?.name || r.employee_id} (${r.review_period_start || '-'})`;
+    });
+
+    const selected = await notify.input({
+        title: 'Select Probation Review to Export',
+        input: 'select',
+        inputOptions: options,
+        inputValue: reviews[0]?.id || '',
+        confirmButtonText: 'Export Excel',
+    });
+    if (selected === null) return;
+
+    const review = reviews.find(r => r.id === selected);
+    if (!review) {
+        await notify.error('Probation review not found.');
+        return;
+    }
+
+    const draft = await ensureProbationMonthlyRows(review);
+    const employee = state.db[review.employee_id] || { id: review.employee_id, name: review.employee_id, position: '-' };
+    const attendanceRows = getAttendanceRows(review.id);
+    const company = state.appSettings?.company_name || 'Company';
+    const appName = state.appSettings?.app_name || 'HR Performance Suite';
+
+    const ExcelJS = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+
+    (draft.monthly_rows || []).forEach(monthRow => {
+        const ws = wb.addWorksheet(`Bulan ${monthRow.month_no}`);
+        ws.columns = [
+            { width: 6 },
+            { width: 38 },
+            { width: 16 },
+            { width: 52 },
+            { width: 40 },
+        ];
+
+        ws.addRow([company]);
+        ws.addRow([appName]);
+        ws.addRow([]);
+        ws.addRow(['Probationary Employee Assessment']);
+        ws.mergeCells('A4:E4');
+        ws.addRow([]);
+        ws.addRow(['Employee', employee.name, '', 'Position', employee.position || '-']);
+        ws.addRow(['Month Window', `${monthRow.period_start} to ${monthRow.period_end}`]);
+        ws.addRow([]);
+        ws.addRow(['No', 'Tugas & tanggung Jawab', 'Realisasi', 'Penilaian Qualitative', 'Catatan']);
+        ws.addRow([1, 'Work Performance (50 points)', Number(monthRow.work_performance_score || 0), monthRow.manager_qualitative_text || '', monthAttendanceSummary(review.id, monthRow.month_no)]);
+        ws.addRow([2, 'Managing Task (30 points)', Number(monthRow.managing_task_score || 0), monthRow.manager_qualitative_text || '', monthRow.manager_note || '']);
+        ws.addRow([3, 'Attitude (20 points)', Number(monthRow.attitude_score || 0), `Attendance deduction: ${toFixedScore(monthRow.attendance_deduction || 0, 2)}`, monthAttendanceSummary(review.id, monthRow.month_no)]);
+        ws.addRow(['', 'Score Rata-rata', Number(monthRow.monthly_total || 0), '', '']);
+
+        const headRow = ws.getRow(9);
+        headRow.font = { bold: true };
+        headRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        [9, 10, 11, 12, 13].forEach(rn => {
+            const row = ws.getRow(rn);
+            row.eachCell(cell => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' },
+                };
+            });
+        });
+        ws.getCell('A4').font = { bold: true, size: 14 };
+        ws.getCell('A4').alignment = { horizontal: 'center' };
+    });
+
+    const recap = wb.addWorksheet('Rekap');
+    recap.columns = [
+        { width: 10 },
+        { width: 22 },
+        { width: 20 },
+        { width: 14 },
+        { width: 14 },
+        { width: 14 },
+        { width: 14 },
+        { width: 42 },
+    ];
+
+    recap.addRow([company]);
+    recap.addRow([appName]);
+    recap.addRow([]);
+    recap.addRow(['Probationary Employee Assessment - Recap']);
+    recap.mergeCells('A4:H4');
+    recap.addRow([]);
+    recap.addRow(['Nama', employee.name, '', 'Jabatan', employee.position || '-']);
+    recap.addRow(['Mulai Probation', review.review_period_start || draft.review_period_start || '-', '', 'Akhir Probation', review.review_period_end || draft.review_period_end || '-']);
+    recap.addRow([]);
+    recap.addRow(['No', 'Task', 'Period', 'Work (50)', 'Managing (30)', 'Attitude (20)', 'Total', 'Qualitative']);
+
+    (draft.monthly_rows || []).forEach(row => {
+        recap.addRow([
+            row.month_no,
+            `Hasil Progres Bulan ${row.month_no}`,
+            `${row.period_start} to ${row.period_end}`,
+            Number(row.work_performance_score || 0),
+            Number(row.managing_task_score || 0),
+            Number(row.attitude_score || 0),
+            Number(row.monthly_total || 0),
+            row.manager_qualitative_text || '-',
+        ]);
+    });
+
+    recap.addRow(['', 'Score Rata-rata', '', Number(draft.quantitative_score || 0), Number(draft.qualitative_score || 0), '', Number(review.final_score || draft.final_score || 0), '']);
+    recap.addRow([]);
+    recap.addRow(['Decision', review.decision || 'pending']);
+    recap.addRow(['Summary', review.manager_notes || '-']);
+
+    [9, 10, 11, 12].forEach(rn => {
+        const row = recap.getRow(rn);
+        row.eachCell(cell => {
+            cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' },
+            };
+        });
+    });
+    recap.getCell('A4').font = { bold: true, size: 14 };
+    recap.getCell('A4').alignment = { horizontal: 'center' };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    const safeName = String(employee.name || review.employee_id || 'employee').replace(/[^a-zA-Z0-9_-]/g, '_');
     a.href = url;
-    a.download = `probation_reviews_${getCurrentPeriodKey()}.csv`;
+    a.download = `probation_${safeName}_${getCurrentPeriodKey()}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1014,3 +1423,4 @@ export async function updatePipPlanStatus(planId) {
     renderProbationPipView();
     await notify.success('PIP plan updated.');
 }
+

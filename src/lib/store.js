@@ -12,6 +12,8 @@ export const state = {
     employeePerformanceScores: [],
     probationReviews: [],
     probationQualitativeItems: [],
+    probationMonthlyScores: [],
+    probationAttendanceRecords: [],
     pipPlans: [],
     pipActions: [],
     activityLogs: [], // Admin/activity logs

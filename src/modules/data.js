@@ -1044,6 +1044,27 @@ export async function fetchProbationQualitativeItems() {
     });
 }
 
+export async function fetchProbationMonthlyScores() {
+    return fetchOptionalCollection({
+        label: 'Fetch probation monthly scores',
+        table: 'probation_monthly_scores',
+        stateKey: 'probationMonthlyScores',
+        eventName: 'data:probationMonthlyScores',
+        orderBy: 'created_at',
+        ascending: false,
+    });
+}
+
+export async function fetchProbationAttendanceRecords() {
+    return fetchOptionalCollection({
+        label: 'Fetch probation attendance records',
+        table: 'probation_attendance_records',
+        stateKey: 'probationAttendanceRecords',
+        eventName: 'data:probationAttendanceRecords',
+        orderBy: 'event_date',
+        ascending: false,
+    });
+}
 export async function fetchPipPlans() {
     return fetchOptionalCollection({
         label: 'Fetch PIP plans',
@@ -1117,20 +1138,187 @@ function toPeriod(date) {
     return `${yyyy}-${mm}`;
 }
 
-function getProbationPeriods(joinDate, monthCount = 3) {
-    const base = new Date(joinDate);
-    if (Number.isNaN(base.getTime())) return [];
+function parseIsoDate(value) {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const [y, m, d] = raw.split('-').map(Number);
+        return new Date(Date.UTC(y, m - 1, d));
+    }
+    const dt = new Date(raw);
+    if (Number.isNaN(dt.getTime())) return null;
+    return new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()));
+}
+
+function formatIsoDate(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(date.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDaysUtc(date, days) {
+    const dt = new Date(date.getTime());
+    dt.setUTCDate(dt.getUTCDate() + days);
+    return dt;
+}
+
+function addMonthsClampedUtc(date, monthDelta) {
+    const baseYear = date.getUTCFullYear();
+    const baseMonth = date.getUTCMonth();
+    const baseDay = date.getUTCDate();
+
+    const monthIndex = baseMonth + monthDelta;
+    const targetYear = baseYear + Math.floor(monthIndex / 12);
+    const targetMonth = ((monthIndex % 12) + 12) % 12;
+    const maxDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+
+    return new Date(Date.UTC(targetYear, targetMonth, Math.min(baseDay, maxDay)));
+}
+
+function getPeriodBounds(period) {
+    const [yyyy, mm] = String(period || '').split('-').map(Number);
+    if (!yyyy || !mm) return null;
+    const start = new Date(Date.UTC(yyyy, mm - 1, 1));
+    const end = new Date(Date.UTC(yyyy, mm, 0));
+    return { start, end };
+}
+
+function getPeriodsInRange(startDate, endDate) {
+    if (!(startDate instanceof Date) || !(endDate instanceof Date)) return [];
+    if (startDate > endDate) return [];
 
     const periods = [];
-    const start = new Date(Date.UTC(base.getFullYear(), base.getMonth(), 1));
-    for (let i = 0; i < monthCount; i++) {
-        const next = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
-        periods.push(toPeriod(next));
+    let cursor = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1));
+    const last = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), 1));
+
+    while (cursor <= last) {
+        periods.push(toPeriod(cursor));
+        cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
     }
+
     return periods;
 }
 
-export function buildProbationDraft(employeeId, qualitativeItems = []) {
+function overlapDaysInclusive(startA, endA, startB, endB) {
+    const start = startA > startB ? startA : startB;
+    const end = endA < endB ? endA : endB;
+    if (end < start) return 0;
+    const millis = end.getTime() - start.getTime();
+    return Math.floor(millis / 86400000) + 1;
+}
+
+function average(values = []) {
+    const nums = values.filter(v => Number.isFinite(Number(v))).map(v => Number(v));
+    if (nums.length === 0) return 0;
+    return nums.reduce((sum, n) => sum + n, 0) / nums.length;
+}
+
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function attendanceDeduction(entries = []) {
+    return roundScore(asArray(entries).reduce((sum, row) => sum + Math.max(0, toNumber(row?.deduction_points, 0)), 0));
+}
+
+function normalizeMonthlyScoreRow(row = {}) {
+    const monthNoRaw = toNumber(row.month_no, 0);
+    const monthNo = Number.isFinite(monthNoRaw) ? Math.max(1, Math.min(3, Math.round(monthNoRaw))) : 0;
+    return {
+        id: row.id || null,
+        month_no: monthNo,
+        period_start: row.period_start || '',
+        period_end: row.period_end || '',
+        work_performance_score: roundScore(clamp(toNumber(row.work_performance_score, 0), 0, 50)),
+        managing_task_score: roundScore(clamp(toNumber(row.managing_task_score, 0), 0, 30)),
+        manager_qualitative_text: String(row.manager_qualitative_text || '').trim(),
+        manager_note: String(row.manager_note || '').trim(),
+        attitude_score: roundScore(clamp(toNumber(row.attitude_score, 20), 0, 20)),
+        attendance_deduction: roundScore(Math.max(0, toNumber(row.attendance_deduction, 0))),
+        monthly_total: roundScore(clamp(toNumber(row.monthly_total, 0), 0, 100)),
+    };
+}
+
+export function buildProbationWindows(joinDate, monthCount = 3) {
+    const start = parseIsoDate(joinDate);
+    if (!start) return [];
+
+    const windows = [];
+    for (let i = 0; i < monthCount; i++) {
+        const periodStart = addMonthsClampedUtc(start, i);
+        const periodEnd = addDaysUtc(addMonthsClampedUtc(start, i + 1), -1);
+        windows.push({
+            month_no: i + 1,
+            start_date: formatIsoDate(periodStart),
+            end_date: formatIsoDate(periodEnd),
+            period_key: toPeriod(periodStart),
+        });
+    }
+
+    return windows;
+}
+
+export function calculateProbationWorkPerformance(employeeId, startDate, endDate) {
+    const start = parseIsoDate(startDate);
+    const end = parseIsoDate(endDate);
+    if (!start || !end || start > end) {
+        return {
+            score: 0,
+            metric_count: 0,
+            total_days: 0,
+            contributions: [],
+        };
+    }
+
+    const periods = getPeriodsInRange(start, end);
+    const contributions = [];
+    let weightedSum = 0;
+    let totalWeightDays = 0;
+    let metricCount = 0;
+
+    periods.forEach(period => {
+        const bounds = getPeriodBounds(period);
+        if (!bounds) return;
+
+        const overlapDays = overlapDaysInclusive(start, end, bounds.start, bounds.end);
+        if (overlapDays <= 0) return;
+
+        const periodRecords = asArray(state.kpiRecords).filter(r => r.employee_id === employeeId && r.period === period);
+        const summary = calculateEmployeeWeightedKpiScore(employeeId, periodRecords);
+        const score = toNumber(summary.score, 0);
+
+        const hasRecords = periodRecords.length > 0;
+        const summaryMetricCount = toNumber(summary.metric_count, 0);
+
+        // Do not penalize pre-tracking days (e.g., join late in month with KPI tracking starting next month).
+        if (hasRecords) {
+            weightedSum += score * overlapDays;
+            totalWeightDays += overlapDays;
+            metricCount += summaryMetricCount;
+        }
+
+        contributions.push({
+            period,
+            overlap_days: overlapDays,
+            score: roundScore(score),
+            metric_count: summaryMetricCount,
+            has_records: hasRecords,
+            used_in_weight: hasRecords,
+        });
+    });
+
+    const avgScore = totalWeightDays > 0 ? weightedSum / totalWeightDays : 0;
+    return {
+        score: roundScore(avgScore),
+        metric_count: metricCount,
+        total_days: totalWeightDays,
+        contributions,
+    };
+}
+
+export function buildProbationDraft(employeeId, monthlyScores = [], attendanceRecords = []) {
     const employee = state.db[employeeId];
     if (!employee?.join_date) {
         return {
@@ -1142,41 +1330,74 @@ export function buildProbationDraft(employeeId, qualitativeItems = []) {
             final_score: 0,
             periods: [],
             metric_count: 0,
+            monthly_rows: [],
         };
     }
 
-    const periods = getProbationPeriods(employee.join_date, 3);
-    const probationRecords = state.kpiRecords.filter(r => r.employee_id === employeeId && periods.includes(r.period));
-    const quantSummary = calculateEmployeeWeightedKpiScore(employeeId, probationRecords);
+    const windows = buildProbationWindows(employee.join_date, 3);
+    const scoreMap = {};
+    asArray(monthlyScores).forEach(raw => {
+        const row = normalizeMonthlyScoreRow(raw);
+        if (!row.month_no) return;
+        scoreMap[row.month_no] = row;
+    });
 
-    const qualitativeList = asArray(qualitativeItems)
-        .map(item => toNumber(item?.score, 0))
-        .filter(score => score > 0);
-    const qualitativeScore = qualitativeList.length > 0
-        ? qualitativeList.reduce((sum, score) => sum + score, 0) / qualitativeList.length
-        : 0;
+    const attendanceByMonth = {};
+    asArray(attendanceRecords).forEach(entry => {
+        const monthNo = Math.max(1, Math.min(3, Math.round(toNumber(entry?.month_no, 0))));
+        if (!attendanceByMonth[monthNo]) attendanceByMonth[monthNo] = [];
+        attendanceByMonth[monthNo].push(entry);
+    });
 
-    const finalScore = (quantSummary.score * 0.7) + (qualitativeScore * 0.3);
+    const monthlyRows = windows.map(win => {
+        const existing = scoreMap[win.month_no] || {};
+        const workInfo = calculateProbationWorkPerformance(employeeId, win.start_date, win.end_date);
+        const workScore = roundScore(clamp(workInfo.score * 0.5, 0, 50));
 
-    const startDate = new Date(employee.join_date);
-    const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + 3);
-    endDate.setDate(endDate.getDate() - 1);
+        const managingScore = roundScore(clamp(toNumber(existing.managing_task_score, 0), 0, 30));
+        const monthAttendance = attendanceByMonth[win.month_no] || [];
+        const deduction = attendanceDeduction(monthAttendance);
+        const attitudeScore = roundScore(clamp(20 - deduction, 0, 20));
+        const monthlyTotal = roundScore(clamp(workScore + managingScore + attitudeScore, 0, 100));
+
+        return {
+            id: existing.id || null,
+            month_no: win.month_no,
+            period: win.period_key,
+            period_start: win.start_date,
+            period_end: win.end_date,
+            work_performance_score: workScore,
+            managing_task_score: managingScore,
+            manager_qualitative_text: String(existing.manager_qualitative_text || '').trim(),
+            manager_note: String(existing.manager_note || '').trim(),
+            attendance_deduction: deduction,
+            attitude_score: attitudeScore,
+            monthly_total: monthlyTotal,
+            metric_count: workInfo.metric_count,
+            attendance_entry_count: monthAttendance.length,
+            contributions: workInfo.contributions,
+        };
+    });
+
+    const quantitativeScore = roundScore(average(monthlyRows.map(row => row.work_performance_score)));
+    const qualitativeScore = roundScore(average(monthlyRows.map(row => row.managing_task_score + row.attitude_score)));
+    const finalScore = roundScore(average(monthlyRows.map(row => row.monthly_total)));
 
     return {
         employee_id: employeeId,
-        review_period_start: employee.join_date,
-        review_period_end: endDate.toISOString().slice(0, 10),
-        quantitative_score: roundScore(quantSummary.score),
-        qualitative_score: roundScore(qualitativeScore),
-        final_score: roundScore(finalScore),
-        periods,
-        metric_count: quantSummary.metric_count,
+        review_period_start: monthlyRows[0]?.period_start || employee.join_date,
+        review_period_end: monthlyRows[monthlyRows.length - 1]?.period_end || employee.join_date,
+        quantitative_score: quantitativeScore,
+        qualitative_score: qualitativeScore,
+        final_score: finalScore,
+        periods: monthlyRows.map(row => row.period),
+        metric_count: monthlyRows.reduce((sum, row) => sum + toNumber(row.metric_count, 0), 0),
+        monthly_rows: monthlyRows,
     };
 }
 
 export async function saveProbationReview(review, qualitativeItems = []) {
-    const draft = buildProbationDraft(review.employee_id, qualitativeItems);
+    const draft = buildProbationDraft(review.employee_id);
     const quantitativeScore = review.quantitative_score !== undefined
         ? toNumber(review.quantitative_score, 0)
         : draft.quantitative_score;
@@ -1185,7 +1406,7 @@ export async function saveProbationReview(review, qualitativeItems = []) {
         : draft.qualitative_score;
     const finalScore = review.final_score !== undefined
         ? toNumber(review.final_score, 0)
-        : roundScore((quantitativeScore * 0.7) + (qualitativeScore * 0.3));
+        : roundScore(quantitativeScore + qualitativeScore);
 
     const payload = {
         ...review,
@@ -1239,6 +1460,81 @@ export async function saveProbationReview(review, qualitativeItems = []) {
     }
 
     return data;
+}
+
+export async function saveProbationMonthlyScores(reviewId, rows = []) {
+    const normalized = asArray(rows)
+        .map(raw => ({
+            id: raw?.id || undefined,
+            probation_review_id: reviewId,
+            month_no: Math.max(1, Math.min(3, Math.round(toNumber(raw?.month_no, 0)))),
+            period_start: raw?.period_start || null,
+            period_end: raw?.period_end || null,
+            work_performance_score: roundScore(clamp(toNumber(raw?.work_performance_score, 0), 0, 50)),
+            managing_task_score: roundScore(clamp(toNumber(raw?.managing_task_score, 0), 0, 30)),
+            manager_qualitative_text: String(raw?.manager_qualitative_text || '').trim(),
+            manager_note: String(raw?.manager_note || '').trim(),
+            attendance_deduction: roundScore(Math.max(0, toNumber(raw?.attendance_deduction, 0))),
+            attitude_score: roundScore(clamp(toNumber(raw?.attitude_score, 20), 0, 20)),
+            monthly_total: roundScore(clamp(toNumber(raw?.monthly_total, 0), 0, 100)),
+        }))
+        .filter(row => row.probation_review_id && row.month_no >= 1 && row.month_no <= 3 && row.period_start && row.period_end);
+
+    if (normalized.length === 0) return [];
+
+    try {
+        const { data } = await execSupabase(
+            'Save probation monthly scores',
+            () => supabase
+                .from('probation_monthly_scores')
+                .upsert(normalized, { onConflict: 'probation_review_id,month_no' })
+                .select(),
+            { interactiveRetry: true, retries: 1 }
+        );
+
+        const untouched = state.probationMonthlyScores.filter(item => item.probation_review_id !== reviewId);
+        state.probationMonthlyScores = [...untouched, ...(data || [])];
+        emit('data:probationMonthlyScores', state.probationMonthlyScores);
+        return data || [];
+    } catch (error) {
+        if (!isMissingRelationError(error)) throw error;
+        return [];
+    }
+}
+
+export async function saveProbationAttendanceRecord(record) {
+    const payload = {
+        id: record?.id || undefined,
+        probation_review_id: record?.probation_review_id,
+        month_no: Math.max(1, Math.min(3, Math.round(toNumber(record?.month_no, 0)))),
+        event_date: record?.event_date || null,
+        event_type: String(record?.event_type || 'attendance').trim() || 'attendance',
+        qty: toNumber(record?.qty, 1),
+        deduction_points: roundScore(Math.max(0, toNumber(record?.deduction_points, 0))),
+        note: String(record?.note || '').trim(),
+        entered_by: record?.entered_by || state.currentUser?.id || null,
+    };
+
+    try {
+        const { data } = await execSupabase(
+            'Save probation attendance record',
+            () => supabase
+                .from('probation_attendance_records')
+                .upsert(payload, { onConflict: 'id' })
+                .select()
+                .single(),
+            { interactiveRetry: true, retries: 1 }
+        );
+
+        const idx = state.probationAttendanceRecords.findIndex(item => item.id === data.id);
+        if (idx >= 0) state.probationAttendanceRecords[idx] = data;
+        else state.probationAttendanceRecords.push(data);
+        emit('data:probationAttendanceRecords', state.probationAttendanceRecords);
+        return data;
+    } catch (error) {
+        if (!isMissingRelationError(error)) throw error;
+        return null;
+    }
 }
 
 export async function savePipPlan(plan) {
@@ -1369,6 +1665,8 @@ export async function syncAll() {
         fetchEmployeePerformanceScores(),
         fetchProbationReviews(),
         fetchProbationQualitativeItems(),
+        fetchProbationMonthlyScores(),
+        fetchProbationAttendanceRecords(),
         fetchPipPlans(),
         fetchPipActions(),
     ];
@@ -1380,6 +1678,7 @@ export async function syncAll() {
     await Promise.all(tasks);
     emit('data:synced');
 }
+
 
 
 

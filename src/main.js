@@ -28,7 +28,7 @@ import { state, subscribe, emit, isAdmin, isManager, isEmployee, setReportFilter
 import { restoreSession, signIn, signOut, requestPasswordReset, promptChangePassword, enforcePasswordPolicyOnLogin } from './modules/auth.js';
 import { syncAll, fetchSettings } from './modules/data.js';
 import { renderDashboard, openDeptKpiModal, renderDeptKpiTable, exportDeptKpiExcel, exportDeptKpiPDF, exportEmployeeKpiPDF, searchDeptKpiModal } from './modules/dashboard.js';
-import { renderRecordsTable, openReportByVal, openTrainingLog, closeTrainingLog, closeReport, searchRecords, deleteRecordSafe, editRecordSafe, saveTrainingLog, approveTraining, editTrainingItem, deleteTrainingItem, resetTrainingForm, fillTrainingRec, toggleOngoing, initiateSelfAssessment as recordSelfAssess, renderProbationPipView, generateProbationDrafts, reviewProbation, exportProbationCsv, generatePipPlans, updatePipPlanStatus } from './modules/records.js';
+import { renderRecordsTable, openReportByVal, openTrainingLog, closeTrainingLog, closeReport, searchRecords, deleteRecordSafe, editRecordSafe, saveTrainingLog, approveTraining, editTrainingItem, deleteTrainingItem, resetTrainingForm, fillTrainingRec, toggleOngoing, initiateSelfAssessment as recordSelfAssess, renderProbationPipView, generateProbationDrafts, reviewProbation, addProbationAttendanceEntry, exportProbationCsv, generatePipPlans, updatePipPlanStatus } from './modules/records.js';
 import { renderPendingList, loadPendingEmployee, startAssessment, renderQuestions, reviewAssessment, finalSubmit, goBack, initiateSelfAssessment } from './modules/assessment.js';
 import { renderAdminList, savePositionConfig, loadPositionForEdit, deletePositionConfig, clearAdminForm, exportConfigJSON, triggerConfigImport, importConfigJSON, addCompetencyRow, removeCompetencyRow } from './modules/admin.js';
 import { renderEmployeeManager, saveEmployeeData, loadEmployeeForEdit, resetEmployeeForm, deleteEmployeeData, exportEmployeeCSV, importEmployeeCSV } from './modules/employees.js';
@@ -61,7 +61,7 @@ window.__app = {
     closeReport, searchRecords, deleteRecordSafe, editRecordSafe,
     saveTrainingLog, approveTraining, editTrainingItem, deleteTrainingItem,
     resetTrainingForm, fillTrainingRec, toggleOngoing,
-    renderProbationPipView, generateProbationDrafts, reviewProbation, exportProbationCsv, generatePipPlans, updatePipPlanStatus,
+    renderProbationPipView, generateProbationDrafts, reviewProbation, addProbationAttendanceEntry, exportProbationCsv, generatePipPlans, updatePipPlanStatus,
     initiateSelfAssessment: recordSelfAssess,
 
     // Admin
