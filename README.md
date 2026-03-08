@@ -153,7 +153,8 @@ Add these secrets:
 - `VITE_SESSION_TIMEOUT_MINUTES` (optional, default `30`)
 - `VITE_MONITOR_WEBHOOK_URL` (optional, frontend error webhook endpoint)
 - `VITE_SENTRY_DSN` (optional, if you provide Sentry script/SDK integration)
-- `SUPABASE_DB_URL` (for scheduled backup workflow, format: `postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`)
+- `SUPABASE_DB_POOLER_URL` (recommended for scheduled backup on GitHub runners, use Supabase Session Pooler IPv4 URL, port `5432`)
+- `SUPABASE_DB_URL` (optional fallback direct DB URL, may require IPv6 connectivity from runner)
 - `SITE_BASE_URL` (example: `https://hr.yourdomain.com`, used for post-deploy checks)
 - `SITE_HEALTHCHECK_URL` (optional override, example: `https://hr.yourdomain.com/healthz.json`)
 - `DEPLOY_NOTIFY_WEBHOOK_URL` (optional webhook for deploy success/failure notifications)
@@ -175,11 +176,13 @@ This repository includes `.github/workflows/supabase-backup.yml`:
 
 - Trigger: every Sunday (`02:00 UTC`) and manual trigger from Actions tab.
 - Output: compressed database dump (`.dump`), plain SQL (`.sql`), and activity log CSV artifact (if table exists).
+- If direct DB host is unreachable (IPv6-only route), workflow writes a skip note artifact and continues. Configure `SUPABASE_DB_POOLER_URL` to avoid skips.
 - Retention: 30 days in GitHub Action artifacts.
 
-Required secret:
+Required secret (at least one):
 
-- `SUPABASE_DB_URL`
+- `SUPABASE_DB_POOLER_URL` (recommended)
+- `SUPABASE_DB_URL` (fallback)
 
 ---
 
@@ -217,6 +220,11 @@ Required secret:
 - **SQL Injection/XSS Prevention:** The system utilizes robust frontend sanitization via custom `escapeHTML` formatters natively across all list/render functions preventing DOM injections.
 - **Row Level Security:** Ensure that your Supabase instance doesn't have RLS disabled. The queries are formatted exclusively expecting the native secure SDK flow.
 - **Default Credentials:** No default production admin credential should be documented or shipped. Use unique credentials and force password rotation for temporary accounts.
+
+
+
+
+
 
 
 

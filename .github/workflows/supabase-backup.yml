@@ -23,26 +23,53 @@ jobs:
       - name: Validate backup secret
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_POOLER_URL: ${{ secrets.SUPABASE_DB_POOLER_URL }}
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "Missing secret: SUPABASE_DB_URL"
+          if [ -z "${SUPABASE_DB_POOLER_URL:-}" ] && [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "Missing secret: set SUPABASE_DB_POOLER_URL (recommended) or SUPABASE_DB_URL"
             exit 1
           fi
 
       - name: Export database backup
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_POOLER_URL: ${{ secrets.SUPABASE_DB_POOLER_URL }}
         run: |
           set -euo pipefail
           mkdir -p backups
           TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
-          pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges --file "backups/supabase_${TS}.dump"
-          pg_dump "$SUPABASE_DB_URL" --format=plain --no-owner --no-privileges > "backups/supabase_${TS}.sql"
+          PRIMARY_URL="${SUPABASE_DB_POOLER_URL:-${SUPABASE_DB_URL:-}}"
 
-          HAS_LOG_TABLE="$(psql "$SUPABASE_DB_URL" -Atc "select to_regclass('public.admin_activity_log') is not null;")"
-          if [ "$HAS_LOG_TABLE" = "t" ]; then
-            psql "$SUPABASE_DB_URL" -c "\copy (select * from public.admin_activity_log order by created_at desc) to 'backups/admin_activity_log_${TS}.csv' csv header"
+          run_export() {
+            local db_url="$1"
+            echo "::add-mask::$db_url"
+
+            pg_dump "$db_url" --format=custom --no-owner --no-privileges --file "backups/supabase_${TS}.dump"
+            pg_dump "$db_url" --format=plain --no-owner --no-privileges > "backups/supabase_${TS}.sql"
+
+            HAS_LOG_TABLE="$(psql "$db_url" -Atc "select to_regclass('public.admin_activity_log') is not null;")"
+            if [ "$HAS_LOG_TABLE" = "t" ]; then
+              psql "$db_url" -c "\\copy (select * from public.admin_activity_log order by created_at desc) to 'backups/admin_activity_log_${TS}.csv' csv header"
+            fi
+          }
+
+          if ! run_export "$PRIMARY_URL"; then
+            echo "Primary backup URL failed."
+
+            if [ -n "${SUPABASE_DB_POOLER_URL:-}" ] && [ -n "${SUPABASE_DB_URL:-}" ] && [ "$SUPABASE_DB_POOLER_URL" != "$SUPABASE_DB_URL" ]; then
+              echo "Retrying backup using SUPABASE_DB_URL fallback..."
+              run_export "$SUPABASE_DB_URL"
+              exit 0
+            fi
+
+            if [ -n "${SUPABASE_DB_URL:-}" ] && echo "$SUPABASE_DB_URL" | grep -qE '@db\..*\.supabase\.co:'; then
+              echo "::warning::Backup skipped: direct Supabase DB host may require IPv6 from this runner. Configure SUPABASE_DB_POOLER_URL (IPv4 session pooler URL)."
+              printf "Backup skipped at %s UTC due network reachability to direct DB host. Configure SUPABASE_DB_POOLER_URL.\n" "$TS" > "backups/backup_skipped_${TS}.txt"
+              exit 0
+            fi
+
+            exit 1
           fi
 
       - name: Upload backup artifact
