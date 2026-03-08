@@ -183,6 +183,120 @@
                 </div>
             </div>
         </div>
+        <div class="mt-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div>
+                    <h6 class="fw-bold mb-1 small text-uppercase"><i class="bi bi-speedometer2 me-1"></i>Leadership Analytics</h6>
+                    <div class="small text-muted">Leadership view for probation, PIP coverage, KPI trend, manager calibration, and employee risk tracking.</div>
+                </div>
+                <span class="badge rounded-pill text-bg-light border" id="d-analytics-period-label">Current Period</span>
+            </div>
+
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-3 mb-4">
+                <div class="col">
+                    <div class="card stat-card border-0 h-100">
+                        <div class="card-body">
+                            <div class="stat-icon bg-success-subtle"><i class="bi bi-patch-check text-success"></i></div>
+                            <small class="text-muted text-uppercase fw-bold">Probation Pass Rate</small>
+                            <div class="fs-2 fw-bold" id="d-analytics-probation-rate">0%</div>
+                            <div class="small text-muted" id="d-analytics-probation-sub">Closed reviews: 0</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card stat-card border-0 h-100">
+                        <div class="card-body">
+                            <div class="stat-icon bg-warning-subtle"><i class="bi bi-person-workspace text-warning"></i></div>
+                            <small class="text-muted text-uppercase fw-bold">PIP Conversion</small>
+                            <div class="fs-2 fw-bold" id="d-analytics-pip-conversion">0%</div>
+                            <div class="small text-muted" id="d-analytics-pip-conversion-sub">Below-threshold employees covered: 0 / 0</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card stat-card border-0 h-100">
+                        <div class="card-body">
+                            <div class="stat-icon bg-primary-subtle"><i class="bi bi-kanban text-primary"></i></div>
+                            <small class="text-muted text-uppercase fw-bold">PIP Success Rate</small>
+                            <div class="fs-2 fw-bold" id="d-analytics-pip-success">0%</div>
+                            <div class="small text-muted" id="d-analytics-pip-success-sub">Resolved plans: 0</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card stat-card border-0 h-100">
+                        <div class="card-body">
+                            <div class="stat-icon bg-danger-subtle"><i class="bi bi-exclamation-triangle text-danger"></i></div>
+                            <small class="text-muted text-uppercase fw-bold">Risk Watchlist</small>
+                            <div class="fs-2 fw-bold" id="d-analytics-risk-count">0</div>
+                            <div class="small text-muted" id="d-analytics-risk-sub">Employees needing follow-up</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-8">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <h6 class="fw-bold m-0">KPI Achievement Trend</h6>
+                                <div class="small text-muted" id="d-kpi-trend-note">Last 6 months of KPI weighted score and at-risk employee counts.</div>
+                            </div>
+                            <span class="badge rounded-pill text-bg-light border" id="d-kpi-threshold-badge">Risk Threshold: 70</span>
+                        </div>
+                        <div class="card-body">
+                            <div style="height: 300px;"><canvas id="chartKpiTrend"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-white border-bottom py-3">
+                            <h6 class="fw-bold m-0"><i class="bi bi-radar me-1 text-danger"></i>Risk Watchlist</h6>
+                        </div>
+                        <div class="card-body p-2">
+                            <ul class="list-group list-group-flush small" id="d-risk-list">
+                                <li class="list-group-item text-center text-muted fst-italic">No risk indicators yet.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white border-bottom py-3">
+                            <h6 class="fw-bold m-0"><i class="bi bi-people-fill me-1 text-primary"></i>Manager Calibration View</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table align-middle mb-0">
+                                    <thead class="table-light small">
+                                        <tr>
+                                            <th class="ps-3">Manager</th>
+                                            <th>Team Size</th>
+                                            <th>KPI Avg</th>
+                                            <th>Assessment Avg</th>
+                                            <th>Probation Pass</th>
+                                            <th>Active PIP</th>
+                                            <th>Risk Count</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="d-manager-calibration-body">
+                                        <tr>
+                                            <td colspan="7" class="text-center text-muted py-3 fst-italic">No manager calibration data yet.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="small text-muted mt-3" id="d-analytics-hint">
+                Workload context: KPI trend uses weighted KPI score per month, probation uses final probation decisions, and PIP conversion uses employees below the KPI PIP threshold in the selected period.
+            </div>
+        </div>
     </div>
 </div>
 

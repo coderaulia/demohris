@@ -360,8 +360,505 @@ function renderKpiSummary() {
 
     // Render department cards
     renderDeptKpiCards(monthlyRecords);
+    renderLeadershipAnalytics(selectedMonth);
 }
 
+function isTrackedEmployee(employee) {
+    const role = String(employee?.role || 'employee').trim().toLowerCase();
+    return !role || role === 'employee';
+}
+
+function parsePeriodKey(period) {
+    const match = /^(\d{4})-(\d{2})$/.exec(String(period || '').trim());
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (!year || month < 1 || month > 12) return null;
+    return { year, month };
+}
+
+function shiftPeriodKey(period, deltaMonths = 0) {
+    const parsed = parsePeriodKey(period);
+    if (!parsed) return '';
+
+    const baseIndex = parsed.year * 12 + (parsed.month - 1) + Number(deltaMonths || 0);
+    const year = Math.floor(baseIndex / 12);
+    const month = (baseIndex % 12) + 1;
+    return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+function buildRollingPeriods(endPeriod, count = 6) {
+    const periods = [];
+    const safeCount = Math.max(1, Number(count) || 1);
+    for (let offset = safeCount - 1; offset >= 0; offset--) {
+        const period = shiftPeriodKey(endPeriod, -offset);
+        if (period) periods.push(period);
+    }
+    return periods;
+}
+
+function averageNumbers(values = []) {
+    const nums = values
+        .map(value => Number(value))
+        .filter(value => Number.isFinite(value));
+
+    if (nums.length === 0) return 0;
+    return nums.reduce((sum, value) => sum + value, 0) / nums.length;
+}
+
+function roundMetric(value, digits = 1) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return 0;
+    const factor = 10 ** digits;
+    return Math.round(num * factor) / factor;
+}
+
+function formatMetricPercent(value) {
+    return `${roundMetric(value, 1).toFixed(1)}%`;
+}
+
+function buildEmployeePerformanceLookup() {
+    const lookup = new Map();
+    (state.employeePerformanceScores || []).forEach(row => {
+        const scoreType = String(row?.score_type || 'kpi_weighted').trim().toLowerCase();
+        if (scoreType && scoreType !== 'kpi_weighted') return;
+        lookup.set(`${row.employee_id}__${row.period}`, Number(row.total_score || 0));
+    });
+    return lookup;
+}
+
+function buildScopedRecordLookup(scopedIds) {
+    const lookup = new Map();
+    (state.kpiRecords || []).forEach(record => {
+        if (scopedIds && !scopedIds.has(record.employee_id)) return;
+        const key = `${record.employee_id}__${record.period}`;
+        if (!lookup.has(key)) lookup.set(key, []);
+        lookup.get(key).push(record);
+    });
+    return lookup;
+}
+
+function getEmployeePeriodKpiScore(employeeId, period, scoreLookup, recordLookup, cache) {
+    const key = `${employeeId}__${period}`;
+    if (cache.has(key)) return cache.get(key);
+
+    if (scoreLookup.has(key)) {
+        const value = Number(scoreLookup.get(key));
+        const safeValue = Number.isFinite(value) ? value : null;
+        cache.set(key, safeValue);
+        return safeValue;
+    }
+
+    const periodRecords = recordLookup.get(key) || [];
+    if (periodRecords.length === 0) {
+        cache.set(key, null);
+        return null;
+    }
+
+    const summary = calculateEmployeeWeightedKpiScore(employeeId, periodRecords);
+    const safeValue = Number(summary?.metric_count || 0) > 0 ? Number(summary.score || 0) : null;
+    cache.set(key, Number.isFinite(safeValue) ? safeValue : null);
+    return cache.get(key);
+}
+
+function buildLeadershipAnalyticsSnapshot(selectedMonth) {
+    const scopedEmployeeIds = getFilteredEmployeeIds().filter(id => isTrackedEmployee(state.db[id]));
+    const scopedEmployeeSet = new Set(scopedEmployeeIds);
+    const selectedPeriod = shiftPeriodKey(selectedMonth, 0) || selectedMonth;
+    const trendPeriods = buildRollingPeriods(selectedPeriod, 6);
+    const riskPeriods = buildRollingPeriods(selectedPeriod, 3);
+    const pipThreshold = Number(state.appSettings?.pip_threshold || 70) || 70;
+    const probationPassThreshold = Number(state.appSettings?.probation_pass_threshold || 75) || 75;
+
+    const scoreLookup = buildEmployeePerformanceLookup();
+    const recordLookup = buildScopedRecordLookup(scopedEmployeeSet);
+    const scoreCache = new Map();
+    const getScore = (employeeId, period) => getEmployeePeriodKpiScore(employeeId, period, scoreLookup, recordLookup, scoreCache);
+
+    const selectedPeriodScores = scopedEmployeeIds
+        .map(employeeId => ({ employee_id: employeeId, score: getScore(employeeId, selectedPeriod) }))
+        .filter(row => row.score !== null);
+    const selectedScoreMap = new Map(selectedPeriodScores.map(row => [row.employee_id, row.score]));
+
+    const atRiskEmployees = selectedPeriodScores.filter(row => row.score < pipThreshold);
+    const atRiskEmployeeSet = new Set(atRiskEmployees.map(row => row.employee_id));
+
+    const scopedProbationReviews = (state.probationReviews || []).filter(review => scopedEmployeeSet.has(review.employee_id));
+    const closedProbationReviews = scopedProbationReviews.filter(review => ['pass', 'extend', 'fail'].includes(String(review.decision || '').toLowerCase()));
+    const passedProbationReviews = closedProbationReviews.filter(review => String(review.decision || '').toLowerCase() === 'pass');
+    const probationPassRate = closedProbationReviews.length > 0
+        ? (passedProbationReviews.length / closedProbationReviews.length) * 100
+        : 0;
+
+    const scopedPipPlans = (state.pipPlans || []).filter(plan => scopedEmployeeSet.has(plan.employee_id));
+    const activePlanStatuses = new Set(['active', 'extended']);
+    const resolvedPlanStatuses = new Set(['completed', 'cancelled', 'escalated']);
+    const successPlanStatuses = new Set(['completed']);
+
+    const activePipEmployeeSet = new Set(
+        scopedPipPlans
+            .filter(plan => activePlanStatuses.has(String(plan.status || 'active').toLowerCase()))
+            .map(plan => plan.employee_id)
+    );
+
+    const convertedEmployeeSet = new Set(
+        scopedPipPlans
+            .filter(plan => {
+                const status = String(plan.status || 'active').toLowerCase();
+                return atRiskEmployeeSet.has(plan.employee_id)
+                    && (activePlanStatuses.has(status) || String(plan.trigger_period || '') === selectedPeriod);
+            })
+            .map(plan => plan.employee_id)
+    );
+
+    const resolvedPipPlans = scopedPipPlans.filter(plan => resolvedPlanStatuses.has(String(plan.status || '').toLowerCase()));
+    const successfulPipPlans = resolvedPipPlans.filter(plan => successPlanStatuses.has(String(plan.status || '').toLowerCase()));
+
+    const pipConversionRate = atRiskEmployees.length > 0
+        ? (convertedEmployeeSet.size / atRiskEmployees.length) * 100
+        : 0;
+    const pipSuccessRate = resolvedPipPlans.length > 0
+        ? (successfulPipPlans.length / resolvedPipPlans.length) * 100
+        : 0;
+
+    const trend = trendPeriods.map(period => {
+        const scores = scopedEmployeeIds
+            .map(employeeId => getScore(employeeId, period))
+            .filter(score => score !== null);
+
+        return {
+            period,
+            avg_score: roundMetric(averageNumbers(scores), 1),
+            employee_count: scores.length,
+            at_risk_count: scores.filter(score => score < pipThreshold).length,
+        };
+    });
+
+    const latestReviewByEmployee = new Map();
+    scopedProbationReviews.forEach(review => {
+        const current = latestReviewByEmployee.get(review.employee_id);
+        const reviewTs = new Date(review.reviewed_at || review.created_at || 0).getTime();
+        if (!current || reviewTs > current._sortTs) {
+            latestReviewByEmployee.set(review.employee_id, {
+                ...review,
+                _sortTs: reviewTs,
+            });
+        }
+    });
+
+    const riskRows = scopedEmployeeIds
+        .map(employeeId => {
+            const employee = state.db[employeeId] || {};
+            const monthlyScores = riskPeriods.map(period => ({ period, score: getScore(employeeId, period) }));
+            const validScores = monthlyScores.filter(item => item.score !== null);
+            const latest = validScores[validScores.length - 1] || null;
+            const previous = validScores.length > 1 ? validScores[validScores.length - 2] : null;
+            const earliest = validScores[0] || null;
+
+            const selectedScore = monthlyScores[monthlyScores.length - 1]?.score ?? null;
+            const currentScore = selectedScore ?? latest?.score ?? null;
+            const trendDelta = latest && earliest ? roundMetric(latest.score - earliest.score, 1) : null;
+            const consecutiveDecline = validScores.length >= 3
+                && validScores[validScores.length - 3].score > validScores[validScores.length - 2].score
+                && validScores[validScores.length - 2].score > validScores[validScores.length - 1].score;
+            const recentDrop = latest && previous ? latest.score < previous.score : false;
+            const lowTrend = trendDelta !== null && trendDelta <= -10;
+            const belowThreshold = currentScore !== null && currentScore < pipThreshold;
+            const activePip = activePipEmployeeSet.has(employeeId);
+            const latestReview = latestReviewByEmployee.get(employeeId);
+            const probationDecision = String(latestReview?.decision || '').toLowerCase();
+
+            const include = belowThreshold
+                || lowTrend
+                || consecutiveDecline
+                || (recentDrop && currentScore !== null && currentScore < pipThreshold + 5)
+                || activePip;
+
+            if (!include) return null;
+
+            let riskLevel = 'Low';
+            if ((belowThreshold && (lowTrend || consecutiveDecline)) || (activePip && belowThreshold)) {
+                riskLevel = 'High';
+            } else if (belowThreshold || lowTrend || activePip || consecutiveDecline) {
+                riskLevel = 'Medium';
+            }
+
+            const reasons = [];
+            if (belowThreshold) reasons.push(`Below KPI threshold (${roundMetric(currentScore, 1).toFixed(1)})`);
+            if (trendDelta !== null && (lowTrend || consecutiveDecline)) reasons.push(`3-month trend ${trendDelta >= 0 ? '+' : ''}${trendDelta.toFixed(1)}`);
+            if (activePip) reasons.push('Active PIP');
+            if (probationDecision && probationDecision !== 'pass') reasons.push(`Probation ${probationDecision.toUpperCase()}`);
+
+            return {
+                employee_id: employeeId,
+                name: employee.name || employeeId,
+                position: employee.position || '-',
+                department: employee.department || getDepartment(employee.position),
+                manager_name: state.db[employee.manager_id || '']?.name || 'Unassigned',
+                current_score: currentScore,
+                trend_delta: trendDelta,
+                risk_level: riskLevel,
+                active_pip: activePip,
+                reasons,
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+            const riskOrder = { High: 0, Medium: 1, Low: 2 };
+            const byRisk = (riskOrder[a.risk_level] ?? 99) - (riskOrder[b.risk_level] ?? 99);
+            if (byRisk !== 0) return byRisk;
+
+            const aScore = a.current_score === null ? 9999 : a.current_score;
+            const bScore = b.current_score === null ? 9999 : b.current_score;
+            if (aScore !== bScore) return aScore - bScore;
+
+            const aTrend = a.trend_delta === null ? 9999 : a.trend_delta;
+            const bTrend = b.trend_delta === null ? 9999 : b.trend_delta;
+            return aTrend - bTrend;
+        });
+
+    const riskEmployeeSet = new Set(riskRows.map(row => row.employee_id));
+
+    const managerTeams = new Map();
+    scopedEmployeeIds.forEach(employeeId => {
+        const managerId = String(state.db[employeeId]?.manager_id || '').trim();
+        if (!managerId) return;
+        if (!managerTeams.has(managerId)) managerTeams.set(managerId, []);
+        managerTeams.get(managerId).push(employeeId);
+    });
+
+    const managerCalibration = [...managerTeams.entries()]
+        .map(([managerId, teamEmployeeIds]) => {
+            const teamSet = new Set(teamEmployeeIds);
+            const kpiScores = teamEmployeeIds
+                .map(employeeId => selectedScoreMap.get(employeeId))
+                .filter(score => score !== undefined);
+            const assessmentScores = teamEmployeeIds
+                .map(employeeId => Number(state.db[employeeId]?.percentage || 0))
+                .filter(score => score > 0);
+            const teamClosedReviews = closedProbationReviews.filter(review => teamSet.has(review.employee_id));
+            const teamPassedReviews = teamClosedReviews.filter(review => String(review.decision || '').toLowerCase() === 'pass');
+            const activePipCount = teamEmployeeIds.filter(employeeId => activePipEmployeeSet.has(employeeId)).length;
+            const riskCount = teamEmployeeIds.filter(employeeId => riskEmployeeSet.has(employeeId)).length;
+
+            return {
+                manager_id: managerId,
+                manager_name: state.db[managerId]?.name || managerId,
+                team_size: teamEmployeeIds.length,
+                kpi_avg: kpiScores.length > 0 ? roundMetric(averageNumbers(kpiScores), 1) : null,
+                assessment_avg: assessmentScores.length > 0 ? roundMetric(averageNumbers(assessmentScores), 1) : null,
+                probation_pass_rate: teamClosedReviews.length > 0
+                    ? roundMetric((teamPassedReviews.length / teamClosedReviews.length) * 100, 1)
+                    : null,
+                probation_closed_count: teamClosedReviews.length,
+                active_pip_count: activePipCount,
+                risk_count: riskCount,
+            };
+        })
+        .sort((a, b) => {
+            if (b.risk_count !== a.risk_count) return b.risk_count - a.risk_count;
+            if ((a.kpi_avg ?? 9999) !== (b.kpi_avg ?? 9999)) return (a.kpi_avg ?? 9999) - (b.kpi_avg ?? 9999);
+            return a.manager_name.localeCompare(b.manager_name);
+        });
+
+    return {
+        selected_period: selectedPeriod,
+        pip_threshold: pipThreshold,
+        probation_pass_threshold: probationPassThreshold,
+        probation_pass_rate: roundMetric(probationPassRate, 1),
+        probation_closed_count: closedProbationReviews.length,
+        probation_passed_count: passedProbationReviews.length,
+        pip_conversion_rate: roundMetric(pipConversionRate, 1),
+        pip_converted_count: convertedEmployeeSet.size,
+        pip_at_risk_count: atRiskEmployees.length,
+        pip_success_rate: roundMetric(pipSuccessRate, 1),
+        pip_resolved_count: resolvedPipPlans.length,
+        pip_success_count: successfulPipPlans.length,
+        active_pip_count: activePipEmployeeSet.size,
+        risk_count: riskRows.length,
+        risk_rows: riskRows.slice(0, 8),
+        manager_rows: managerCalibration,
+        trend,
+    };
+}
+
+function renderLeadershipAnalytics(selectedMonth) {
+    const snapshot = buildLeadershipAnalyticsSnapshot(selectedMonth);
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = value;
+        return el;
+    };
+
+    setText('d-analytics-period-label', `Scope: ${formatPeriod(snapshot.selected_period)}`);
+    setText('d-analytics-probation-rate', formatMetricPercent(snapshot.probation_pass_rate));
+    setText('d-analytics-probation-sub', `Pass ${snapshot.probation_passed_count} of ${snapshot.probation_closed_count} closed reviews`);
+    setText('d-analytics-pip-conversion', formatMetricPercent(snapshot.pip_conversion_rate));
+    setText('d-analytics-pip-conversion-sub', `Below-threshold employees covered: ${snapshot.pip_converted_count} / ${snapshot.pip_at_risk_count}`);
+    setText('d-analytics-pip-success', formatMetricPercent(snapshot.pip_success_rate));
+    setText('d-analytics-pip-success-sub', `Completed ${snapshot.pip_success_count} of ${snapshot.pip_resolved_count} resolved plans`);
+    setText('d-analytics-risk-count', formatNumber(snapshot.risk_count));
+    setText('d-analytics-risk-sub', `Active PIP employees: ${snapshot.active_pip_count}`);
+    setText('d-kpi-trend-note', `Last 6 months ending ${formatPeriod(snapshot.selected_period)}. Blue line = KPI weighted average, red bars = employees below threshold.`);
+    setText('d-kpi-threshold-badge', `Risk Threshold: ${roundMetric(snapshot.pip_threshold, 1).toFixed(1)}`);
+    setText('d-analytics-hint', `Leadership formulas: probation pass rate uses closed probation decisions, PIP conversion uses current-period employees below KPI threshold ${roundMetric(snapshot.pip_threshold, 1).toFixed(1)}, and pass benchmark uses probation minimum ${roundMetric(snapshot.probation_pass_threshold, 1).toFixed(1)}.`);
+
+    const trendCanvas = document.getElementById('chartKpiTrend');
+    if (trendCanvas) {
+        if (chartKpiTrendInstance) chartKpiTrendInstance.destroy();
+        chartKpiTrendInstance = new Chart(trendCanvas, {
+            type: 'bar',
+            data: {
+                labels: snapshot.trend.map(item => formatPeriod(item.period)),
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'Avg KPI Score',
+                        data: snapshot.trend.map(item => item.avg_score),
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                        fill: true,
+                        tension: 0.35,
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        yAxisID: 'y',
+                    },
+                    {
+                        type: 'line',
+                        label: 'Risk Threshold',
+                        data: snapshot.trend.map(() => snapshot.pip_threshold),
+                        borderColor: '#94a3b8',
+                        borderDash: [6, 4],
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0,
+                        yAxisID: 'y',
+                    },
+                    {
+                        type: 'bar',
+                        label: 'At-Risk Employees',
+                        data: snapshot.trend.map(item => item.at_risk_count),
+                        backgroundColor: 'rgba(239, 68, 68, 0.24)',
+                        borderColor: '#ef4444',
+                        borderWidth: 1,
+                        borderRadius: 8,
+                        yAxisID: 'y1',
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        suggestedMax: 120,
+                        title: {
+                            display: true,
+                            text: 'KPI Score',
+                        },
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                        ticks: {
+                            precision: 0,
+                        },
+                        title: {
+                            display: true,
+                            text: 'Employees',
+                        },
+                    },
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    },
+                },
+            },
+        });
+    }
+
+    const riskList = document.getElementById('d-risk-list');
+    if (riskList) {
+        riskList.innerHTML = '';
+        if (snapshot.risk_rows.length === 0) {
+            riskList.innerHTML = '<li class="list-group-item text-center text-muted fst-italic">No risk indicators in the current scope.</li>';
+        } else {
+            snapshot.risk_rows.forEach(row => {
+                const badgeClass = row.risk_level === 'High'
+                    ? 'text-bg-danger'
+                    : row.risk_level === 'Medium'
+                        ? 'text-bg-warning'
+                        : 'text-bg-primary';
+                const currentScore = row.current_score === null ? '-' : formatMetricPercent(row.current_score);
+                const trendText = row.trend_delta === null
+                    ? 'Trend not enough'
+                    : `${row.trend_delta >= 0 ? '+' : ''}${row.trend_delta.toFixed(1)} pts`;
+                const reasons = row.reasons.length > 0 ? row.reasons.join(' | ') : 'Needs follow-up';
+
+                riskList.innerHTML += `
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <div class="fw-bold">${escapeHTML(row.name)}</div>
+                                <div class="text-muted" style="font-size: 11px;">${escapeHTML(row.department)} · ${escapeHTML(row.manager_name)}</div>
+                            </div>
+                            <span class="badge ${badgeClass} rounded-pill">${escapeHTML(row.risk_level)}</span>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap mt-2" style="font-size: 11px;">
+                            <span class="badge text-bg-light border">Score ${escapeHTML(currentScore)}</span>
+                            <span class="badge text-bg-light border">Trend ${escapeHTML(trendText)}</span>
+                            ${row.active_pip ? '<span class="badge text-bg-light border border-warning text-warning-emphasis">Active PIP</span>' : ''}
+                        </div>
+                        <div class="text-muted mt-2" style="font-size: 11px;">${escapeHTML(reasons)}</div>
+                    </li>`;
+            });
+        }
+    }
+
+    const calibrationBody = document.getElementById('d-manager-calibration-body');
+    if (calibrationBody) {
+        calibrationBody.innerHTML = '';
+        if (snapshot.manager_rows.length === 0) {
+            calibrationBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3 fst-italic">No manager calibration data yet.</td></tr>';
+        } else {
+            snapshot.manager_rows.forEach(row => {
+                const kpiAvgLabel = row.kpi_avg === null ? '-' : formatMetricPercent(row.kpi_avg);
+                const assessmentAvgLabel = row.assessment_avg === null ? '-' : formatMetricPercent(row.assessment_avg);
+                const probationLabel = row.probation_pass_rate === null
+                    ? '-'
+                    : `${formatMetricPercent(row.probation_pass_rate)} (${row.probation_closed_count})`;
+                const riskBadgeClass = row.risk_count > 0 ? 'text-bg-danger' : 'text-bg-success';
+                const kpiBadgeClass = row.kpi_avg === null ? 'text-bg-light border' : getScoreBandClass(row.kpi_avg);
+
+                calibrationBody.innerHTML += `
+                    <tr>
+                        <td class="ps-3">
+                            <div class="fw-bold">${escapeHTML(row.manager_name)}</div>
+                            <div class="text-muted small">Manager ID: ${escapeHTML(row.manager_id)}</div>
+                        </td>
+                        <td>${formatNumber(row.team_size)}</td>
+                        <td><span class="badge ${kpiBadgeClass} rounded-pill">${escapeHTML(kpiAvgLabel)}</span></td>
+                        <td>${escapeHTML(assessmentAvgLabel)}</td>
+                        <td>${escapeHTML(probationLabel)}</td>
+                        <td>${formatNumber(row.active_pip_count)}</td>
+                        <td><span class="badge ${riskBadgeClass} rounded-pill">${formatNumber(row.risk_count)}</span></td>
+                    </tr>`;
+            });
+        }
+    }
+}
 // ==================================================
 // DEPARTMENT KPI CARDS
 // ==================================================
@@ -1232,17 +1729,4 @@ export async function exportEmployeeKpiPDF(employeeId) {
 
 
 export { renderAssessmentSummary, renderKpiSummary, renderDeptKpiCards };
-
-
-
-
-
-
-
-
-
-
-
-
-
 
