@@ -55,3 +55,8 @@ secrets/
 .secrets/
 *.secret
 *.token
+
+# E2E artifacts
+playwright-report/
+test-results/
+blob-report/

@@ -47,6 +47,73 @@ function nextVersionNo(rows = [], predicate = () => true) {
     return maxVer + 1;
 }
 
+function isUniqueConstraintError(error) {
+    return String(error?.code || '') === '23505';
+}
+
+async function getNextDefinitionVersionNo(definitionId) {
+    const safeId = String(definitionId || '').trim();
+    if (!safeId) return 1;
+
+    let dbMax = 0;
+    try {
+        const { data } = await execSupabase(
+            `Fetch latest KPI definition version no (${safeId})`,
+            () => supabase
+                .from('kpi_definition_versions')
+                .select('version_no')
+                .eq('kpi_definition_id', safeId)
+                .order('version_no', { ascending: false })
+                .limit(1),
+            { retries: 1 }
+        );
+        dbMax = Number(data?.[0]?.version_no || 0);
+    } catch {
+        dbMax = 0;
+    }
+
+    const localMax = nextVersionNo(
+        state.kpiDefinitionVersions,
+        row => String(row?.kpi_definition_id || '') === safeId
+    ) - 1;
+
+    return Math.max(dbMax, localMax) + 1;
+}
+
+async function getNextTargetVersionNo(employeeId, kpiId, period) {
+    const safeEmp = String(employeeId || '').trim();
+    const safeKpi = String(kpiId || '').trim();
+    const safePeriod = String(period || '').trim();
+    if (!safeEmp || !safeKpi || !safePeriod) return 1;
+
+    let dbMax = 0;
+    try {
+        const { data } = await execSupabase(
+            `Fetch latest KPI target version no (${safeEmp}/${safeKpi}/${safePeriod})`,
+            () => supabase
+                .from('employee_kpi_target_versions')
+                .select('version_no')
+                .eq('employee_id', safeEmp)
+                .eq('kpi_id', safeKpi)
+                .eq('effective_period', safePeriod)
+                .order('version_no', { ascending: false })
+                .limit(1),
+            { retries: 1 }
+        );
+        dbMax = Number(data?.[0]?.version_no || 0);
+    } catch {
+        dbMax = 0;
+    }
+
+    const localMax = nextVersionNo(
+        state.employeeKpiTargetVersions,
+        row => String(row?.employee_id || '') === safeEmp
+            && String(row?.kpi_id || '') === safeKpi
+            && String(row?.effective_period || '') === safePeriod
+    ) - 1;
+
+    return Math.max(dbMax, localMax) + 1;
+}
 async function fetchKpiDefinitions() {
     try {
         const { data } = await execSupabase(
@@ -144,33 +211,49 @@ async function submitKpiDefinitionVersion(change) {
 
     if (!definitionId) throw new Error('Failed to resolve KPI definition id.');
 
-    const versionNo = nextVersionNo(
-        state.kpiDefinitionVersions,
-        row => String(row?.kpi_definition_id || '') === definitionId
-    );
+    let insertedVersionNo = 0;
+    let lastInsertError = null;
 
-    const versionRow = {
-        kpi_definition_id: definitionId,
-        version_no: versionNo,
-        effective_period: payload.effective_period,
-        name: payload.name,
-        description: payload.description,
-        category: payload.category,
-        target: payload.target,
-        unit: payload.unit,
-        status: requestStatus,
-        request_note: payload.request_note,
-        requested_by: state.currentUser?.id || null,
-        requested_at: now,
-        approved_by: requestStatus === 'approved' ? (state.currentUser?.id || null) : null,
-        approved_at: requestStatus === 'approved' ? now : null,
-    };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const versionNo = await getNextDefinitionVersionNo(definitionId);
+        const versionRow = {
+            kpi_definition_id: definitionId,
+            version_no: versionNo,
+            effective_period: payload.effective_period,
+            name: payload.name,
+            description: payload.description,
+            category: payload.category,
+            target: payload.target,
+            unit: payload.unit,
+            status: requestStatus,
+            request_note: payload.request_note,
+            requested_by: state.currentUser?.id || null,
+            requested_at: now,
+            approved_by: requestStatus === 'approved' ? (state.currentUser?.id || null) : null,
+            approved_at: requestStatus === 'approved' ? now : null,
+        };
 
-    await execSupabase(
-        'Save KPI definition version',
-        () => supabase.from('kpi_definition_versions').insert(versionRow),
-        { interactiveRetry: true, retries: 1 }
-    );
+        try {
+            await execSupabase(
+                'Save KPI definition version',
+                () => supabase.from('kpi_definition_versions').insert(versionRow),
+                { interactiveRetry: true, retries: 1 }
+            );
+            insertedVersionNo = versionNo;
+            lastInsertError = null;
+            break;
+        } catch (error) {
+            lastInsertError = error;
+            if (!isUniqueConstraintError(error) || attempt === 2) {
+                throw error;
+            }
+            await fetchKpiDefinitionVersions();
+        }
+    }
+
+    if (!insertedVersionNo && lastInsertError) {
+        throw lastInsertError;
+    }
 
     if (requestStatus === 'approved') {
         await saveKpiDefinition({
@@ -178,7 +261,7 @@ async function submitKpiDefinitionVersion(change) {
             ...payload,
             approval_status: 'approved',
             approval_required: requiresApproval,
-            latest_version_no: versionNo,
+            latest_version_no: insertedVersionNo,
             approved_by: state.currentUser?.id || null,
             approved_at: now,
             is_active: true,
@@ -202,10 +285,9 @@ async function submitKpiDefinitionVersion(change) {
         status: requestStatus,
         requiresApproval,
         definition_id: definitionId,
-        version_no: versionNo,
+        version_no: insertedVersionNo,
     };
 }
-
 async function decideKpiDefinitionVersion(versionId, decision, reason = '') {
     const id = String(versionId || '').trim();
     const action = String(decision || '').trim().toLowerCase();
@@ -310,37 +392,60 @@ async function submitEmployeeKpiTargetVersions({ employee_id, effective_period, 
         throw new Error('No KPI target items to save.');
     }
 
-    const preparedRows = rows.map(item => {
-        const version_no = nextVersionNo(
-            state.employeeKpiTargetVersions,
-            row => String(row?.employee_id || '') === item.employee_id
-                && String(row?.kpi_id || '') === item.kpi_id
-                && String(row?.effective_period || '') === item.effective_period
-        );
+    const preparedRows = [];
+    for (const item of rows) {
+        let inserted = null;
+        let lastInsertError = null;
 
-        return {
-            ...item,
-            version_no,
-            status,
-            requested_by: state.currentUser?.id || null,
-            requested_at: now,
-            approved_by: status === 'approved' ? (state.currentUser?.id || null) : null,
-            approved_at: status === 'approved' ? now : null,
-        };
-    });
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            const version_no = await getNextTargetVersionNo(
+                item.employee_id,
+                item.kpi_id,
+                item.effective_period
+            );
 
-    const { data } = await execSupabase(
-        'Save employee KPI target versions',
-        () => supabase.from('employee_kpi_target_versions').insert(preparedRows).select('*'),
-        { interactiveRetry: true, retries: 1 }
-    );
+            const payload = {
+                ...item,
+                version_no,
+                status,
+                requested_by: state.currentUser?.id || null,
+                requested_at: now,
+                approved_by: status === 'approved' ? (state.currentUser?.id || null) : null,
+                approved_at: status === 'approved' ? now : null,
+            };
 
+            try {
+                const { data } = await execSupabase(
+                    'Save employee KPI target version',
+                    () => supabase.from('employee_kpi_target_versions').insert(payload).select('*').single(),
+                    { interactiveRetry: true, retries: 1 }
+                );
+                inserted = data || payload;
+                lastInsertError = null;
+                break;
+            } catch (error) {
+                lastInsertError = error;
+                if (!isUniqueConstraintError(error) || attempt === 2) {
+                    throw error;
+                }
+                await fetchEmployeeKpiTargetVersions();
+            }
+        }
+
+        if (!inserted && lastInsertError) {
+            throw lastInsertError;
+        }
+
+        if (inserted) {
+            preparedRows.push(inserted);
+        }
+    }
     await fetchEmployeeKpiTargetVersions();
 
     return {
         status,
         requiresApproval,
-        rows: data || preparedRows,
+        rows: preparedRows,
     };
 }
 
@@ -770,4 +875,3 @@ export {
     deleteKpiRecord,
     resolveEmployeeKpiTarget,
 };
-

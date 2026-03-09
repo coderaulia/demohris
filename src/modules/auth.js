@@ -102,6 +102,21 @@ export async function restoreSession() {
     return setCurrentUser(profile, session.user);
 }
 
+const DEFAULT_AUTH_REDIRECT_URL = 'https://hr.warnaemasindonesia.com';
+
+function resolveAuthRedirectUrl() {
+    const envUrl = String(import.meta?.env?.VITE_AUTH_REDIRECT_URL || import.meta?.env?.VITE_PUBLIC_APP_URL || '').trim();
+    const configured = String(state.appSettings?.app_public_url || '').trim();
+    const base = envUrl || configured || DEFAULT_AUTH_REDIRECT_URL;
+
+    try {
+        const normalized = /^https?:\/\//i.test(base) ? base : `https://${base}`;
+        return new URL(normalized).origin;
+    } catch {
+        return DEFAULT_AUTH_REDIRECT_URL;
+    }
+}
+
 export async function createAuthUser(email, password) {
     if (state.currentUser?.role !== 'superadmin') {
         throw new Error('Access denied. Superadmin only.');
@@ -110,7 +125,7 @@ export async function createAuthUser(email, password) {
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: window.location.origin }
+        options: { emailRedirectTo: resolveAuthRedirectUrl() }
     });
     if (error) throw error;
     return data;
@@ -118,7 +133,7 @@ export async function createAuthUser(email, password) {
 
 export async function requestPasswordReset(email) {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: resolveAuthRedirectUrl(),
     });
     if (error) throw error;
 }

@@ -33,7 +33,15 @@
             min-width: 60px;
         }
 
+        .role-toggle .btn {
+            min-width: 92px;
+        }
+
         [data-manual-lang].is-hidden {
+            display: none !important;
+        }
+
+        [data-manual-role].is-hidden-role {
             display: none !important;
         }
     </style>
@@ -47,17 +55,21 @@
                     <div>
                         <div data-manual-lang="en">
                             <h1 class="h3 mb-1">HR Performance Suite Manual</h1>
-                            <p class="text-muted mb-0">Quick guide for daily use by Employee, Manager, HR, and Super Admin.</p>
+                            <p class="text-muted mb-0">Switch role tab to see Manager guide or HR/Super Admin guide.</p>
                         </div>
                         <div data-manual-lang="id" class="is-hidden">
                             <h1 class="h3 mb-1">Panduan HR Performance Suite</h1>
-                            <p class="text-muted mb-0">Panduan singkat penggunaan harian untuk Employee, Manager, HR, dan Super Admin.</p>
+                            <p class="text-muted mb-0">Pilih tab role untuk melihat panduan Manager atau HR/Super Admin.</p>
                         </div>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
                         <div class="btn-group lang-toggle" role="group" aria-label="Manual language toggle">
                             <button type="button" class="btn btn-outline-primary" id="manual-lang-id">ID</button>
                             <button type="button" class="btn btn-outline-primary" id="manual-lang-en">EN</button>
+                        </div>
+                        <div class="btn-group role-toggle" role="group" aria-label="Manual role toggle">
+                            <button type="button" class="btn btn-outline-secondary" id="manual-role-manager">Manager</button>
+                            <button type="button" class="btn btn-outline-secondary" id="manual-role-admin">HR/Admin</button>
                         </div>
                         <a class="btn btn-outline-secondary" href="/" role="button">
                             <i class="bi bi-arrow-left me-1"></i>
@@ -69,269 +81,257 @@
 
                 <div class="alert alert-info mb-4" role="alert">
                     <div data-manual-lang="en">
-                        <strong>Tip:</strong> Features are role-based. If a tab/action is missing, your account role may not have access.
+                        <strong>Tip:</strong> Features are role-based. Missing action means your role scope does not allow it.
                     </div>
                     <div data-manual-lang="id" class="is-hidden">
-                        <strong>Tip:</strong> Fitur berbasis role. Jika tab atau aksi tidak muncul, role akun Anda mungkin belum memiliki akses.
+                        <strong>Tip:</strong> Fitur berbasis role. Jika aksi tidak muncul, kemungkinan tidak termasuk scope role Anda.
                     </div>
                 </div>
 
                 <div data-manual-lang="en">
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">1. Login &amp; Account</h2>
-                        <ul>
-                            <li>Enter your registered email and password, then select <strong>Sign In</strong>.</li>
-                            <li>Use <strong>Forgot Password</strong> on the login page to request reset link.</li>
-                            <li>After login, use <strong>Password</strong> in the top-right header to change your password.</li>
-                        </ul>
-                    </section>
+                    <div data-manual-role="manager" class="is-hidden-role">
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">1. Manager Daily Workflow</h2>
+                            <ol>
+                                <li>Check team KPI trend and risks in <strong>Dashboard</strong>.</li>
+                                <li>Input KPI achievements and competency assessments in <strong>Assessment &amp; KPI</strong>.</li>
+                                <li>Manage team KPI definitions and monthly targets in <strong>Settings &gt; KPI Management</strong>.</li>
+                                <li>Review probation and follow-up PIP in <strong>Records &gt; Probation &amp; PIP</strong>.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">2. Navigation Tabs</h2>
-                        <ul>
-                            <li><strong>Dashboard:</strong> Summary, KPI analytics, leadership trend, and risk overview.</li>
-                            <li><strong>Employees:</strong> Employee master data (Super Admin).</li>
-                            <li><strong>Assessment &amp; KPI:</strong> Competency assessment and KPI input workflow.</li>
-                            <li><strong>Records:</strong> Assessment Records, KPI Records, and Probation &amp; PIP.</li>
-                            <li><strong>Settings:</strong> Users, competencies, KPI definition, KPI monthly target config, and org setup.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">2. Add/Edit KPI Definition (Manager)</h2>
+                            <ol>
+                                <li>Open <strong>Settings &gt; KPI Management &gt; KPI Definition</strong>.</li>
+                                <li>Fill KPI name, category/position, target, effective month, and <strong>unit from dropdown</strong>.</li>
+                                <li>Click <strong>Save</strong>. If governance is enabled, request goes to pending approval.</li>
+                                <li>Track progress in <strong>Pending KPI Approvals</strong> and <strong>KPI Version History</strong>.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">3. Common Workflow</h2>
-                        <ol>
-                            <li>Check KPI summary, leadership analytics, and updates in <strong>Dashboard</strong>.</li>
-                            <li>Create or review assessments in <strong>Assessment &amp; KPI</strong>.</li>
-                            <li>Input KPI achievements and review KPI period values in <strong>Assessment &amp; KPI</strong>.</li>
-                            <li>Validate final records and exports in <strong>Records</strong>.</li>
-                            <li>Maintain users/configuration in <strong>Settings</strong> (if authorized).</li>
-                        </ol>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">3. Monthly Target Config</h2>
+                            <ol>
+                                <li>In <strong>Employee Targets Config</strong>, select target month and employee.</li>
+                                <li>Enter monthly override values per KPI for that employee.</li>
+                                <li>Leave blank to use default KPI target.</li>
+                                <li>Save and re-check values in KPI history/records.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">4. Assessment Flow</h2>
-                        <ol>
-                            <li>Open <strong>Assessment &amp; KPI</strong>.</li>
-                            <li>From <strong>Select Employee</strong>, choose employee to assess.</li>
-                            <li>Click <strong>Assess Competencies</strong>.</li>
-                            <li>Select position and fill competency scores.</li>
-                            <li>Click <strong>Review Answers</strong>, then <strong>Final Submit</strong>.</li>
-                            <li>Verify result in <strong>Records &gt; Assessment Records</strong>.</li>
-                        </ol>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">4. KPI Record Flow</h2>
+                            <ol>
+                                <li>Go to <strong>Assessment &amp; KPI</strong>, choose employee, click <strong>Input KPI Achievement</strong>.</li>
+                                <li>Pick period, KPI metric, and value.</li>
+                                <li>If unit is <strong>%</strong>, fill Attained + Total to auto-calculate.</li>
+                                <li>Validate saved data in <strong>Records &gt; KPI Records</strong>.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">5. KPI Record Flow (Input, Edit, Validation)</h2>
-                        <ol>
-                            <li>Open <strong>Assessment &amp; KPI</strong>, select employee, click <strong>Input KPI Achievement</strong>.</li>
-                            <li>Set <strong>Period (YYYY-MM)</strong>, select KPI metric, and input value.</li>
-                            <li>KPI metric list follows active definition by <strong>effective month</strong> and your role scope.</li>
-                            <li>If KPI unit is <strong>%</strong>, fill Attained and Total to auto-calculate final value.</li>
-                            <li>Click <strong>Submit Achievement</strong>.</li>
-                            <li>System stores KPI snapshots (target/name/unit/category) at record time, so future KPI edits do not change old records.</li>
-                            <li>Open <strong>Records &gt; KPI Records</strong> to validate saved data.</li>
-                            <li>Use row actions in KPI Records to <strong>Edit</strong> or <strong>Delete</strong> wrong entry (according to role scope).</li>
-                        </ol>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">5. Probation &amp; PIP</h2>
+                            <ol>
+                                <li>Use <strong>Review Form</strong> to fill Managing score and monthly qualitative text.</li>
+                                <li>Work score comes from KPI records in probation date window.</li>
+                                <li>Attitude score comes from attendance deductions entered by HR/Super Admin.</li>
+                                <li>Set decision and export report for signature process.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">6. KPI Definition, Governance, Monthly Target Config &amp; Probation Rules</h2>
-                        <ol>
-                            <li>Open <strong>Settings &gt; KPI Management</strong>.</li>
-                            <li>To add/edit KPI definition, fill KPI name, category/position, target, unit, <strong>effective month</strong>, and optional change note.</li>
-                            <li>Use <strong>KPI Governance</strong> toggle to require HR approval for manager KPI changes.</li>
-                            <li>If governance is enabled, changes appear in <strong>Pending KPI Approvals</strong> until approved by HR/Super Admin.</li>
-                            <li>All submitted changes are recorded in <strong>KPI Version History</strong> (definition and target versions).</li>
-                            <li>Manager can add/edit KPI definition for team positions only; Super Admin can manage all.</li>
-                            <li>In <strong>Employee Targets Config</strong>, select target month and employee.</li>
-                            <li>Input monthly target override per KPI, then click <strong>Save Employee Targets</strong>.</li>
-                            <li>Leave fields blank to fall back to global/default KPI target.</li>
-                            <li>Open <strong>Settings &gt; General</strong> to configure probation scoring policy (Work/Managing/Attitude weights, pass threshold, attendance deduction JSON rules).</li>
-                            <li>Weight values are normalized by system to keep total score policy-safe (100).</li>
-                        </ol>
-                    </section>
+                        <section class="manual-section">
+                            <h2 class="fw-bold">6. Troubleshooting (Manager)</h2>
+                            <ul class="mb-0">
+                                <li>If KPI save fails, verify you are editing team position only and fields are complete.</li>
+                                <li>If KPI update is pending, wait for HR/Super Admin approval.</li>
+                                <li>If KPI card count looks low, re-check active period filter.</li>
+                            </ul>
+                        </section>
+                    </div>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">7. Probation Review &amp; PIP Flow</h2>
-                        <ol>
-                            <li>Open <strong>Records &gt; Probation &amp; PIP</strong>.</li>
-                            <li>Click <strong>Generate Probation Drafts</strong> for employees reaching probation end.</li>
-                            <li>Use <strong>Review Form</strong> to fill monthly manager inputs: managing task score and qualitative text.</li>
-                            <li><strong>Work Performance</strong> score is calculated from KPI records by probation date window.</li>
-                            <li><strong>Attendance / Attitude</strong> score is managed via <strong>Add Attendance Entry</strong> (HR/Super Admin), using deduction suggestions from configured attendance rules, then auto-recomputed.</li>
-                            <li>Set decision: <strong>Pending</strong>, <strong>Pass</strong>, <strong>Extend</strong>, or <strong>Fail</strong>.</li>
-                            <li>Click <strong>Export Probation Excel</strong> to download monthly sheets (Bulan 1-3 + Rekap).</li>
-                            <li>For low KPI performance, click <strong>Generate PIP</strong> and track status in PIP Plans.</li>
-                        </ol>
-                        <div class="small text-muted">
-                            Probation windows are date-to-date from join date. Example: join on 2025-12-25 means month windows are 2025-12-25 to 2026-01-24,
-                            2026-01-25 to 2026-02-24, and 2026-02-25 to 2026-03-24.
-                        </div>
-                    </section>
+                    <div data-manual-role="admin">
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">1. Login &amp; Account</h2>
+                            <ul>
+                                <li>Use registered email and password on login page.</li>
+                                <li>Use <strong>Forgot Password</strong> to request reset link.</li>
+                                <li>Use header <strong>Password</strong> action to update password.</li>
+                            </ul>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">8. Report Filters</h2>
-                        <ul>
-                            <li>Use top filters (Department, Manager, Period) to scope Dashboard and Records outputs.</li>
-                            <li>Select <strong>Clear</strong> to reset all filters.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">2. Core Workflow (HR/Admin)</h2>
+                            <ol>
+                                <li>Check KPI summary and analytics in <strong>Dashboard</strong>.</li>
+                                <li>Maintain employee and assessment data in <strong>Assessment &amp; KPI</strong>.</li>
+                                <li>Review outputs in <strong>Records</strong>.</li>
+                                <li>Maintain app/user/configuration in <strong>Settings</strong>.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">9. Exports &amp; Imports</h2>
-                        <ul>
-                            <li>Export options are available in relevant modules (CSV, JSON, Excel, PDF).</li>
-                            <li>Before importing files, verify format and required columns/fields.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">3. KPI Governance &amp; Config</h2>
+                            <ol>
+                                <li>Use <strong>KPI Governance</strong> toggle to require HR approval for manager KPI changes.</li>
+                                <li>Review and approve pending definition/target requests.</li>
+                                <li>Set probation scoring policy in <strong>Settings &gt; General</strong> (weights, threshold, attendance rules).</li>
+                                <li>Use version history to audit KPI definition and target changes.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">10. Session &amp; Security</h2>
-                        <ul>
-                            <li>Inactive sessions are logged out automatically after timeout.</li>
-                            <li>Always log out from shared devices.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">4. KPI Records &amp; Reporting</h2>
+                            <ul>
+                                <li>KPI records store KPI snapshot (name/unit/category/target) at submission time.</li>
+                                <li>Use filters (Department, Manager, Period) before exporting.</li>
+                                <li>Use Records exports (CSV/Excel/PDF) for operational and approval workflows.</li>
+                            </ul>
+                        </section>
 
-                    <section class="manual-section">
-                        <h2 class="fw-bold">11. Troubleshooting</h2>
-                        <ul class="mb-0">
-                            <li>Data not visible: confirm your role and selected filters.</li>
-                            <li>KPI change not applied yet: check <strong>Pending KPI Approvals</strong> and approval status.</li>
-                            <li>Cannot save/update: check required fields and network connection.</li>
-                            <li>Error <strong>email rate limit exceeded</strong>: too many auth emails in short time, wait and retry.</li>
-                            <li>Access issue persists: contact your system administrator.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">5. Probation Process</h2>
+                            <ol>
+                                <li>Generate probation drafts for employees nearing probation end.</li>
+                                <li>Manager fills monthly qualitative review; HR inputs attendance deductions.</li>
+                                <li>Review final score, pass threshold, and decision (Pass/Extend/Fail).</li>
+                                <li>Export signed report package for approval and compensation process.</li>
+                            </ol>
+                            <div class="small text-muted">Probation windows are date-to-date from join date, not fixed calendar month.</div>
+                        </section>
+
+                        <section class="manual-section">
+                            <h2 class="fw-bold">6. Troubleshooting</h2>
+                            <ul class="mb-0">
+                                <li>Missing menu/action: check role and filter scope first.</li>
+                                <li>KPI request not active: verify pending approval status.</li>
+                                <li>Auth error <strong>email rate limit exceeded</strong>: wait and retry later.</li>
+                            </ul>
+                        </section>
+                    </div>
                 </div>
 
                 <div data-manual-lang="id" class="is-hidden">
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">1. Login &amp; Akun</h2>
-                        <ul>
-                            <li>Masukkan email dan password yang sudah terdaftar, lalu klik <strong>Sign In</strong>.</li>
-                            <li>Gunakan <strong>Forgot Password</strong> di halaman login untuk meminta link reset password.</li>
-                            <li>Setelah login, gunakan menu <strong>Password</strong> di header kanan atas untuk mengganti password.</li>
-                        </ul>
-                    </section>
+                    <div data-manual-role="manager" class="is-hidden-role">
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">1. Workflow Harian Manager</h2>
+                            <ol>
+                                <li>Cek tren KPI tim dan risiko di <strong>Dashboard</strong>.</li>
+                                <li>Input KPI achievement dan assessment kompetensi di <strong>Assessment &amp; KPI</strong>.</li>
+                                <li>Kelola definisi KPI dan target bulanan tim di <strong>Settings &gt; KPI Management</strong>.</li>
+                                <li>Review probation dan tindak lanjut PIP di <strong>Records &gt; Probation &amp; PIP</strong>.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">2. Tab Navigasi</h2>
-                        <ul>
-                            <li><strong>Dashboard:</strong> Ringkasan, analitik KPI, tren leadership, dan overview risiko.</li>
-                            <li><strong>Employees:</strong> Data master karyawan (Super Admin).</li>
-                            <li><strong>Assessment &amp; KPI:</strong> Alur input assessment kompetensi dan KPI.</li>
-                            <li><strong>Records:</strong> Assessment Records, KPI Records, dan Probation &amp; PIP.</li>
-                            <li><strong>Settings:</strong> Users, kompetensi, definisi KPI, konfigurasi target KPI bulanan, dan organisasi.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">2. Tambah/Edit Definisi KPI (Manager)</h2>
+                            <ol>
+                                <li>Buka <strong>Settings &gt; KPI Management &gt; KPI Definition</strong>.</li>
+                                <li>Isi nama KPI, kategori/posisi, target, effective month, dan <strong>unit dari dropdown</strong>.</li>
+                                <li>Klik <strong>Save</strong>. Jika governance aktif, perubahan menjadi pending approval.</li>
+                                <li>Pantau status di <strong>Pending KPI Approvals</strong> dan <strong>KPI Version History</strong>.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">3. Workflow Umum</h2>
-                        <ol>
-                            <li>Cek ringkasan KPI, analitik leadership, dan update terbaru di <strong>Dashboard</strong>.</li>
-                            <li>Buat atau review assessment di <strong>Assessment &amp; KPI</strong>.</li>
-                            <li>Input pencapaian KPI dan review nilai KPI per periode di <strong>Assessment &amp; KPI</strong>.</li>
-                            <li>Validasi record final dan export di <strong>Records</strong>.</li>
-                            <li>Kelola user dan konfigurasi di <strong>Settings</strong> (jika memiliki akses).</li>
-                        </ol>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">3. Konfigurasi Target Bulanan</h2>
+                            <ol>
+                                <li>Di <strong>Employee Targets Config</strong>, pilih bulan target dan karyawan.</li>
+                                <li>Isi override target bulanan per KPI.</li>
+                                <li>Kosongkan nilai jika ingin pakai target default.</li>
+                                <li>Simpan lalu validasi di KPI history/records.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">4. Alur Assessment</h2>
-                        <ol>
-                            <li>Buka <strong>Assessment &amp; KPI</strong>.</li>
-                            <li>Pada <strong>Select Employee</strong>, pilih karyawan yang akan dinilai.</li>
-                            <li>Klik <strong>Assess Competencies</strong>.</li>
-                            <li>Pilih posisi dan isi skor kompetensi.</li>
-                            <li>Klik <strong>Review Answers</strong>, lalu <strong>Final Submit</strong>.</li>
-                            <li>Verifikasi hasil di <strong>Records &gt; Assessment Records</strong>.</li>
-                        </ol>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">4. Alur KPI Record</h2>
+                            <ol>
+                                <li>Masuk ke <strong>Assessment &amp; KPI</strong>, pilih karyawan, klik <strong>Input KPI Achievement</strong>.</li>
+                                <li>Pilih period, metric KPI, lalu isi nilai.</li>
+                                <li>Jika unit <strong>%</strong>, isi Attained + Total agar auto-calculate.</li>
+                                <li>Validasi hasil di <strong>Records &gt; KPI Records</strong>.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">5. Alur KPI Record (Input, Edit, Validasi)</h2>
-                        <ol>
-                            <li>Buka <strong>Assessment &amp; KPI</strong>, pilih karyawan, lalu klik <strong>Input KPI Achievement</strong>.</li>
-                            <li>Tentukan <strong>Period (YYYY-MM)</strong>, pilih metric KPI, lalu isi nilainya.</li>
-                            <li>Daftar metric KPI mengikuti definisi aktif berdasarkan <strong>effective month</strong> dan scope role Anda.</li>
-                            <li>Jika unit KPI adalah <strong>%</strong>, isi Attained dan Total agar sistem menghitung nilai akhir otomatis.</li>
-                            <li>Klik <strong>Submit Achievement</strong>.</li>
-                            <li>Sistem menyimpan snapshot KPI (target/nama/unit/kategori) saat record dibuat, jadi perubahan KPI di masa depan tidak mengubah record lama.</li>
-                            <li>Buka <strong>Records &gt; KPI Records</strong> untuk validasi data yang tersimpan.</li>
-                            <li>Gunakan aksi pada baris KPI Records untuk <strong>Edit</strong> atau <strong>Delete</strong> entri yang salah (sesuai scope role).</li>
-                        </ol>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">5. Probation &amp; PIP</h2>
+                            <ol>
+                                <li>Isi <strong>Managing score</strong> dan <strong>qualitative text</strong> per bulan pada form review.</li>
+                                <li>Work score diambil dari KPI records dalam window probation.</li>
+                                <li>Attitude score berasal dari attendance deduction oleh HR/Super Admin.</li>
+                                <li>Tentukan keputusan dan export report untuk proses tanda tangan.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">6. KPI Definition, Governance, Monthly Target Config &amp; Aturan Probation</h2>
-                        <ol>
-                            <li>Buka <strong>Settings &gt; KPI Management</strong>.</li>
-                            <li>Untuk menambah atau mengubah definisi KPI, isi nama KPI, kategori/posisi, target, unit, <strong>effective month</strong>, dan catatan perubahan jika perlu.</li>
-                            <li>Gunakan toggle <strong>KPI Governance</strong> untuk mewajibkan approval HR pada perubahan KPI oleh manager.</li>
-                            <li>Jika governance aktif, perubahan akan masuk ke <strong>Pending KPI Approvals</strong> sampai disetujui oleh HR atau Super Admin.</li>
-                            <li>Semua perubahan tersimpan di <strong>KPI Version History</strong> (versi definisi dan versi target).</li>
-                            <li>Manager hanya bisa menambah atau mengubah KPI untuk posisi di timnya; Super Admin bisa mengelola semua KPI.</li>
-                            <li>Di <strong>Employee Targets Config</strong>, pilih bulan target dan karyawan.</li>
-                            <li>Isi override target bulanan per KPI, lalu klik <strong>Save Employee Targets</strong>.</li>
-                            <li>Biarkan field kosong jika ingin mengikuti target global/default KPI.</li>
-                            <li>Buka <strong>Settings &gt; General</strong> untuk mengatur kebijakan scoring probation (bobot Work/Managing/Attitude, pass threshold, dan aturan potongan attendance dalam format JSON).</li>
-                            <li>Bobot akan dinormalisasi otomatis oleh sistem agar total kebijakan tetap aman (100).</li>
-                        </ol>
-                    </section>
+                        <section class="manual-section">
+                            <h2 class="fw-bold">6. Troubleshooting (Manager)</h2>
+                            <ul class="mb-0">
+                                <li>Jika save KPI gagal, pastikan KPI pada posisi tim dan field wajib terisi.</li>
+                                <li>Jika perubahan KPI pending, tunggu approval HR/Super Admin.</li>
+                                <li>Jika jumlah record KPI kecil, cek filter period aktif.</li>
+                            </ul>
+                        </section>
+                    </div>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">7. Alur Probation Review &amp; PIP</h2>
-                        <ol>
-                            <li>Buka <strong>Records &gt; Probation &amp; PIP</strong>.</li>
-                            <li>Klik <strong>Generate Probation Drafts</strong> untuk karyawan yang sudah mendekati akhir masa probation.</li>
-                            <li>Gunakan <strong>Review Form</strong> untuk mengisi input bulanan dari manager: managing task score dan qualitative text.</li>
-                            <li>Skor <strong>Work Performance</strong> dihitung dari KPI records berdasarkan jendela tanggal probation.</li>
-                            <li>Skor <strong>Attendance / Attitude</strong> dikelola melalui <strong>Add Attendance Entry</strong> (HR/Super Admin), memakai saran deduction dari aturan attendance yang sudah dikonfigurasi, lalu dihitung ulang otomatis.</li>
-                            <li>Tentukan decision: <strong>Pending</strong>, <strong>Pass</strong>, <strong>Extend</strong>, atau <strong>Fail</strong>.</li>
-                            <li>Klik <strong>Export Probation Excel</strong> untuk mengunduh sheet bulanan (Bulan 1-3 + Rekap).</li>
-                            <li>Untuk performa KPI yang rendah, klik <strong>Generate PIP</strong> dan pantau statusnya di PIP Plans.</li>
-                        </ol>
-                        <div class="small text-muted">
-                            Jendela probation dihitung date-to-date dari join date. Contoh: join pada 2025-12-25 berarti jendela bulan 1 adalah 2025-12-25 sampai 2026-01-24,
-                            bulan 2 adalah 2026-01-25 sampai 2026-02-24, dan bulan 3 adalah 2026-02-25 sampai 2026-03-24.
-                        </div>
-                    </section>
+                    <div data-manual-role="admin">
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">1. Login &amp; Akun</h2>
+                            <ul>
+                                <li>Masuk dengan email dan password terdaftar.</li>
+                                <li>Gunakan <strong>Forgot Password</strong> untuk reset password.</li>
+                                <li>Gunakan aksi <strong>Password</strong> di header untuk ganti password.</li>
+                            </ul>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">8. Report Filters</h2>
-                        <ul>
-                            <li>Gunakan filter atas (Department, Manager, Period) untuk membatasi output Dashboard dan Records.</li>
-                            <li>Pilih <strong>Clear</strong> untuk mereset semua filter.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">2. Workflow Utama (HR/Admin)</h2>
+                            <ol>
+                                <li>Cek ringkasan KPI dan analitik di <strong>Dashboard</strong>.</li>
+                                <li>Kelola data karyawan dan assessment di <strong>Assessment &amp; KPI</strong>.</li>
+                                <li>Review hasil final di <strong>Records</strong>.</li>
+                                <li>Kelola user, setting, dan konfigurasi di <strong>Settings</strong>.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">9. Export &amp; Import</h2>
-                        <ul>
-                            <li>Opsi export tersedia di modul yang relevan (CSV, JSON, Excel, PDF).</li>
-                            <li>Sebelum import file, pastikan format dan kolom atau field wajib sudah sesuai.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">3. KPI Governance &amp; Konfigurasi</h2>
+                            <ol>
+                                <li>Gunakan toggle <strong>KPI Governance</strong> untuk mewajibkan approval HR pada perubahan KPI oleh manager.</li>
+                                <li>Review dan approve request definisi/target KPI yang pending.</li>
+                                <li>Atur kebijakan probation di <strong>Settings &gt; General</strong> (bobot, threshold, aturan attendance).</li>
+                                <li>Gunakan version history untuk audit perubahan KPI definition dan target.</li>
+                            </ol>
+                        </section>
 
-                    <section class="manual-section mb-4">
-                        <h2 class="fw-bold">10. Session &amp; Security</h2>
-                        <ul>
-                            <li>Session yang tidak aktif akan logout otomatis setelah timeout.</li>
-                            <li>Selalu logout jika menggunakan perangkat bersama.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">4. KPI Records &amp; Reporting</h2>
+                            <ul>
+                                <li>KPI record menyimpan snapshot KPI (nama/unit/kategori/target) saat submit.</li>
+                                <li>Gunakan filter Department, Manager, dan Period sebelum export report.</li>
+                                <li>Gunakan export Records (CSV/Excel/PDF) untuk kebutuhan operasional dan approval.</li>
+                            </ul>
+                        </section>
 
-                    <section class="manual-section">
-                        <h2 class="fw-bold">11. Troubleshooting</h2>
-                        <ul class="mb-0">
-                            <li>Data tidak terlihat: pastikan role dan filter yang dipilih sudah benar.</li>
-                            <li>Perubahan KPI belum aktif: cek <strong>Pending KPI Approvals</strong> dan status approval.</li>
-                            <li>Tidak bisa save atau update: cek field wajib dan koneksi jaringan.</li>
-                            <li>Error <strong>email rate limit exceeded</strong>: terlalu banyak email auth dalam waktu singkat, tunggu lalu coba lagi.</li>
-                            <li>Jika masalah akses masih berlanjut: hubungi system administrator Anda.</li>
-                        </ul>
-                    </section>
+                        <section class="manual-section mb-4">
+                            <h2 class="fw-bold">5. Proses Probation</h2>
+                            <ol>
+                                <li>Generate draft probation untuk karyawan yang mendekati akhir probation.</li>
+                                <li>Manager isi review kualitatif bulanan, HR isi attendance deduction.</li>
+                                <li>Review final score, pass threshold, dan keputusan (Pass/Extend/Fail).</li>
+                                <li>Export dokumen report untuk proses tanda tangan dan penyesuaian kompensasi.</li>
+                            </ol>
+                            <div class="small text-muted">Window probation dihitung date-to-date dari join date, bukan bulan kalender tetap.</div>
+                        </section>
+
+                        <section class="manual-section">
+                            <h2 class="fw-bold">6. Troubleshooting</h2>
+                            <ul class="mb-0">
+                                <li>Jika menu/aksi tidak muncul, cek role dan scope filter.</li>
+                                <li>Jika perubahan KPI belum aktif, cek status pending approval.</li>
+                                <li>Error auth <strong>email rate limit exceeded</strong>: tunggu lalu coba lagi.</li>
+                            </ul>
+                        </section>
+                    </div>
                 </div>
             </div>
         </div>
@@ -339,7 +339,8 @@
 
     <script>
         (function () {
-            const supported = ['id', 'en'];
+            const supportedLangs = ['id', 'en'];
+            const supportedRoles = ['manager', 'admin'];
             const pageMeta = {
                 en: {
                     title: 'HR Performance Suite - User Manual',
@@ -355,26 +356,45 @@
             const metaDescription = document.querySelector('meta[name="description"]');
             const btnId = document.getElementById('manual-lang-id');
             const btnEn = document.getElementById('manual-lang-en');
+            const btnRoleManager = document.getElementById('manual-role-manager');
+            const btnRoleAdmin = document.getElementById('manual-role-admin');
+
+            let currentLang = 'en';
+            let currentRole = 'admin';
 
             function resolveInitialLang() {
                 const params = new URLSearchParams(window.location.search);
                 const queryLang = (params.get('lang') || '').toLowerCase();
-                if (supported.includes(queryLang)) return queryLang;
+                if (supportedLangs.includes(queryLang)) return queryLang;
 
                 const storedLang = (window.localStorage.getItem('manual-lang') || '').toLowerCase();
-                if (supported.includes(storedLang)) return storedLang;
+                if (supportedLangs.includes(storedLang)) return storedLang;
 
                 return navigator.language && navigator.language.toLowerCase().startsWith('id') ? 'id' : 'en';
             }
 
-            function syncQuery(lang) {
+            function resolveInitialRole() {
+                const params = new URLSearchParams(window.location.search);
+                const queryRole = (params.get('role') || '').toLowerCase();
+                if (supportedRoles.includes(queryRole)) return queryRole;
+
+                const storedRole = (window.localStorage.getItem('manual-role') || '').toLowerCase();
+                if (supportedRoles.includes(storedRole)) return storedRole;
+
+                return 'admin';
+            }
+
+            function syncQuery(lang = currentLang, role = currentRole) {
                 const url = new URL(window.location.href);
                 url.searchParams.set('lang', lang);
+                url.searchParams.set('role', role);
                 window.history.replaceState({}, '', url);
             }
 
             function applyLang(lang) {
-                const safeLang = supported.includes(lang) ? lang : 'en';
+                const safeLang = supportedLangs.includes(lang) ? lang : 'en';
+                currentLang = safeLang;
+
                 html.lang = safeLang;
                 html.dataset.manualLang = safeLang;
 
@@ -382,20 +402,39 @@
                     el.classList.toggle('is-hidden', el.getAttribute('data-manual-lang') !== safeLang);
                 });
 
-                btnId.classList.toggle('active', safeLang === 'id');
-                btnEn.classList.toggle('active', safeLang === 'en');
+                btnId?.classList.toggle('active', safeLang === 'id');
+                btnEn?.classList.toggle('active', safeLang === 'en');
 
                 document.title = pageMeta[safeLang].title;
                 if (metaDescription) metaDescription.setAttribute('content', pageMeta[safeLang].description);
 
                 window.localStorage.setItem('manual-lang', safeLang);
-                syncQuery(safeLang);
+                syncQuery();
             }
 
-            btnId.addEventListener('click', () => applyLang('id'));
-            btnEn.addEventListener('click', () => applyLang('en'));
+            function applyRole(role) {
+                const safeRole = supportedRoles.includes(role) ? role : 'admin';
+                currentRole = safeRole;
+
+                html.dataset.manualRole = safeRole;
+                document.querySelectorAll('[data-manual-role]').forEach(el => {
+                    el.classList.toggle('is-hidden-role', el.getAttribute('data-manual-role') !== safeRole);
+                });
+
+                btnRoleManager?.classList.toggle('active', safeRole === 'manager');
+                btnRoleAdmin?.classList.toggle('active', safeRole === 'admin');
+
+                window.localStorage.setItem('manual-role', safeRole);
+                syncQuery();
+            }
+
+            btnId?.addEventListener('click', () => applyLang('id'));
+            btnEn?.addEventListener('click', () => applyLang('en'));
+            btnRoleManager?.addEventListener('click', () => applyRole('manager'));
+            btnRoleAdmin?.addEventListener('click', () => applyRole('admin'));
 
             applyLang(resolveInitialLang());
+            applyRole(resolveInitialRole());
         }());
     </script>
 </body>

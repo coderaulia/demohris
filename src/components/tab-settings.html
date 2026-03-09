@@ -258,8 +258,20 @@
                                             </div>
                                             <div class="col-3"><input type="month" id="kpi-def-effective-period"
                                                     class="form-control form-control-sm" title="Effective month"></div>
-                                            <div class="col-3"><input type="text" id="kpi-def-unit"
-                                                    class="form-control form-control-sm" placeholder="Unit">
+                                            <div class="col-3">
+                                                <select id="kpi-def-unit" class="form-select form-select-sm" title="KPI unit">
+                                                    <option value="">-- Unit --</option>
+                                                    <option value="%">%</option>
+                                                    <option value="IDR">IDR</option>
+                                                    <option value="Count">Count</option>
+                                                    <option value="Point">Point</option>
+                                                    <option value="Hours">Hours</option>
+                                                    <option value="Days">Days</option>
+                                                    <option value="Leads">Leads</option>
+                                                    <option value="Clients">Clients</option>
+                                                    <option value="Items">Items</option>
+                                                    <option value="Projects">Projects</option>
+                                                </select>
                                             </div>
                                             <div class="col-4"><input type="number" id="kpi-def-target"
                                                     class="form-control form-control-sm" placeholder="Target">

@@ -48,6 +48,37 @@ function isDefinitionActive(kpi, period = '') {
     if (!period || !effective) return true;
     return effective <= period;
 }
+
+const KPI_UNIT_OPTIONS = [
+    '',
+    '%',
+    'IDR',
+    'Count',
+    'Point',
+    'Hours',
+    'Days',
+    'Leads',
+    'Clients',
+    'Items',
+    'Projects',
+];
+
+function renderKpiUnitOptions(selectedValue = '') {
+    const unitSelect = document.getElementById('kpi-def-unit');
+    if (!unitSelect) return;
+
+    const normalized = String(selectedValue || unitSelect.value || '').trim();
+    unitSelect.innerHTML = KPI_UNIT_OPTIONS
+        .map(unit => `<option value="${escapeHTML(unit)}">${escapeHTML(unit || '-- Unit --')}</option>`)
+        .join('');
+
+    if (normalized && !KPI_UNIT_OPTIONS.includes(normalized)) {
+        unitSelect.innerHTML += `<option value="${escapeHTML(normalized)}">${escapeHTML(normalized)} (Legacy)</option>`;
+    }
+
+    unitSelect.value = normalized || '';
+}
+
 function getLatestTargetVersionForPeriod(employeeId, kpiId, period, options = {}) {
     const includePending = Boolean(options.includePending);
     return (state.employeeKpiTargetVersions || [])
@@ -445,6 +476,8 @@ function renderKpiTargetConfig() {
     if (defPeriodInput && !defPeriodInput.value) {
         defPeriodInput.value = getCurrentPeriodKey();
     }
+
+    renderKpiUnitOptions();
 
     const defSelect = document.getElementById('kpi-def-category');
     if (defSelect) {
@@ -874,7 +907,12 @@ export async function saveKpiDef() {
     const effective_period = document.getElementById('kpi-def-effective-period')?.value?.trim() || getCurrentPeriodKey();
     const request_note = document.getElementById('kpi-def-request-note')?.value?.trim() || '';
     const target = parseFloat(document.getElementById('kpi-def-target')?.value) || 0;
-    const unit = document.getElementById('kpi-def-unit')?.value?.trim() || '';
+    const unitSelect = document.getElementById('kpi-def-unit');
+    const unit = unitSelect?.value?.trim() || '';
+    if (unitSelect && unit && !Array.from(unitSelect.options).some(opt => opt.value === unit)) {
+        await notify.warn('Please select KPI unit from dropdown.');
+        return;
+    }
 
     if (!name) { await notify.warn('Please enter a KPI name.'); return; }
 
@@ -940,7 +978,7 @@ export function editKpiDef(id) {
     document.getElementById('kpi-def-desc').value = kpi.description || '';
     document.getElementById('kpi-def-category').value = kpi.category || 'General';
     document.getElementById('kpi-def-target').value = kpi.target || '';
-    document.getElementById('kpi-def-unit').value = kpi.unit || '';
+    renderKpiUnitOptions(kpi.unit || '');
     document.getElementById('kpi-def-effective-period').value = kpi.effective_period || getCurrentPeriodKey();
     document.getElementById('kpi-def-request-note').value = '';
     document.getElementById('kpi-def-edit-id').value = kpi.id;
@@ -957,7 +995,7 @@ export function copyKpiDef(id) {
     document.getElementById('kpi-def-desc').value = kpi.description || '';
     document.getElementById('kpi-def-category').value = kpi.category || 'General';
     document.getElementById('kpi-def-target').value = kpi.target || '';
-    document.getElementById('kpi-def-unit').value = kpi.unit || '';
+    renderKpiUnitOptions(kpi.unit || '');
     document.getElementById('kpi-def-effective-period').value = kpi.effective_period || getCurrentPeriodKey();
     document.getElementById('kpi-def-request-note').value = '';
 
@@ -1113,7 +1151,7 @@ export function clearKpiDefForm() {
     document.getElementById('kpi-def-desc').value = '';
     document.getElementById('kpi-def-category').value = '';
     document.getElementById('kpi-def-target').value = '';
-    document.getElementById('kpi-def-unit').value = '';
+    renderKpiUnitOptions('');
     document.getElementById('kpi-def-effective-period').value = getCurrentPeriodKey();
     document.getElementById('kpi-def-request-note').value = '';
     document.getElementById('kpi-def-edit-id').value = '';
