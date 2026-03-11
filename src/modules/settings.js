@@ -79,8 +79,8 @@ function renderAppSettings() {
     const attendanceTemplate = JSON.stringify(JSON.parse(getDefaultProbationAttendanceRulesJson()));
     const fields = [
         { key: 'app_name', label: 'Application Name', placeholder: 'e.g. HR Performance Suite' },
-        { key: 'company_name', label: 'Company Name', placeholder: 'e.g. Warna Emas Indonesia' },
-        { key: 'company_short', label: 'Company Short Name', placeholder: 'e.g. WEI' },
+        { key: 'company_name', label: 'Company Name', placeholder: 'e.g. Your Company' },
+        { key: 'company_short', label: 'Company Short Name', placeholder: 'e.g. YC' },
         { key: 'department_label', label: 'Department Label', placeholder: 'e.g. Human Resources Department' },
         { key: 'assessment_scale_max', label: 'Assessment Scale Max', placeholder: '10' },
         { key: 'assessment_threshold', label: 'Training Threshold (score below this triggers recommendation)', placeholder: '7' },

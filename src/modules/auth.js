@@ -102,7 +102,7 @@ export async function restoreSession() {
     return setCurrentUser(profile, session.user);
 }
 
-const DEFAULT_AUTH_REDIRECT_URL = 'https://hr.warnaemasindonesia.com';
+const DEFAULT_AUTH_REDIRECT_URL = 'https://example.com';
 
 function resolveAuthRedirectUrl() {
     const envUrl = String(import.meta?.env?.VITE_AUTH_REDIRECT_URL || import.meta?.env?.VITE_PUBLIC_APP_URL || '').trim();

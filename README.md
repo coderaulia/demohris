@@ -1,6 +1,6 @@
 # HR Performance Suite
 
-A modern and comprehensive Human Resources management system focusing on Employee Competencies Assessment and KPI Tracking, built for **Warna Emas Indonesia (WEI)**.
+A modern and comprehensive Human Resources management system focusing on employee competency assessment and KPI tracking.
 
 This system replaces older, disconnected spreadsheets by centralizing authentication, competency evaluations, and key performance indicators into a sleek, real-time dashboard powered by **Supabase (PostgreSQL)**.
 
@@ -46,7 +46,7 @@ TNA/
 ├── index.html               ← Application Entry Point
 ├── vite.config.js           ← Vite Bundler Configurations
 ├── package.json             ← Project Dependencies
-├── complete-setup.sql       ← Complete Supabase Database Architecture
+├── complete-setup.sql       ← Sanitized Supabase bootstrap (schema + RLS, no sample data)
 ├── src/
 │   ├── main.js              ← Core Routing, Event Wirings, and Initializer
 │   ├── lib/
@@ -68,10 +68,11 @@ TNA/
 1. Log in to [Supabase](https://supabase.com) and create exactly **one new project**.
 2. Once the project dashboard is ready, navigate to the **SQL Editor** on the left menu.
 3. Open the `complete-setup.sql` file from this project's root folder. Copy **everything** inside that file.
-4. Paste it into your Supabase SQL Editor and click **RUN**. This single script handles everything:
-   - Generates all Database Tables.
-   - Triggers the necessary Row-Level Security (RLS) policies.
-   - Inserts baseline employee/competency sample data and app defaults.
+4. Paste it into your Supabase SQL Editor and click **RUN**. This single script handles the base platform setup:
+   - Generates the database tables.
+   - Applies the required Row-Level Security (RLS) policies.
+   - Inserts only safe default app settings, with no employee, KPI, competency, or training sample data.
+5. Import employees, KPI definitions, and competency configuration separately through the app or your own private migration files.
 
 ### Phase 1B: Required Incremental Migrations (Existing Projects)
 
@@ -153,10 +154,8 @@ Add these secrets:
 - `VITE_SESSION_TIMEOUT_MINUTES` (optional, default `30`)
 - `VITE_MONITOR_WEBHOOK_URL` (optional, frontend error webhook endpoint)
 - `VITE_SENTRY_DSN` (optional, if you provide Sentry script/SDK integration)
-- `SUPABASE_DB_POOLER_URL` (recommended for scheduled backup on GitHub runners, use Supabase Session Pooler IPv4 URL, port `5432`)
-- `SUPABASE_DB_URL` (optional fallback direct DB URL, may require IPv6 connectivity from runner)
-- `SITE_BASE_URL` (example: `https://hr.yourdomain.com`, used for post-deploy checks)
-- `SITE_HEALTHCHECK_URL` (optional override, example: `https://hr.yourdomain.com/healthz.json`)
+- `SITE_BASE_URL` (example: `https://app.yourdomain.com`, used for post-deploy checks)
+- `SITE_HEALTHCHECK_URL` (optional override, example: `https://app.yourdomain.com/healthz.json`)
 - `DEPLOY_NOTIFY_WEBHOOK_URL` (optional webhook for deploy success/failure notifications)
 
 ### 2) Push to `main`
@@ -170,19 +169,9 @@ Every push to `main` will automatically deploy the latest `dist/` build to your 
 - If your repo default branch is not `main`, change the branch in `.github/workflows/deploy-hostinger.yml`.
 - Ensure `public/healthz.json` is reachable after deploy (`/healthz.json`).
 
-### 4) Scheduled Supabase backup/export
+### 4) Backups
 
-This repository includes `.github/workflows/supabase-backup.yml`:
-
-- Trigger: every Sunday (`02:00 UTC`) and manual trigger from Actions tab.
-- Output: compressed database dump (`.dump`), plain SQL (`.sql`), and activity log CSV artifact (if table exists).
-- If direct DB host is unreachable (IPv6-only route), workflow writes a skip note artifact and continues. Configure `SUPABASE_DB_POOLER_URL` to avoid skips.
-- Retention: 30 days in GitHub Action artifacts.
-
-Required secret (at least one):
-
-- `SUPABASE_DB_POOLER_URL` (recommended)
-- `SUPABASE_DB_URL` (fallback)
+Database backups are intentionally not shipped through this public repository. Keep backup/export jobs in a private repository, a private runner, or your database platform tooling so SQL dumps and activity data do not end up in GitHub artifacts.
 
 ---
 

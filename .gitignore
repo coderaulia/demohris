@@ -33,6 +33,10 @@ dist-ssr
 backups/
 exports/
 reports/
+seed_*.json
+seed_*.sql
+*_seed.json
+*_seed.sql
 *.dump
 *.bak
 *.tmp
