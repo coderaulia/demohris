@@ -3,10 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/app.js",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "node server/app.js",
+    "package:backend": "powershell -ExecutionPolicy Bypass -File scripts/package-backend.ps1",
     "qa:rls-audit": "node scripts/qa/rls-policy-audit.mjs",
     "qa:migrations": "node scripts/qa/migration-safety-check.mjs",
     "qa:negative": "node scripts/qa/rls-negative-path.mjs",
@@ -19,11 +25,15 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.97.0",
+    "bcryptjs": "^3.0.2",
     "chart.js": "^4.5.1",
     "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "express-session": "^1.18.2",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
+    "mysql2": "^3.15.2",
     "sweetalert2": "^11.26.20"
   }
 }
+

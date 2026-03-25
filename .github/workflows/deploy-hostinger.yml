@@ -1,4 +1,4 @@
-name: Deploy To Hostinger
+name: Deploy Frontend To Hostinger
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  build-and-deploy:
+  build-and-deploy-frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,30 +25,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate required env vars
+      - name: Validate required secrets
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          HOSTINGER_FTP_HOST: ${{ secrets.HOSTINGER_FTP_HOST }}
+          HOSTINGER_FTP_USER: ${{ secrets.HOSTINGER_FTP_USER }}
+          HOSTINGER_FTP_PASSWORD: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
+          HOSTINGER_FTP_REMOTE_DIR: ${{ secrets.HOSTINGER_FTP_REMOTE_DIR }}
         run: |
-          if [ -z "$VITE_SUPABASE_URL" ]; then
-            echo "Missing secret: VITE_SUPABASE_URL"
+          if [ -z "$VITE_API_BASE_URL" ]; then
+            echo "Missing secret: VITE_API_BASE_URL"
             exit 1
           fi
-          if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
-            echo "Missing secret: VITE_SUPABASE_ANON_KEY"
+          if [ -z "$HOSTINGER_FTP_HOST" ]; then
+            echo "Missing secret: HOSTINGER_FTP_HOST"
+            exit 1
+          fi
+          if [ -z "$HOSTINGER_FTP_USER" ]; then
+            echo "Missing secret: HOSTINGER_FTP_USER"
+            exit 1
+          fi
+          if [ -z "$HOSTINGER_FTP_PASSWORD" ]; then
+            echo "Missing secret: HOSTINGER_FTP_PASSWORD"
+            exit 1
+          fi
+          if [ -z "$HOSTINGER_FTP_REMOTE_DIR" ]; then
+            echo "Missing secret: HOSTINGER_FTP_REMOTE_DIR"
             exit 1
           fi
 
-      - name: Build
+      - name: Build frontend
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           VITE_SESSION_TIMEOUT_MINUTES: ${{ secrets.VITE_SESSION_TIMEOUT_MINUTES }}
           VITE_MONITOR_WEBHOOK_URL: ${{ secrets.VITE_MONITOR_WEBHOOK_URL }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
         run: npm run build
 
-      - name: Deploy dist/ to Hostinger via FTP
+      - name: Deploy dist/ to Hostinger via FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.HOSTINGER_FTP_HOST }}
@@ -64,7 +78,7 @@ jobs:
             **/.git*/**
             **/node_modules/**
 
-      - name: Post-deploy health check
+      - name: Post-deploy frontend health check
         env:
           SITE_BASE_URL: ${{ secrets.SITE_BASE_URL }}
           SITE_HEALTHCHECK_URL: ${{ secrets.SITE_HEALTHCHECK_URL }}
@@ -74,14 +88,14 @@ jobs:
             echo "No SITE_BASE_URL/SITE_HEALTHCHECK_URL configured, skipping health check."
             exit 0
           fi
-          if [ -n "$SITE_BASE_URL" ]; then
+          if [ -n "${SITE_BASE_URL:-}" ]; then
             BASE="${SITE_BASE_URL%/}"
             curl -fSL --retry 5 --retry-delay 5 "$BASE/"
             HEALTH_URL="$BASE/healthz.json"
           else
             HEALTH_URL="$SITE_HEALTHCHECK_URL"
           fi
-          if [ -n "$SITE_HEALTHCHECK_URL" ]; then
+          if [ -n "${SITE_HEALTHCHECK_URL:-}" ]; then
             HEALTH_URL="$SITE_HEALTHCHECK_URL"
           fi
           curl -fSL --retry 5 --retry-delay 5 "$HEALTH_URL"

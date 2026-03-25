@@ -1,14 +1,10 @@
 // ==================================================
-// AUTH MODULE — Supabase Authentication
+// AUTH MODULE — Session Authentication via PHP API
 // ==================================================
 
-import { supabase } from '../lib/supabase.js';
+import { apiRequest } from '../lib/supabase.js';
 import { state, emit } from '../lib/store.js';
 import * as notify from '../lib/notify.js';
-
-function isVerifiedUser(user) {
-    return Boolean(user?.email_confirmed_at || user?.confirmed_at);
-}
 
 function getHashParams() {
     const hash = String(window.location.hash || '').replace(/^#/, '');
@@ -25,52 +21,32 @@ export function clearAuthHash() {
     history.replaceState(null, '', window.location.pathname + window.location.search);
 }
 
-async function findProfileByAuthUser(user) {
-    let profile = null;
-
-    const { data: byAuthId } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('auth_id', user.id)
-        .maybeSingle();
-
-    if (byAuthId) {
-        profile = byAuthId;
-    } else if (isVerifiedUser(user)) {
-        const { data: byEmail } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('auth_email', user.email)
-            .maybeSingle();
-
-        if (byEmail) {
-            if (byEmail.auth_id && byEmail.auth_id !== user.id) {
-                throw new Error('This email is already linked to another auth account. Contact administrator.');
-            }
-            profile = byEmail;
-            if (!byEmail.auth_id) {
-                await supabase.from('employees')
-                    .update({ auth_id: user.id })
-                    .eq('employee_id', byEmail.employee_id);
-            }
-        }
-    }
-
-    return profile;
+function normalizeProfile(profile = {}) {
+    return {
+        employee_id: profile.employee_id || profile.id || '',
+        name: profile.name || '',
+        auth_email: profile.auth_email || profile.email || '',
+        role: profile.role || 'employee',
+        auth_id: profile.auth_id || profile.employee_id || profile.id || '',
+        position: profile.position || '',
+        department: profile.department || '',
+        seniority: profile.seniority || '',
+        must_change_password: Boolean(profile.must_change_password),
+    };
 }
 
-function setCurrentUser(profile, authUser) {
-    const role = profile?.role || 'employee';
+function setCurrentUser(profile) {
+    const normalized = normalizeProfile(profile);
     state.currentUser = {
-        id: profile?.employee_id || authUser.id,
-        name: profile?.name || authUser.email.split('@')[0],
-        email: authUser.email,
-        role,
-        auth_id: authUser.id,
-        position: profile?.position || '',
-        department: profile?.department || '',
-        seniority: profile?.seniority || '',
-        must_change_password: Boolean(profile?.must_change_password),
+        id: normalized.employee_id,
+        name: normalized.name || normalized.auth_email.split('@')[0] || normalized.employee_id,
+        email: normalized.auth_email,
+        role: normalized.role,
+        auth_id: normalized.auth_id,
+        position: normalized.position,
+        department: normalized.department,
+        seniority: normalized.seniority,
+        must_change_password: normalized.must_change_password,
         reauthenticated_at: Date.now(),
     };
     sessionStorage.setItem('hr_user', JSON.stringify(state.currentUser));
@@ -79,15 +55,20 @@ function setCurrentUser(profile, authUser) {
 }
 
 export async function signIn(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-
-    const profile = await findProfileByAuthUser(data.user);
-    return setCurrentUser(profile, data.user);
+    const response = await apiRequest('auth/login', {
+        email: String(email || '').trim(),
+        password: String(password || ''),
+    });
+    return setCurrentUser(response?.profile || {});
 }
 
 export async function signOut() {
-    await supabase.auth.signOut();
+    try {
+        await apiRequest('auth/logout', {});
+    } catch {
+        // Clear browser state even if the server session was already invalidated.
+    }
+
     state.currentUser = null;
     sessionStorage.removeItem('hr_user');
     emit('auth:logout');
@@ -95,52 +76,37 @@ export async function signOut() {
 }
 
 export async function restoreSession() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-
-    const profile = await findProfileByAuthUser(session.user);
-    return setCurrentUser(profile, session.user);
-}
-
-const DEFAULT_AUTH_REDIRECT_URL = 'https://example.com';
-
-function resolveAuthRedirectUrl() {
-    const envUrl = String(import.meta?.env?.VITE_AUTH_REDIRECT_URL || import.meta?.env?.VITE_PUBLIC_APP_URL || '').trim();
-    const configured = String(state.appSettings?.app_public_url || '').trim();
-    const base = envUrl || configured || DEFAULT_AUTH_REDIRECT_URL;
-
     try {
-        const normalized = /^https?:\/\//i.test(base) ? base : `https://${base}`;
-        return new URL(normalized).origin;
+        const response = await apiRequest('auth/session', {}, { method: 'GET' });
+        if (!response?.profile?.employee_id) return null;
+        return setCurrentUser(response.profile);
     } catch {
-        return DEFAULT_AUTH_REDIRECT_URL;
+        return null;
     }
 }
 
-export async function createAuthUser(email, password) {
+export async function createAuthUser(employeeId, email, password) {
     if (state.currentUser?.role !== 'superadmin') {
         throw new Error('Access denied. Superadmin only.');
     }
 
-    const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: resolveAuthRedirectUrl() }
+    return apiRequest('auth/create-user', {
+        employee_id: String(employeeId || '').trim(),
+        email: String(email || '').trim(),
+        password: String(password || ''),
     });
-    if (error) throw error;
-    return data;
 }
 
 export async function requestPasswordReset(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: resolveAuthRedirectUrl(),
+    return apiRequest('auth/password-reset-request', {
+        email: String(email || '').trim(),
     });
-    if (error) throw error;
 }
 
 export async function updatePassword(newPassword, options = {}) {
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) throw error;
+    await apiRequest('auth/update-password', {
+        password: String(newPassword || ''),
+    });
 
     if (state.currentUser) {
         state.currentUser.reauthenticated_at = Date.now();
@@ -200,7 +166,7 @@ export async function promptChangePassword(options = {}) {
 
 export async function enforcePasswordPolicyOnLogin() {
     if (isRecoveryMode()) {
-        await notify.info('Password recovery verified. Please set your new password now.');
+        await notify.info('Password recovery mode is not configured for email links in this deployment. Please set a new password now.');
         const ok = await promptChangePassword({ enforced: true, clearMustChange: true });
         clearAuthHash();
         if (!ok) {
@@ -247,11 +213,11 @@ export async function requireRecentAuth(actionLabel = 'this action', maxAgeMs = 
     });
     if (password === null) return false;
 
-    const { error } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: String(password),
-    });
-    if (error) {
+    try {
+        await apiRequest('auth/verify-password', {
+            password: String(password),
+        });
+    } catch (error) {
         await notify.error('Re-authentication failed: ' + error.message);
         return false;
     }

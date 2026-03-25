@@ -471,7 +471,7 @@ export async function setupUserLogin(empId) {
 
     try {
         const authData = await notify.withLoading(async () => {
-            return await createAuthUser(emailVal, passwordVal);
+            return await createAuthUser(empId, emailVal, passwordVal);
         }, 'Creating Login', `Provisioning auth account for ${rec.name}...`);
 
         rec.auth_email = emailVal;
@@ -694,3 +694,4 @@ export async function importOrgConfigJSON(input) {
 
     reader.readAsText(file);
 }
+

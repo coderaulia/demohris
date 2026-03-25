@@ -64,3 +64,6 @@ secrets/
 playwright-report/
 test-results/
 blob-report/
+
+# Generated deployment bundles
+deploy/

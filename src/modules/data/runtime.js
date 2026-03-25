@@ -115,7 +115,7 @@ function generateUuid() {
 
 function isMissingRelationError(error) {
     const code = String(error?.code || '').toUpperCase();
-    if (code === '42P01' || code === 'PGRST205') return true;
+    if (code === '42P01' || code === 'PGRST205' || code === 'TABLE_NOT_FOUND') return true;
 
     const msg = [
         error?.message,
@@ -331,3 +331,4 @@ export {
     average,
     fetchOptionalCollection,
 };
+

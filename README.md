@@ -1,221 +1,181 @@
 # HR Performance Suite
 
-A modern and comprehensive Human Resources management system focusing on employee competency assessment and KPI tracking.
+HR Performance Suite is a Vite single-page app backed by an Express session API and a MySQL database.
 
-This system replaces older, disconnected spreadsheets by centralizing authentication, competency evaluations, and key performance indicators into a sleek, real-time dashboard powered by **Supabase (PostgreSQL)**.
+## Stack
 
----
+- Frontend: Vanilla JavaScript, Bootstrap 5, Chart.js, jsPDF, ExcelJS
+- Backend: Express.js
+- Database: MySQL / MariaDB
+- Hosting target: Hostinger Node.js app hosting for the backend and Hostinger static/FTP hosting for the frontend
 
-## 🚀 Features Highlights
+## Project Layout
 
-### **1. Competency Assessment**
-- **Dual Evaluation System:** Employees perform self-assessments, which are then reviewed and finalized by their Managers.
-- **Dynamic Questionnaires:** Questions branch based on the employee's role and configured competencies.
-- **Training Recommendations:** Tracks recommended training for employees who score below the required baseline.
+- `src/`: browser application
+- `server/app.js`: Express API and optional static file host
+- `server/tableMeta.js`: table metadata for the query layer
+- `mysql-setup.sql`: MySQL schema bootstrap
+- `mysql-demo-seed.sql`: demo dataset bootstrap
+- `scripts/package-backend.ps1`: builds the backend upload bundle and ZIP
+- `.github/workflows/deploy-hostinger.yml`: frontend deploy workflow
 
-### **2. Employee KPI Manager**
-- **Monthly/Quarterly KPI Tracking:** Employees can report data on targets ranging from Sales performance to Customer Satisfaction.
-- **Department Drill-Downs:** Managers can view individual and aggregate departmental achievement scores, complete with 6-month trends.
-- **KPI Library:** Admins can create overarching KPI definitions and apply global or personalized targets for every employee.
-- **KPI Governance:** KPI definitions and monthly target overrides support effective-month changes, optional approval workflow, and version history.
-- **Non-Retroactive Scoring:** KPI records store target/name/unit snapshots at submission time so old scores remain stable after KPI updates.
+## Environment Variables
 
-### **3. Robust Analytics Dashboard**
-- **Actionable Insights:** Tracks overall organizational skill averages, highest/lowest-scoring groups, and KPI top performers continuously.
-- **Data Exporting:** Every table and visualization can be instantly exported to Excel (`.xlsx`) or PDF.
-- **Traceability:** Activity logs track admin-sensitive changes and KPI/assessment edits with actor + timestamp metadata.
+Frontend build/runtime:
 
-### **4. Account & Security**
-- **Password Recovery:** Built-in forgot password flow via Supabase reset email.
-- **First Login Protection:** Temporary credentials can force mandatory password change on first login.
-- **Session Protection:** Idle timeout and re-authentication prompts for sensitive operations.
+- `VITE_API_BASE_URL`
+- `VITE_API_PROXY_TARGET`
+- `VITE_SESSION_TIMEOUT_MINUTES`
+- `VITE_MONITOR_WEBHOOK_URL`
+- `VITE_SENTRY_DSN`
 
----
+Backend runtime:
 
-## 🏗 Architecture & Stack 
+- `PORT`
+- `SESSION_SECRET`
+- `MYSQL_HOST`
+- `MYSQL_PORT`
+- `MYSQL_DATABASE`
+- `MYSQL_USER`
+- `MYSQL_PASSWORD`
+- `CORS_ALLOWED_ORIGINS`
+- `SESSION_COOKIE_DOMAIN`
+- `SESSION_COOKIE_SAME_SITE`
+- `SESSION_COOKIE_SECURE`
 
-- **Frontend Framework:** Vanilla JavaScript + HTML5 + Bootstrap 5 (Custom CSS)
-- **Bundler:** Vite
-- **Backend & Database:** Supabase (PostgreSQL + Auth)
-- **Charting Engine:** Chart.js
-- **PDF/Excel Exporting:** jspdf + exceljs
+Copy [.env.example](D:/web/demo-kpi/.env.example) to `.env` for local development.
 
-### Project Structure
-```text
-TNA/
-├── index.html               ← Application Entry Point
-├── vite.config.js           ← Vite Bundler Configurations
-├── package.json             ← Project Dependencies
-├── complete-setup.sql       ← Sanitized Supabase bootstrap (schema + RLS, no sample data)
-├── src/
-│   ├── main.js              ← Core Routing, Event Wirings, and Initializer
-│   ├── lib/
-│   │   ├── supabase.js      ← Supabase SDK Setup & Credentials
-│   │   ├── store.js         ← Native App Reactive Store (Pub/Sub)
-│   │   └── utils.js         ← Global Formatting & Helpers
-│   ├── components/          ← HTML Partial Views (Injected via Vite `?raw`)
-│   ├── modules/             ← JS Feature Controllers (Auth, KPI, Dashboard, Data)
-│   └── styles/              
-│       └── main.css         ← Global Application Stylesheet
+## Local Development
+
+1. Install dependencies.
+
+```bash
+npm install
 ```
 
----
+2. Create the MySQL schema.
 
-## ⚙️ Initial Setup Guide
+```sql
+SOURCE mysql-setup.sql;
+```
 
-### Phase 1: Supabase Configuration
+3. Load demo data if needed.
 
-1. Log in to [Supabase](https://supabase.com) and create exactly **one new project**.
-2. Once the project dashboard is ready, navigate to the **SQL Editor** on the left menu.
-3. Open the `complete-setup.sql` file from this project's root folder. Copy **everything** inside that file.
-4. Paste it into your Supabase SQL Editor and click **RUN**. This single script handles the base platform setup:
-   - Generates the database tables.
-   - Applies the required Row-Level Security (RLS) policies.
-   - Inserts only safe default app settings, with no employee, KPI, competency, or training sample data.
-5. Import employees, KPI definitions, and competency configuration separately through the app or your own private migration files.
+```sql
+SOURCE mysql-demo-seed.sql;
+```
 
-### Phase 1B: Required Incremental Migrations (Existing Projects)
+4. Start the backend.
 
-If your project was already running before sprint updates, run these migration files in order from `/migrations`:
+```bash
+npm run dev:server
+```
 
-1. `20260307_safe_next_steps.sql`
-2. `20260308_probation_monthly_attendance.sql`
-3. `20260308_probation_hr_access_policy.sql`
-4. `20260308_manager_kpi_competency_policy.sql`
-5. `20260308_director_role_scope.sql`
-6. `20260308_kpi_governance.sql`
+5. Start the frontend.
 
-This enables probation monthly scoring, HR probation access, director scope, and KPI governance (effective month + approvals + version history + snapshot scoring).
+```bash
+npm run dev
+```
 
-### Phase 2: Connecting the Frontend
+Vite runs on `http://127.0.0.1:5173` and proxies `/api` to `http://127.0.0.1:3000`.
 
-1. On your Supabase Dashboard, click on **Settings (Gear Icon)** -> **API**.
-2. Keep this tab open. In your local project folder, create a `.env` file (or copy `.env.example`).
-3. Add your Supabase credentials:
-   ```env
-   VITE_SUPABASE_URL=https://[YOUR_PROJECT_ID].supabase.co
-   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR...
-   ```
+## Demo Seed
 
-### Phase 3: Launching Locally
+Seeded demo logins:
 
-You must have **Node.js** installed on your computer.
+- `admin.demo@xenos.local`
+- `hr.demo@xenos.local`
+- `director.demo@xenos.local`
+- `manager.demo@xenos.local`
+- `farhan.demo@xenos.local`
+- `nadia.demo@xenos.local`
+- `kevin.demo@xenos.local`
 
-1. Open your terminal in the project's root directory:
-   ```bash
-   npm install
-   ```
-2. Start the local development server:
-   ```bash
-   npm run dev
-   ```
-3. The app will launch (typically at `http://localhost:5173`).
-4. Create your first superadmin login in Supabase Auth, then link that email in `employees.auth_email` and role `superadmin`.
+Shared demo password: `Demo123!`
 
----
+## Backend ZIP For Hostinger
 
-## 🌍 Deployment Guide (Hostinger & Similar standard Web Hosts)
+The backend upload artifact is generated by:
 
-Since this app operates completely as a **Static Frontend Site (SPA)** connecting to Supabase, deploying to shared hosting like Hostinger is remarkably easy. You do **not** need Node.js installed on your Hostinger server.
+```bash
+npm run package:backend
+```
 
-1. First, inside your local project terminal, create the production build:
-   ```bash
-   npm run build
-   ```
-2. Vite will process and bundle all instructions into a brand new folder named **`dist/`**.
-3. Log into your **Hostinger hPanel**.
-4. Go to the **File Manager** for your specific domain or subdomain (e.g., `hr.yourdomain.com`).
-5. Open the `public_html/` folder.
-6. Upload the **contents** of your local `dist/` folder directly into `public_html/`. Make sure `index.html` sits immediately inside `public_html/`, not inside a sub-folder.
-7. You're done! Visit your domain. 
+This creates:
 
----
+- `deploy/backend-hostinger/`
+- `deploy/backend-hostinger.zip`
 
-## 🤖 Automatic Deploy (GitHub Actions -> Hostinger)
+The ZIP contains only the Node backend runtime files, MySQL SQL files, a backend-only `package.json`, and an environment example.
 
-This repository now includes an automatic deploy workflow:
+### Backend upload flow
 
-- Workflow file: `.github/workflows/deploy-hostinger.yml`
-- Trigger: push to `main` (and manual trigger from Actions tab)
-- Process: install deps -> build (`dist/`) -> upload to Hostinger via FTPS
+1. Upload `deploy/backend-hostinger.zip` to your Hostinger Node.js app.
+2. Provision the MySQL database in Hostinger.
+3. Import `mysql-setup.sql` in phpMyAdmin.
+4. Import `mysql-demo-seed.sql` if this is the demo environment.
+5. Configure backend env vars in Hostinger.
+6. Confirm the start command is `npm start`.
 
-### 1) Add GitHub Repository Secrets
+Hostinger currently advertises ZIP upload and Express.js support on its Node.js web app hosting page: [Hostinger Node.js Hosting](https://www.hostinger.com/web-apps-hosting)
 
-Open **GitHub -> Repository -> Settings -> Secrets and variables -> Actions -> New repository secret**.
+### Backend env guidance
 
-Add these secrets:
+For a split frontend/backend deployment, set:
 
-- `HOSTINGER_FTP_HOST` (example: `ftp.yourdomain.com`)
+- `CORS_ALLOWED_ORIGINS=https://your-frontend-domain.example.com`
+- `SESSION_COOKIE_SAME_SITE=none`
+- `SESSION_COOKIE_SECURE=true`
+
+If frontend and backend are on the same registrable site and you intentionally want stricter cookies, you can relax those values, but the defaults above are the safer deployment baseline.
+
+## Frontend GitHub Actions Deploy
+
+Workflow file: [.github/workflows/deploy-hostinger.yml](D:/web/demo-kpi/.github/workflows/deploy-hostinger.yml)
+
+The workflow builds `dist/` and pushes it to Hostinger over FTPS whenever `main` changes or the workflow is triggered manually.
+
+### Required GitHub secrets
+
+- `VITE_API_BASE_URL`
+- `HOSTINGER_FTP_HOST`
 - `HOSTINGER_FTP_USER`
 - `HOSTINGER_FTP_PASSWORD`
-- `HOSTINGER_FTP_REMOTE_DIR` (example: `/public_html/`)
-- `VITE_SUPABASE_URL` (example: `https://your-project-id.supabase.co`)
-- `VITE_SUPABASE_ANON_KEY` (your Supabase anon public key)
-- `VITE_SESSION_TIMEOUT_MINUTES` (optional, default `30`)
-- `VITE_MONITOR_WEBHOOK_URL` (optional, frontend error webhook endpoint)
-- `VITE_SENTRY_DSN` (optional, if you provide Sentry script/SDK integration)
-- `SITE_BASE_URL` (example: `https://app.yourdomain.com`, used for post-deploy checks)
-- `SITE_HEALTHCHECK_URL` (optional override, example: `https://app.yourdomain.com/healthz.json`)
-- `DEPLOY_NOTIFY_WEBHOOK_URL` (optional webhook for deploy success/failure notifications)
+- `HOSTINGER_FTP_REMOTE_DIR`
 
-### 2) Push to `main`
+### Optional GitHub secrets
 
-Every push to `main` will automatically deploy the latest `dist/` build to your Hostinger folder.
+- `VITE_SESSION_TIMEOUT_MINUTES`
+- `VITE_MONITOR_WEBHOOK_URL`
+- `VITE_SENTRY_DSN`
+- `SITE_BASE_URL`
+- `SITE_HEALTHCHECK_URL`
+- `DEPLOY_NOTIFY_WEBHOOK_URL`
 
-### 3) First-run checks
+### Frontend API URL example
 
-- Ensure FTP account has write access to your target directory.
-- Ensure `HOSTINGER_FTP_REMOTE_DIR` points to the correct site root (for most cases: `/public_html/`).
-- If your repo default branch is not `main`, change the branch in `.github/workflows/deploy-hostinger.yml`.
-- Ensure `public/healthz.json` is reachable after deploy (`/healthz.json`).
+If your backend is deployed at `https://api.example.com`, set:
 
-### 4) Backups
+```text
+VITE_API_BASE_URL=https://api.example.com/api
+```
 
-Database backups are intentionally not shipped through this public repository. Keep backup/export jobs in a private repository, a private runner, or your database platform tooling so SQL dumps and activity data do not end up in GitHub artifacts.
+## Production Commands
 
----
+Frontend build:
 
-## 📘 User Roles & Workflows
+```bash
+npm run build
+```
 
-### 1. Admins (Super Users)
-- **Capabilities:** Have unrestricted access. Only Admins can tweak the global Competency matrices, establish organization-wide KPI scales, map exact organizational hierarchies (Departments/Roles/Branches), and import/export raw infrastructure configuration JSONs.
+Backend start:
 
-### 2. Managers
-- **Capabilities:** Have visibility linked to scoped department/team and can manage KPI for direct reports.
-- **Workflow:**
-   1. Open Assessment tab to review team submissions.
-   2. Finalize managerial assessments.
-   3. Manage KPI definitions/targets for scoped positions and employees.
-   4. Monitor department KPI dashboards and monthly progress.
+```bash
+npm start
+```
 
-### 3. HR
-- **Capabilities:** Operational reviewer for probation and KPI governance.
-- **Workflow:**
-   1. Manage probation reviews and attendance-based deductions.
-   2. Approve/reject pending KPI definition or monthly target changes (when approval is enabled).
-   3. Maintain probation scoring policy and pass threshold settings.
+## Notes
 
-### 4. Employees
-- **Capabilities:** Limited view, focusing only on their direct requirements.
-- **Workflow:**
-   1. Logs into their account.
-   2. Promptly clicks 'Initiate Self Assessment' if a review cycle is currently open. They grade themselves across listed competency parameters.
-   3. Clicks 'Submit monthly KPI data' on the Records/Overview page when applicable to pass performance metrics (like total calls or success retention) upward to the Manager.
-
----
-
-## ✨ Support & Security Note
-
-- **SQL Injection/XSS Prevention:** The system utilizes robust frontend sanitization via custom `escapeHTML` formatters natively across all list/render functions preventing DOM injections.
-- **Row Level Security:** Ensure that your Supabase instance doesn't have RLS disabled. The queries are formatted exclusively expecting the native secure SDK flow.
-- **Default Credentials:** No default production admin credential should be documented or shipped. Use unique credentials and force password rotation for temporary accounts.
-
-
-
-
-
-
-
-
-
-
+- The frontend no longer depends on Supabase.
+- The active runtime path is Express + MySQL.
+- Legacy Supabase SQL and QA files are still present only as historical reference.
