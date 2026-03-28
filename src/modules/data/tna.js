@@ -178,3 +178,13 @@ export async function fetchLmsReport(department = '') {
     const result = await apiRequest('tna/lms-report', params);
     return result?.data || { summary: {}, by_course: [] };
 }
+
+export async function migrateTrainingHistory() {
+    const result = await apiRequest('tna/migrate-training-history', {});
+    return result?.data || null;
+}
+
+export async function fetchTrainingHistoryStats() {
+    const result = await apiRequest('tna/training-history-stats', {});
+    return result?.data || null;
+}

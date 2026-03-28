@@ -929,6 +929,109 @@ export async function handleTnaAction(req, res, action) {
         });
     }
 
+    if (action === 'tna/migrate-training-history') {
+        requireTna(req);
+        requireRole(req, ['superadmin']);
+
+        const [allEmployees] = await pool.query('SELECT employee_id, training_history FROM employees WHERE training_history IS NOT NULL AND training_history != "" AND training_history != "[]"');
+
+        let migrated = 0;
+        let skipped = 0;
+        let errors = 0;
+
+        for (const emp of allEmployees) {
+            try {
+                let history = emp.training_history;
+                if (typeof history === 'string') {
+                    try { history = JSON.parse(history); } catch { history = []; }
+                }
+
+                if (!Array.isArray(history) || history.length === 0) {
+                    skipped++;
+                    continue;
+                }
+
+                for (const item of history) {
+                    if (!item.course_name && !item.training_name) continue;
+
+                    const courseName = item.course_name || item.training_name || 'Unknown Training';
+                    const status = item.status === 'ongoing' ? 'in_progress' : (item.status === 'completed' ? 'completed' : 'enrolled');
+                    const completionDate = item.completion_date || item.completed_at || null;
+
+                    let [existing] = await pool.query(
+                        'SELECT id FROM training_enrollments WHERE employee_id = ? AND course_id = ?',
+                        [emp.employee_id, courseName]
+                    );
+
+                    if (existing.length > 0) {
+                        skipped++;
+                        continue;
+                    }
+
+                    const courseId = generateUuid();
+                    await pool.query(
+                        `INSERT INTO training_courses (id, course_name, provider, duration_hours, is_active)
+                         VALUES (?, ?, ?, 8, true)
+                         ON DUPLICATE KEY UPDATE id = id`,
+                        [courseId, courseName, item.provider || 'Unknown']
+                    );
+
+                    const enrollmentId = generateUuid();
+                    await pool.query(
+                        `INSERT INTO training_enrollments (id, employee_id, course_id, enrollment_date, status, completion_date)
+                         VALUES (?, ?, ?, ?, ?, ?)`,
+                        [enrollmentId, emp.employee_id, courseId, item.date || item.start_date || new Date().toISOString().slice(0, 10), status, completionDate]
+                    );
+
+                    migrated++;
+                }
+            } catch (err) {
+                errors++;
+                console.error(`Error migrating training history for employee ${emp.employee_id}:`, err.message);
+            }
+        }
+
+        return res.json({
+            data: {
+                message: 'Migration completed',
+                employees_processed: allEmployees.length,
+                enrollments_migrated: migrated,
+                skipped: skipped,
+                errors: errors,
+            },
+        });
+    }
+
+    if (action === 'tna/training-history-stats') {
+        requireTna(req);
+        requireRole(req, ['superadmin', 'manager', 'hr']);
+
+        const [allEmployees] = await pool.query('SELECT COUNT(*) as total FROM employees WHERE training_history IS NOT NULL AND training_history != "" AND training_history != "[]"');
+
+        const [withHistory] = await pool.query(`
+            SELECT COUNT(DISTINCT employee_id) as employees_with_history 
+            FROM employees 
+            WHERE training_history IS NOT NULL 
+            AND training_history != '' 
+            AND training_history != '[]'
+        `);
+
+        const [enrollmentStats] = await pool.query(`
+            SELECT 
+                COUNT(*) as total_enrollments,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+            FROM training_enrollments
+        `);
+
+        return res.json({
+            data: {
+                employees_with_embedded_history: withHistory[0]?.employees_with_history || 0,
+                total_enrollments_in_lms: enrollmentStats[0]?.total_enrollments || 0,
+                completed_in_lms: enrollmentStats[0]?.completed || 0,
+            },
+        });
+    }
+
     throw { status: 404, message: `Unknown TNA action: ${action}`, code: 'NOT_FOUND' };
 }
 
