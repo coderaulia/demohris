@@ -7,3 +7,4 @@ export * from './kpi.js';
 export * from './probation.js';
 export * from './pip.js';
 export * from './sync.js';
+export * from './modules.js';

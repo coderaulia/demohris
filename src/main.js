@@ -4,6 +4,7 @@
 
 import './styles/main.css';
 import { isFeatureEnabled } from './lib/features.js';
+import { moduleRegistry, isModuleEnabled, getActiveModules } from './lib/moduleRegistry.js';
 
 // ---- Component HTML Imports (inlined at build time via Vite ?raw) ----
 import loginHTML from './components/login.html?raw';
@@ -15,6 +16,7 @@ import recordsHTML from './components/tab-records.html?raw';
 import settingsHTML from './components/tab-settings.html?raw';
 import overlaysHTML from './components/overlays.html?raw';
 import tnaSidebarHTML from './components/sidebar-tna.html?raw';
+import modulesHTML from './components/tab-modules.html?raw';
 
 // Inject components into shell
 document.getElementById('component-login').innerHTML = loginHTML;
@@ -25,6 +27,7 @@ document.getElementById('component-assessment').innerHTML = assessmentHTML;
 document.getElementById('component-records').innerHTML = recordsHTML;
 document.getElementById('component-settings').innerHTML = settingsHTML;
 document.getElementById('component-overlays').innerHTML = overlaysHTML;
+document.getElementById('component-modules').innerHTML = modulesHTML;
 
 // Inject TNA sidebar if feature is enabled
 if (isFeatureEnabled('TNA')) {
@@ -59,6 +62,8 @@ import { getRoleScopedEmployeeIds } from './lib/reportFilters.js';
 import * as notify from './lib/notify.js';
 import { initMonitoring } from './lib/monitoring.js';
 import { initTna } from './modules/tna.js';
+import { initModuleManager } from './modules/modules.js';
+import { registerModuleLoader } from './lib/moduleRegistry.js';
 
 const SESSION_IDLE_MINUTES = Number(import.meta.env.VITE_SESSION_TIMEOUT_MINUTES || 30);
 const SESSION_IDLE_MS = Math.max(5, SESSION_IDLE_MINUTES) * 60 * 1000;
@@ -105,6 +110,9 @@ window.__app = {
     renderSettings, saveAppSettings, editUserRole, setupUserLogin, saveOrgConfig, addOrgDepartment, addOrgPosition,
     exportOrgConfigJSON, triggerOrgConfigImport, importOrgConfigJSON,
     toggleSettingsView, toggleRecordsView,
+
+    // Modules
+    refreshModules: () => import('./modules/modules.js').then(m => m.refreshModules()),
 };
 
 function doLogout() {
@@ -141,6 +149,7 @@ function handleRoute() {
         '/assessment': 'tab-assessment',
         '/records': 'tab-records',
         '/settings': 'tab-settings',
+        '/modules': 'tab-modules',
     };
 
     const tabId = routeMap[route];
@@ -186,6 +195,7 @@ function switchTab(tabId) {
         'tab-records': 'nav-records',
         'tab-settings': 'nav-settings',
         'tab-tna': 'nav-tna',
+        'tab-modules': 'nav-settings',
     };
 
     const navId = tabMapping[tabId];
@@ -212,6 +222,9 @@ function switchTab(tabId) {
         if (isFeatureEnabled('TNA')) {
             initTna();
         }
+    }
+    if (tabId === 'tab-modules') {
+        import('./modules/modules.js').then(m => m.initModuleManager());
     }
 }
 
@@ -491,29 +504,37 @@ async function showApp() {
     // Hide all nav items first
     document.querySelectorAll('.nav-item').forEach(el => el.classList.add('hidden'));
 
-    // Role-based navigation
-    const navConfig = {
-        superadmin: ['nav-tna', 'nav-dashboard', 'nav-employees', 'nav-assessment', 'nav-records', 'nav-settings'],
-        manager: ['nav-tna', 'nav-dashboard', 'nav-assessment', 'nav-records', 'nav-settings'],
-        director: ['nav-tna', 'nav-dashboard', 'nav-assessment', 'nav-records'],
-        employee: ['nav-records'],
-    };
+    // Get dynamic navigation from module registry
+    const navItems = moduleRegistry.getNavItemsForRole(role);
 
-    // If TNA not enabled, remove it from nav
-    if (!isFeatureEnabled('TNA')) {
-        Object.keys(navConfig).forEach(role => {
-            navConfig[role] = navConfig[role].filter(id => id !== 'nav-tna');
-        });
+    // Always show dashboard for non-employee roles
+    if (role !== 'employee') {
+        const dashboardNav = document.getElementById('nav-dashboard');
+        if (dashboardNav?.closest('.nav-item')) {
+            dashboardNav.closest('.nav-item').classList.remove('hidden');
+        }
     }
 
-    const allowedNavs = navConfig[role] || navConfig.employee;
-
-    allowedNavs.forEach(navId => {
-        const navItem = document.getElementById(navId);
-        if (navItem && navItem.closest('.nav-item')) {
-            navItem.closest('.nav-item').classList.remove('hidden');
+    // Show nav items based on enabled modules
+    navItems.forEach(item => {
+        const navEl = document.getElementById(item.id);
+        if (navEl && navEl.closest('.nav-item')) {
+            navEl.closest('.nav-item').classList.remove('hidden');
         }
     });
+
+    // Settings access for superadmin
+    if (role === 'superadmin') {
+        const settingsNav = document.getElementById('nav-settings');
+        if (settingsNav?.closest('.nav-item')) {
+            settingsNav.closest('.nav-item').classList.remove('hidden');
+        }
+    }
+
+    // Initialize module manager for superadmin
+    if (role === 'superadmin') {
+        initModuleManager();
+    }
 
     // Update user display
     const nameEl = document.getElementById('user-display-name');

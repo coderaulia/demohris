@@ -11,6 +11,15 @@ import mysql from 'mysql2/promise';
 import { getTableMeta, getRegisteredTables, isTableRegistered, isTableReadable, isTableWritable } from './modules/registry.js';
 import { isFeatureEnabled } from './features.js';
 import { isTnaEnabled, handleTnaAction } from './modules/tna.js';
+import {
+    getAllModules,
+    getModule,
+    updateModuleSettings,
+    toggleModule,
+    getModuleActivityLog,
+    getModulesByCategory,
+    getActiveModules
+} from './modules/moduleManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -709,6 +718,47 @@ app.get('/api/health', async (_req, res, next) => {
     try {
         await pool.query('SELECT 1');
         res.json({ ok: true });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.all('/api/modules', async (req, res, next) => {
+    try {
+        await getCurrentUser(req);
+        const role = currentUserRole(req.currentUser);
+        
+        if (!['superadmin', 'hr'].includes(role)) {
+            throw new ApiError(403, 'Access denied. Superadmin or HR role required.', 'ACCESS_DENIED');
+        }
+        
+        const action = String(req.query?.action || '').trim();
+        
+        switch (action) {
+            case 'list':
+                await getAllModules(req, res, next);
+                break;
+            case 'get':
+                await getModule(req, res, next);
+                break;
+            case 'update':
+                await updateModuleSettings(req, res, next);
+                break;
+            case 'toggle':
+                await toggleModule(req, res, next);
+                break;
+            case 'activity':
+                await getModuleActivityLog(req, res, next);
+                break;
+            case 'by-category':
+                await getModulesByCategory(req, res, next);
+                break;
+            case 'active':
+                await getActiveModules(req, res, next);
+                break;
+            default:
+                throw new ApiError(400, 'Invalid module action.', 'INVALID_ACTION');
+        }
     } catch (error) {
         next(error);
     }
