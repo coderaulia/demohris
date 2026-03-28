@@ -71,7 +71,7 @@ window.__app = {
     attemptLogin, doLogout, forgotPassword, changeMyPassword,
 
     // Navigation
-    switchTab, toggleTheme, toggleDashboardView, updateReportFilters, clearReportFilters,
+    switchTab, navigateTo, handleRoute, toggleTheme, toggleDashboardView, updateReportFilters, clearReportFilters,
 
     // Assessment
     renderPendingList, loadPendingEmployee, startAssessment, renderQuestions,
@@ -112,12 +112,69 @@ function doLogout() {
     signOut();
 }
 
+// ---- Hash-based Routing ----
+function getRoute() {
+    const hash = window.location.hash.replace('#', '') || '/';
+    return hash;
+}
+
+function navigateTo(route) {
+    window.location.hash = route;
+}
+
+function handleRoute() {
+    const route = getRoute();
+    
+    // If not logged in, stay on login
+    if (!state.currentUser) {
+        document.getElementById('login-view')?.classList.remove('hidden');
+        document.getElementById('main-app')?.classList.add('hidden');
+        return;
+    }
+
+    // Route mapping
+    const routeMap = {
+        '/': 'tab-tna',
+        '/tna': 'tab-tna',
+        '/dashboard': 'tab-dashboard',
+        '/employees': 'tab-employees',
+        '/assessment': 'tab-assessment',
+        '/records': 'tab-records',
+        '/settings': 'tab-settings',
+    };
+
+    const tabId = routeMap[route];
+    if (tabId) {
+        switchTab(tabId);
+    } else {
+        // Default route - go to first allowed tab
+        const firstAllowed = document.querySelector('.nav-item:not(.hidden) .nav-tab');
+        if (firstAllowed) {
+            firstAllowed.click();
+        }
+    }
+}
+
 // ---- Tab Navigation ----
 function switchTab(tabId) {
     // Hide all content sections
     document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+
+    // Update URL hash if not already correct
+    const routeForTab = {
+        'tab-tna': '/tna',
+        'tab-dashboard': '/dashboard',
+        'tab-employees': '/employees',
+        'tab-assessment': '/assessment',
+        'tab-records': '/records',
+        'tab-settings': '/settings',
+    };
+    const expectedHash = '#' + (routeForTab[tabId] || '/');
+    if (window.location.hash !== expectedHash) {
+        history.replaceState(null, '', expectedHash);
+    }
 
     const target = document.getElementById(tabId);
     if (target) target.classList.add('active');
@@ -432,29 +489,21 @@ async function showApp() {
     const role = currentUser.role;
 
     // Hide all nav items first
-    document.querySelectorAll('.nav-item[data-role]').forEach(el => el.classList.add('hidden'));
-
-    // Hide feature-gated nav items
-    document.querySelectorAll('.nav-item[data-feature]').forEach(el => {
-        const feature = el.dataset.feature;
-        if (!isFeatureEnabled(feature)) {
-            el.classList.add('hidden');
-        }
-    });
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.add('hidden'));
 
     // Role-based navigation
     const navConfig = {
-        superadmin: ['nav-dashboard', 'nav-employees', 'nav-assessment', 'nav-records', 'nav-settings'],
-        manager: ['nav-dashboard', 'nav-assessment', 'nav-records', 'nav-settings'],
-        director: ['nav-dashboard', 'nav-assessment', 'nav-records'],
+        superadmin: ['nav-tna', 'nav-dashboard', 'nav-employees', 'nav-assessment', 'nav-records', 'nav-settings'],
+        manager: ['nav-tna', 'nav-dashboard', 'nav-assessment', 'nav-records', 'nav-settings'],
+        director: ['nav-tna', 'nav-dashboard', 'nav-assessment', 'nav-records'],
         employee: ['nav-records'],
     };
 
-    // Add TNA nav if feature is enabled
-    if (isFeatureEnabled('TNA') && ['superadmin', 'manager', 'director'].includes(role)) {
-        if (!navConfig[role].includes('nav-tna')) {
-            navConfig[role].push('nav-tna');
-        }
+    // If TNA not enabled, remove it from nav
+    if (!isFeatureEnabled('TNA')) {
+        Object.keys(navConfig).forEach(role => {
+            navConfig[role] = navConfig[role].filter(id => id !== 'nav-tna');
+        });
     }
 
     const allowedNavs = navConfig[role] || navConfig.employee;
@@ -491,12 +540,8 @@ async function showApp() {
     const passOk = await enforcePasswordPolicyOnLogin();
     if (!passOk) return;
 
-    // Default tab
-    if (role === 'superadmin' || role === 'manager' || role === 'director') {
-        switchTab('tab-dashboard');
-    } else {
-        switchTab('tab-records');
-    }
+    // Handle route after login
+    handleRoute();
 }
 
 // ---- Subscribe to events ----
@@ -526,11 +571,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (user) {
             await syncAll();
             await showApp();
+        } else {
+            // Show login, handle route if hash present
+            handleRoute();
         }
     } catch (err) {
         debugError('Session restore failed:', err);
     }
 });
+
+// ---- Hash Change Listener ----
+window.addEventListener('hashchange', handleRoute);
 
 
 

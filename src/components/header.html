@@ -28,39 +28,39 @@
         <div class="card shadow-sm border-0 mb-4 nav-card">
             <div class="card-body p-2">
                 <div class="nav nav-pills nav-fill gap-1 flex-nowrap overflow-auto">
+                    <div class="nav-item" data-feature="TNA" data-role="admin-manager">
+                        <button class="nav-link nav-tab" id="nav-tna"
+                            onclick="window.__app.navigateTo('/tna')">
+                            <i class="bi bi-graph-up-arrow me-1"></i><span class="nav-label">TNA Hub</span>
+                        </button>
+                    </div>
                     <div class="nav-item" data-role="admin-manager">
                         <button class="nav-link nav-tab" id="nav-dashboard"
-                            onclick="window.__app.switchTab('tab-dashboard')">
+                            onclick="window.__app.navigateTo('/dashboard')">
                             <i class="bi bi-speedometer2 me-1"></i><span class="nav-label">Dashboard</span>
                         </button>
                     </div>
                     <div class="nav-item" data-role="admin">
                         <button class="nav-link nav-tab" id="nav-employees"
-                            onclick="window.__app.switchTab('tab-employees')">
+                            onclick="window.__app.navigateTo('/employees')">
                             <i class="bi bi-people-fill me-1"></i><span class="nav-label">Employees</span>
                         </button>
                     </div>
                     <div class="nav-item" data-role="admin-manager">
                         <button class="nav-link nav-tab" id="nav-assessment"
-                            onclick="window.__app.switchTab('tab-assessment')">
+                            onclick="window.__app.navigateTo('/assessment')">
                             <i class="bi bi-clipboard-check me-1"></i><span class="nav-label">Assessment & KPI</span>
                         </button>
                     </div>
                     <div class="nav-item" data-role="all">
                         <button class="nav-link nav-tab" id="nav-records"
-                            onclick="window.__app.switchTab('tab-records')">
+                            onclick="window.__app.navigateTo('/records')">
                             <i class="bi bi-table me-1"></i><span class="nav-label">Records</span>
-                        </button>
-                    </div>
-                    <div class="nav-item" data-feature="TNA">
-                        <button class="nav-link nav-tab" id="nav-tna"
-                            onclick="window.__app.switchTab('tab-tna')">
-                            <i class="bi bi-graph-up-arrow me-1"></i><span class="nav-label">TNA Hub</span>
                         </button>
                     </div>
                     <div class="nav-item" data-role="admin">
                         <button class="nav-link nav-tab" id="nav-settings"
-                            onclick="window.__app.switchTab('tab-settings')">
+                            onclick="window.__app.navigateTo('/settings')">
                             <i class="bi bi-sliders me-1"></i><span class="nav-label">Settings</span>
                         </button>
                     </div>

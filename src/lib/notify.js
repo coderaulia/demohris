@@ -111,3 +111,49 @@ export async function withLoading(task, title = 'Please wait...', text = 'Proces
         hideLoading();
     }
 }
+
+export function showValidationMessage(message) {
+    Swal.showValidationMessage(message);
+}
+
+export async function prompt(options = {}) {
+    const result = await fire({
+        title: options.title || 'Input Required',
+        html: options.html || '',
+        input: options.input || 'text',
+        inputOptions: options.inputOptions,
+        inputValue: options.inputValue ?? '',
+        inputPlaceholder: options.inputPlaceholder || '',
+        inputLabel: options.inputLabel || '',
+        inputAttributes: options.inputAttributes || {},
+        showCancelButton: true,
+        confirmButtonText: options.confirmButtonText || 'OK',
+        cancelButtonText: options.cancelButtonText || 'Cancel',
+        showLoaderOnConfirm: Boolean(options.showLoaderOnConfirm),
+        reverseButtons: true,
+        focusCancel: true,
+        preConfirm: value => {
+            if (typeof options.preConfirm === 'function') {
+                const result = options.preConfirm();
+                if (result === false) {
+                    return false;
+                }
+                if (result.then) {
+                    return result.then(r => r === false ? false : r).catch(() => false);
+                }
+                return result;
+            }
+            if (typeof options.validate === 'function') {
+                const msg = options.validate(value);
+                if (msg) {
+                    Swal.showValidationMessage(msg);
+                    return false;
+                }
+            }
+            return value;
+        },
+    });
+
+    if (!result.isConfirmed) return null;
+    return result.value;
+}
