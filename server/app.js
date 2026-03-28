@@ -8,7 +8,9 @@ import express from 'express';
 import session from 'express-session';
 import mysql from 'mysql2/promise';
 
-import { getTableMeta } from './tableMeta.js';
+import { getTableMeta, getRegisteredTables, isTableRegistered, isTableReadable, isTableWritable } from './modules/registry.js';
+import { isFeatureEnabled } from './features.js';
+import { isTnaEnabled, handleTnaAction } from './modules/tna.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -295,6 +297,10 @@ async function getRelatedEmployeeId(req, table, row) {
 }
 
 async function canReadRow(req, table, row) {
+    if (isTableRegistered(table)) {
+        return isTableReadable(req, table, row);
+    }
+
     const user = await getCurrentUser(req);
     if (table === 'app_settings') return true;
     if (!user) return false;
@@ -317,6 +323,10 @@ async function canReadRow(req, table, row) {
 }
 
 async function canWriteRow(req, table, row, action = 'update') {
+    if (isTableRegistered(table)) {
+        return isTableWritable(req, table, row, action);
+    }
+
     const user = await getCurrentUser(req);
     if (!user) return false;
     const role = currentUserRole(user);
@@ -584,9 +594,16 @@ async function handleAuthAction(req, res, action) {
 async function handleDbQuery(req, res) {
     const action = String(req.body?.action || 'select');
     const table = String(req.body?.table || '').trim();
+
     const meta = getTableMeta(table);
-    if (!meta) {
+    const isRegistered = isTableRegistered(table);
+
+    if (!meta && !isRegistered) {
         throw new ApiError(404, `Unknown table: ${table}`, 'TABLE_NOT_FOUND');
+    }
+
+    if (isRegistered && !isTableReadable(req, table, null)) {
+        throw new ApiError(403, 'Access denied to table: ' + table, 'FORBIDDEN');
     }
 
     if (!(action === 'select' && table === 'app_settings')) {
@@ -712,6 +729,21 @@ app.all('/api', async (req, res, next) => {
         if (action === 'db/query') {
             await handleDbQuery(req, res);
             return;
+        }
+
+        if (action.startsWith('tna/')) {
+            if (!isTnaEnabled()) {
+                throw new ApiError(404, 'TNA module is not enabled.', 'MODULE_DISABLED');
+            }
+            await handleTnaAction(req, res, action);
+            return;
+        }
+
+        if (action.startsWith('kpi/') || action.startsWith('probation/') || action.startsWith('pip/')) {
+            const feature = action.split('/')[0].toUpperCase();
+            if (!isFeatureEnabled(feature)) {
+                throw new ApiError(404, `${feature} module is not enabled.`, 'MODULE_DISABLED');
+            }
         }
 
         throw new ApiError(404, 'Unknown action.', 'NOT_FOUND');

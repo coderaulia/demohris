@@ -1,0 +1,288 @@
+<div id="tab-tna" class="content-section">
+    <div class="d-flex">
+        <!-- Sidebar -->
+        <nav id="tna-sidebar" class="bg-white border-end" style="width: 260px; min-height: 100vh;">
+            <div class="p-3 border-bottom bg-light">
+                <h5 class="mb-0 text-primary"><i class="bi bi-graph-up-arrow me-2"></i>TNA Hub</h5>
+                <small class="text-muted">Training Needs Analysis</small>
+            </div>
+            
+            <!-- Summary Cards -->
+            <div class="p-3 border-bottom">
+                <div class="row g-2 text-center">
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-danger bg-opacity-10">
+                            <div class="fs-4 fw-bold text-danger" id="tna-critical-gaps">0</div>
+                            <small class="text-muted">Critical</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-warning bg-opacity-10">
+                            <div class="fs-4 fw-bold text-warning" id="tna-high-gaps">0</div>
+                            <small class="text-muted">High</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-success bg-opacity-10">
+                            <div class="fs-4 fw-bold text-success" id="tna-active-plans">0</div>
+                            <small class="text-muted">Plans</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-primary bg-opacity-10">
+                            <div class="fs-4 fw-bold text-primary" id="tna-completed">0</div>
+                            <small class="text-muted">Done</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="list-group list-group-flush p-2">
+                <a href="#" class="list-group-item list-group-item-action active" data-tna-view="gaps">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Gap Analysis
+                </a>
+                <a href="#" class="list-group-item list-group-item-action" data-tna-view="plans">
+                    <i class="bi bi-calendar-check me-2"></i>Training Plans
+                </a>
+                <a href="#" class="list-group-item list-group-item-action" data-tna-view="courses">
+                    <i class="bi bi-book me-2"></i>Course Catalog
+                </a>
+                <a href="#" class="list-group-item list-group-item-action" data-tna-view="enrollments">
+                    <i class="bi bi-person-check me-2"></i>Enrollments
+                </a>
+                <a href="#" class="list-group-item list-group-item-action" data-tna-view="report">
+                    <i class="bi bi-file-earmark-bar-graph me-2"></i>Gaps Report
+                </a>
+            </div>
+
+            <!-- Employee Selector -->
+            <div class="p-3 border-top mt-auto">
+                <label class="form-label small text-muted">Quick Employee View</label>
+                <select class="form-select form-select-sm" id="tna-employee-select">
+                    <option value="">-- All Employees --</option>
+                </select>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="flex-grow-1 p-4" id="tna-main-content" style="background: #f8f9fa;">
+            <!-- Gap Analysis View -->
+            <div id="tna-view-gaps" class="tna-view">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0"><i class="bi bi-exclamation-triangle text-danger me-2"></i>Competency Gap Analysis</h4>
+                    <button class="btn btn-primary btn-sm" id="tna-btn-run-analysis">
+                        <i class="bi bi-play-circle me-1"></i>Run Analysis
+                    </button>
+                </div>
+                
+                <div class="card shadow-sm mb-4" id="tna-gaps-summary-card">
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-3">
+                                <div class="fs-3 fw-bold text-primary" id="tna-total-gaps">0</div>
+                                <div class="text-muted small">Total Gaps</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="fs-3 fw-bold text-danger" id="tna-critical-count">0</div>
+                                <div class="text-muted small">Critical</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="fs-3 fw-bold text-warning" id="tna-high-count">0</div>
+                                <div class="text-muted small">High</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="fs-3 fw-bold text-success" id="tna-medium-low-count">0</div>
+                                <div class="text-muted small">Medium/Low</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>Training Needs Identified</strong>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary active" data-filter="all">All</button>
+                                <button class="btn btn-outline-secondary" data-filter="critical">Critical</button>
+                                <button class="btn btn-outline-secondary" data-filter="high">High</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Position</th>
+                                        <th>Competency</th>
+                                        <th class="text-center">Current</th>
+                                        <th class="text-center">Required</th>
+                                        <th class="text-center">Gap</th>
+                                        <th class="text-center">Priority</th>
+                                        <th>Recommended Training</th>
+                                        <th class="text-center">Status</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tna-gaps-table-body">
+                                    <tr>
+                                        <td colspan="10" class="text-center text-muted py-4">
+                                            <i class="bi bi-info-circle me-2"></i>Run gap analysis to see results
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Training Plans View -->
+            <div id="tna-view-plans" class="tna-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0"><i class="bi bi-calendar-check text-success me-2"></i>Training Plans</h4>
+                    <button class="btn btn-success btn-sm" id="tna-btn-new-plan">
+                        <i class="bi bi-plus-circle me-1"></i>New Plan
+                    </button>
+                </div>
+                
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Plan Name</th>
+                                        <th>Period</th>
+                                        <th class="text-end">Est. Cost</th>
+                                        <th class="text-center">Items</th>
+                                        <th class="text-center">Status</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tna-plans-table-body">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox me-2"></i>No training plans yet
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Course Catalog View -->
+            <div id="tna-view-courses" class="tna-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0"><i class="bi bi-book text-info me-2"></i>Course Catalog</h4>
+                </div>
+                
+                <div class="row" id="tna-courses-container">
+                    <div class="col-12 text-center text-muted py-5">
+                        <i class="bi bi-hourglass-split me-2"></i>Loading courses...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enrollments View -->
+            <div id="tna-view-enrollments" class="tna-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0"><i class="bi bi-person-check text-primary me-2"></i>Training Enrollments</h4>
+                </div>
+                
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Course</th>
+                                        <th>Enrolled Date</th>
+                                        <th class="text-center">Status</th>
+                                        <th>Completion Date</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tna-enrollments-table-body">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox me-2"></i>No enrollments yet
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gaps Report View -->
+            <div id="tna-view-report" class="tna-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0"><i class="bi bi-file-earmark-bar-graph text-secondary me-2"></i>Gaps Report</h4>
+                    <button class="btn btn-outline-secondary btn-sm" id="tna-btn-export-report">
+                        <i class="bi bi-download me-1"></i>Export CSV
+                    </button>
+                </div>
+                
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <div class="row align-items-center">
+                            <div class="col-md-4">
+                                <select class="form-select form-select-sm" id="tna-report-department">
+                                    <option value="">All Departments</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Position</th>
+                                        <th>Department</th>
+                                        <th>Competency</th>
+                                        <th class="text-center">Required</th>
+                                        <th class="text-center">Current</th>
+                                        <th class="text-center">Gap</th>
+                                        <th class="text-center">Priority</th>
+                                        <th class="text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tna-report-table-body">
+                                    <tr>
+                                        <td colspan="9" class="text-center text-muted py-4">
+                                            <i class="bi bi-bar-chart me-2"></i>Select department and view report
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+#tna-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+.tna-view .card {
+    border: none;
+    border-radius: 8px;
+}
+</style>

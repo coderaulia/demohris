@@ -3,6 +3,7 @@
 // ==================================================
 
 import './styles/main.css';
+import { isFeatureEnabled } from './lib/features.js';
 
 // ---- Component HTML Imports (inlined at build time via Vite ?raw) ----
 import loginHTML from './components/login.html?raw';
@@ -13,6 +14,7 @@ import assessmentHTML from './components/tab-assessment.html?raw';
 import recordsHTML from './components/tab-records.html?raw';
 import settingsHTML from './components/tab-settings.html?raw';
 import overlaysHTML from './components/overlays.html?raw';
+import tnaSidebarHTML from './components/sidebar-tna.html?raw';
 
 // Inject components into shell
 document.getElementById('component-login').innerHTML = loginHTML;
@@ -23,6 +25,11 @@ document.getElementById('component-assessment').innerHTML = assessmentHTML;
 document.getElementById('component-records').innerHTML = recordsHTML;
 document.getElementById('component-settings').innerHTML = settingsHTML;
 document.getElementById('component-overlays').innerHTML = overlaysHTML;
+
+// Inject TNA sidebar if feature is enabled
+if (isFeatureEnabled('TNA')) {
+    document.getElementById('component-tna').innerHTML = tnaSidebarHTML;
+}
 
 import { state, subscribe, emit, isAdmin, isManager, isEmployee, setReportFilters } from './lib/store.js';
 import { restoreSession, signIn, signOut, requestPasswordReset, promptChangePassword, enforcePasswordPolicyOnLogin } from './modules/auth.js';
@@ -51,6 +58,7 @@ import { debugError, escapeHTML } from './lib/utils.js';
 import { getRoleScopedEmployeeIds } from './lib/reportFilters.js';
 import * as notify from './lib/notify.js';
 import { initMonitoring } from './lib/monitoring.js';
+import { initTna } from './modules/tna.js';
 
 const SESSION_IDLE_MINUTES = Number(import.meta.env.VITE_SESSION_TIMEOUT_MINUTES || 30);
 const SESSION_IDLE_MS = Math.max(5, SESSION_IDLE_MINUTES) * 60 * 1000;
@@ -106,8 +114,10 @@ function doLogout() {
 
 // ---- Tab Navigation ----
 function switchTab(tabId) {
+    // Hide all content sections
     document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
 
     const target = document.getElementById(tabId);
     if (target) target.classList.add('active');
@@ -118,6 +128,7 @@ function switchTab(tabId) {
         'tab-assessment': 'nav-assessment',
         'tab-records': 'nav-records',
         'tab-settings': 'nav-settings',
+        'tab-tna': 'nav-tna',
     };
 
     const navId = tabMapping[tabId];
@@ -139,6 +150,11 @@ function switchTab(tabId) {
         renderSettings();
         renderAdminList();
         renderKpiManager();
+    }
+    if (tabId === 'tab-tna') {
+        if (isFeatureEnabled('TNA')) {
+            initTna();
+        }
     }
 }
 
@@ -418,6 +434,14 @@ async function showApp() {
     // Hide all nav items first
     document.querySelectorAll('.nav-item[data-role]').forEach(el => el.classList.add('hidden'));
 
+    // Hide feature-gated nav items
+    document.querySelectorAll('.nav-item[data-feature]').forEach(el => {
+        const feature = el.dataset.feature;
+        if (!isFeatureEnabled(feature)) {
+            el.classList.add('hidden');
+        }
+    });
+
     // Role-based navigation
     const navConfig = {
         superadmin: ['nav-dashboard', 'nav-employees', 'nav-assessment', 'nav-records', 'nav-settings'],
@@ -425,6 +449,13 @@ async function showApp() {
         director: ['nav-dashboard', 'nav-assessment', 'nav-records'],
         employee: ['nav-records'],
     };
+
+    // Add TNA nav if feature is enabled
+    if (isFeatureEnabled('TNA') && ['superadmin', 'manager', 'director'].includes(role)) {
+        if (!navConfig[role].includes('nav-tna')) {
+            navConfig[role].push('nav-tna');
+        }
+    }
 
     const allowedNavs = navConfig[role] || navConfig.employee;
 

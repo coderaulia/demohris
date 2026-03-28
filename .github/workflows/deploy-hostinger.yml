@@ -1,4 +1,4 @@
-name: Deploy Frontend To Hostinger
+name: Deploy Frontend to Hostinger
 
 on:
   push:
@@ -60,6 +60,11 @@ jobs:
           VITE_SESSION_TIMEOUT_MINUTES: ${{ secrets.VITE_SESSION_TIMEOUT_MINUTES }}
           VITE_MONITOR_WEBHOOK_URL: ${{ secrets.VITE_MONITOR_WEBHOOK_URL }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_FEATURE_KPI: ${{ secrets.VITE_FEATURE_KPI }}
+          VITE_FEATURE_PROBATION: ${{ secrets.VITE_FEATURE_PROBATION }}
+          VITE_FEATURE_PIP: ${{ secrets.VITE_FEATURE_PIP }}
+          VITE_FEATURE_TNA: ${{ secrets.VITE_FEATURE_TNA }}
+          VITE_FEATURE_LMS: ${{ secrets.VITE_FEATURE_LMS }}
         run: npm run build
 
       - name: Deploy dist/ to Hostinger via FTPS
