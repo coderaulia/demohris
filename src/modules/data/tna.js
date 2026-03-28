@@ -150,3 +150,31 @@ export async function bulkCreateNeedRecords(employeeId, gaps) {
     });
     return result?.data || null;
 }
+
+export async function createCourse(payload) {
+    const result = await apiRequest('tna/course-create', payload);
+    emit('data:tnaCourses');
+    return result?.data || null;
+}
+
+export async function updateCourse(payload) {
+    const result = await apiRequest('tna/course-update', payload);
+    emit('data:tnaCourses');
+    return result?.data || null;
+}
+
+export async function fetchEnrollmentsWithDetails(employeeId = '') {
+    const params = {};
+    if (employeeId) params.employee_id = employeeId;
+
+    const result = await apiRequest('tna/enrollments-with-details', params);
+    return result?.data || [];
+}
+
+export async function fetchLmsReport(department = '') {
+    const params = {};
+    if (department) params.department = department;
+
+    const result = await apiRequest('tna/lms-report', params);
+    return result?.data || { summary: {}, by_course: [] };
+}

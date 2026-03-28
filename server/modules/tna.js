@@ -756,6 +756,179 @@ export async function handleTnaAction(req, res, action) {
         });
     }
 
+    if (action === 'tna/course-create') {
+        requireTna(req);
+        requireRole(req, ['superadmin', 'manager', 'hr']);
+
+        const courseName = String(req.body?.course_name || '').trim();
+        const description = String(req.body?.description || '').trim();
+        const provider = String(req.body?.provider || '').trim();
+        const durationHours = Number(req.body?.duration_hours || 0);
+        const cost = Number(req.body?.cost || 0);
+        const competenciesCovered = req.body?.competencies_covered || [];
+
+        if (!courseName) {
+            throw { status: 400, message: 'Course name is required', code: 'INVALID_INPUT' };
+        }
+
+        const id = generateUuid();
+        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+        await pool.query(
+            `INSERT INTO training_courses (id, course_name, description, provider, duration_hours, cost, competencies_covered, is_active, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, true, ?)`,
+            [id, courseName, description, provider, durationHours, cost, JSON.stringify(competenciesCovered), now]
+        );
+
+        const saved = await queryRows('training_courses', {
+            filters: [{ op: 'eq', column: 'id', value: id }],
+            limit: 1,
+        });
+
+        return res.json({ data: saved[0] });
+    }
+
+    if (action === 'tna/course-update') {
+        requireTna(req);
+        requireRole(req, ['superadmin', 'manager', 'hr']);
+
+        const id = String(req.body?.id || '').trim();
+        if (!id) {
+            throw { status: 400, message: 'Course ID is required', code: 'INVALID_INPUT' };
+        }
+
+        const updates = [];
+        const values = [];
+
+        if (req.body?.course_name !== undefined) {
+            updates.push('course_name = ?');
+            values.push(req.body.course_name);
+        }
+        if (req.body?.description !== undefined) {
+            updates.push('description = ?');
+            values.push(req.body.description);
+        }
+        if (req.body?.provider !== undefined) {
+            updates.push('provider = ?');
+            values.push(req.body.provider);
+        }
+        if (req.body?.duration_hours !== undefined) {
+            updates.push('duration_hours = ?');
+            values.push(Number(req.body.duration_hours));
+        }
+        if (req.body?.cost !== undefined) {
+            updates.push('cost = ?');
+            values.push(Number(req.body.cost));
+        }
+        if (req.body?.competencies_covered !== undefined) {
+            updates.push('competencies_covered = ?');
+            values.push(JSON.stringify(req.body.competencies_covered));
+        }
+        if (req.body?.is_active !== undefined) {
+            updates.push('is_active = ?');
+            values.push(req.body.is_active ? 1 : 0);
+        }
+
+        if (updates.length === 0) {
+            throw { status: 400, message: 'No updates provided', code: 'INVALID_INPUT' };
+        }
+
+        values.push(id);
+        await pool.query(`UPDATE training_courses SET ${updates.join(', ')} WHERE id = ?`, values);
+
+        const updated = await queryRows('training_courses', {
+            filters: [{ op: 'eq', column: 'id', value: id }],
+            limit: 1,
+        });
+
+        return res.json({ data: updated[0] });
+    }
+
+    if (action === 'tna/enrollments-with-details') {
+        requireTna(req);
+        const employeeId = String(req.query?.employee_id || '').trim();
+
+        let query = `
+            SELECT 
+                te.id,
+                te.employee_id,
+                e.name as employee_name,
+                te.course_id,
+                tc.course_name,
+                tc.provider,
+                tc.duration_hours,
+                te.enrollment_date,
+                te.status,
+                te.completion_date,
+                te.score,
+                te.certificate_url
+            FROM training_enrollments te
+            JOIN employees e ON te.employee_id = e.employee_id
+            JOIN training_courses tc ON te.course_id = tc.id
+            WHERE 1=1
+        `;
+        const params = [];
+
+        if (employeeId) {
+            query += ' AND te.employee_id = ?';
+            params.push(employeeId);
+        }
+
+        query += ' ORDER BY te.enrollment_date DESC';
+
+        const [rows] = await pool.query(query, params);
+        return res.json({ data: rows });
+    }
+
+    if (action === 'tna/lms-report') {
+        requireTna(req);
+        requireRole(req, ['superadmin', 'manager', 'director', 'hr']);
+
+        const department = String(req.query?.department || '').trim();
+
+        let query = `
+            SELECT 
+                e.department,
+                tc.course_name,
+                tc.provider,
+                COUNT(te.id) as total_enrolled,
+                SUM(CASE WHEN te.status = 'completed' THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN te.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+                AVG(te.score) as avg_score
+            FROM training_enrollments te
+            JOIN employees e ON te.employee_id = e.employee_id
+            JOIN training_courses tc ON te.course_id = tc.id
+            WHERE 1=1
+        `;
+        const params = [];
+
+        if (department) {
+            query += ' AND e.department = ?';
+            params.push(department);
+        }
+
+        query += ' GROUP BY e.department, tc.course_name, tc.provider ORDER BY e.department, tc.course_name';
+
+        const [rows] = await pool.query(query, params);
+
+        const [totalStats] = await pool.query(`
+            SELECT 
+                COUNT(*) as total_enrollments,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+                SUM(CASE WHEN status = 'enrolled' THEN 1 ELSE 0 END) as enrolled,
+                AVG(score) as avg_score
+            FROM training_enrollments
+        `);
+
+        return res.json({
+            data: {
+                summary: totalStats[0] || {},
+                by_course: rows,
+            },
+        });
+    }
+
     throw { status: 404, message: `Unknown TNA action: ${action}`, code: 'NOT_FOUND' };
 }
 
