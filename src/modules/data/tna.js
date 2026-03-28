@@ -134,3 +134,19 @@ export async function fetchGapsReport(department = '') {
     const result = await apiRequest('tna/gaps-report', params);
     return result?.data || [];
 }
+
+export async function importCompetenciesFromConfig(positionName, defaultRequiredLevel = 3) {
+    const result = await apiRequest('tna/import-competencies', {
+        position_name: positionName,
+        default_required_level: defaultRequiredLevel,
+    });
+    return result?.data || null;
+}
+
+export async function bulkCreateNeedRecords(employeeId, gaps) {
+    const result = await apiRequest('tna/bulk-create-need-records', {
+        employee_id: employeeId,
+        gaps: gaps,
+    });
+    return result?.data || null;
+}

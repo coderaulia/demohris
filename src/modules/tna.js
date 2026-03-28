@@ -40,6 +40,11 @@ function setupEventListeners() {
             exportReport();
             return;
         }
+
+        if (e.target.closest('#tna-btn-create-all-needs')) {
+            await createAllNeedsFromGaps();
+            return;
+        }
     });
 
     document.getElementById('tna-employee-select')?.addEventListener('change', async (e) => {
@@ -187,24 +192,30 @@ function renderGapsTable(gaps) {
     const employeeId = document.getElementById('tna-employee-select')?.value || '';
     const employee = state.db[employeeId];
 
-    tbody.innerHTML = gaps.map(gap => {
+    tbody.innerHTML = gaps.map((gap, idx) => {
         const priorityClass = getPriorityClass(gap.priority);
         const priorityBadge = `<span class="badge ${priorityClass}">${escapeHTML(gap.priority)}</span>`;
+        const belowThreshold = gap.score_below_threshold ? '<span class="badge bg-warning text-dark ms-1">Below Threshold</span>' : '';
+        const hasConfig = gap.has_training_need_config ? '<span class="badge bg-success ms-1">Configured</span>' : '';
 
         return `
-            <tr>
+            <tr data-gap-idx="${idx}">
                 <td>${escapeHTML(employee?.name || '-')}</td>
                 <td>${escapeHTML(employee?.position || '-')}</td>
-                <td><strong>${escapeHTML(gap.competency_name)}</strong></td>
-                <td class="text-center">${gap.current_level}</td>
-                <td class="text-center">${gap.required_level}</td>
+                <td>
+                    <strong>${escapeHTML(gap.competency_name)}</strong>
+                    ${belowThreshold}
+                    ${hasConfig}
+                </td>
+                <td class="text-center">${gap.current_score}/10</td>
+                <td class="text-center">${gap.required_level}/5</td>
                 <td class="text-center"><span class="badge bg-danger">${gap.gap}</span></td>
                 <td class="text-center">${priorityBadge}</td>
                 <td>${escapeHTML(gap.recommended_training || '-')}</td>
                 <td class="text-center"><span class="badge bg-secondary">Identified</span></td>
                 <td class="text-end">
-                    <button class="btn btn-sm btn-outline-success" onclick="window.__app.createTrainingNeedFromGap('${escapeHTML(employeeId)}', '${escapeHTML(gap.competency_name)}')">
-                        <i class="bi bi-plus"></i> Plan
+                    <button class="btn btn-sm btn-outline-primary" onclick="window.__app.createTrainingNeedFromGap('${escapeHTML(employeeId)}', ${idx})">
+                        <i class="bi bi-plus"></i> Create Need
                     </button>
                 </td>
             </tr>`;
@@ -477,13 +488,28 @@ async function showNewPlanModal() {
     }
 }
 
-async function createTrainingNeedFromGap(employeeId, competencyName) {
+async function createTrainingNeedFromGap(employeeId, gapIndex) {
     try {
-        const needs = await tnaData.fetchTrainingNeedsConfig(state.db[employeeId]?.position || '');
-        const need = needs.find(n => n.competency_name === competencyName);
-        
+        const gap = gapsCache[gapIndex];
+        if (!gap) {
+            await notify.error('Gap data not found. Please re-run the analysis.');
+            return;
+        }
+
+        const position = state.db[employeeId]?.position || '';
+        const needs = await tnaData.fetchTrainingNeedsConfig(position);
+        let need = needs.find(n => n.competency_name === gap.competency_name);
+
         if (!need) {
-            await notify.error('Training need not found in configuration');
+            const importResult = await tnaData.importCompetenciesFromConfig(position, 3);
+            if (importResult?.competencies_imported > 0) {
+                const updatedNeeds = await tnaData.fetchTrainingNeedsConfig(position);
+                need = updatedNeeds.find(n => n.competency_name === gap.competency_name);
+            }
+        }
+
+        if (!need) {
+            await notify.error('Training need not configured for this competency. Please add it in Settings.');
             return;
         }
 
@@ -491,15 +517,64 @@ async function createTrainingNeedFromGap(employeeId, competencyName) {
             await tnaData.createTrainingNeed({
                 employee_id: employeeId,
                 training_need_id: need.id,
-                current_level: 0,
-                priority: 'medium',
+                current_level: gap.current_score || 0,
+                priority: gap.priority || 'medium',
+                notes: `Gap analysis: ${gap.gap} points below required level`,
             });
         }, 'Creating Training Need', 'Creating training need record...');
 
-        await notify.success('Training need created');
+        await notify.success(`Training need created for ${gap.competency_name}`);
+        await loadTnaSummary();
     } catch (error) {
         await notify.error('Error: ' + error.message);
     }
+}
+
+async function createAllNeedsFromGaps() {
+    const employeeId = document.getElementById('tna-employee-select')?.value;
+    if (!employeeId) {
+        await notify.warn('Please select an employee first');
+        return;
+    }
+
+    if (!gapsCache || gapsCache.length === 0) {
+        await notify.warn('No gaps to create. Run gap analysis first.');
+        return;
+    }
+
+    const position = state.db[employeeId]?.position || '';
+
+    await notify.withLoading(async () => {
+        let needs = await tnaData.fetchTrainingNeedsConfig(position);
+
+        const needsWithoutConfig = gapsCache.filter(gap => {
+            return !needs.find(n => n.competency_name === gap.competency_name);
+        });
+
+        if (needsWithoutConfig.length > 0) {
+            await tnaData.importCompetenciesFromConfig(position, 3);
+            needs = await tnaData.fetchTrainingNeedsConfig(position);
+        }
+
+        const gapsWithNeeds = gapsCache.map(gap => {
+            const need = needs.find(n => n.competency_name === gap.competency_name);
+            return {
+                ...gap,
+                training_need_id: need?.id,
+            };
+        }).filter(gap => gap.training_need_id);
+
+        if (gapsWithNeeds.length === 0) {
+            throw new Error('No training needs configured for these gaps');
+        }
+
+        await tnaData.bulkCreateNeedRecords(employeeId, gapsWithNeeds);
+    }, 'Creating Training Needs', `Creating ${gapsCache.length} training need records...`);
+
+    await notify.success(`${gapsCache.length} training needs created for ${state.db[employeeId]?.name}`);
+    gapsCache = [];
+    await loadTnaSummary();
+    await loadGapsForEmployee(employeeId);
 }
 
 async function viewPlanDetails(planId) {

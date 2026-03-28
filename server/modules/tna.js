@@ -47,6 +47,26 @@ async function getCompetencyConfig(positionName) {
     return rows[0] || null;
 }
 
+async function getTrainingNeedsConfig(positionName) {
+    const rows = await queryRows('training_needs', {
+        filters: [{ op: 'eq', column: 'position_name', value: positionName }],
+    });
+    const needsMap = {};
+    (rows || []).forEach(row => {
+        needsMap[row.competency_name] = row;
+    });
+    return needsMap;
+}
+
+function normalizeScoreToScale(score, fromScale = 10, toScale = 5) {
+    return (score / fromScale) * toScale;
+}
+
+function calculateGap(currentScore, requiredLevel) {
+    const normalizedCurrent = normalizeScoreToScale(currentScore, 10, 5);
+    return requiredLevel - normalizedCurrent;
+}
+
 export async function handleTnaAction(req, res, action) {
     requireAuth(req);
 
@@ -68,7 +88,7 @@ export async function handleTnaAction(req, res, action) {
 
         const config = await getCompetencyConfig(employee.position);
         if (!config || !config.competencies) {
-            return res.json({ data: { gaps: [], competency_config: null } });
+            return res.json({ data: { gaps: [], competency_config: null, message: 'No competency config found for position' } });
         }
 
         let competencies = config.competencies;
@@ -76,11 +96,15 @@ export async function handleTnaAction(req, res, action) {
             try { competencies = JSON.parse(competencies); } catch { competencies = []; }
         }
 
+        const trainingNeeds = await getTrainingNeedsConfig(employee.position);
+
         const assessmentRows = await queryRows('employee_assessments', {
             filters: [
                 { op: 'eq', column: 'employee_id', value: employeeId },
                 { op: 'eq', column: 'assessment_type', value: 'manager' },
             ],
+            orderBy: 'created_at',
+            ascending: false,
             limit: 1,
         });
         const assessment = assessmentRows[0];
@@ -96,27 +120,39 @@ export async function handleTnaAction(req, res, action) {
 
         const gaps = [];
         const threshold = req.body?.threshold || 7;
+        const defaultRequiredLevel = 3;
 
         for (const comp of competencies) {
-            const currentScore = scoreMap[comp.name] || 0;
-            const requiredLevel = comp.required_level || comp.target || 3;
-            const gap = requiredLevel - currentScore;
+            const compName = comp.name;
+            if (!compName) continue;
 
-            if (gap > 0) {
+            const currentScore = scoreMap[compName] || 0;
+
+            let requiredLevel = defaultRequiredLevel;
+            if (trainingNeeds[compName]?.required_level) {
+                requiredLevel = trainingNeeds[compName].required_level;
+            }
+
+            const rawGap = calculateGap(currentScore, requiredLevel);
+            const gap = Math.max(0, rawGap);
+
+            if (currentScore < threshold || gap > 0) {
                 let priority = 'medium';
-                if (gap >= 3) priority = 'critical';
-                else if (gap >= 2) priority = 'high';
-                else if (gap === 1) priority = 'low';
+                if (gap >= 2) priority = 'critical';
+                else if (gap >= 1.5) priority = 'high';
+                else if (gap >= 0.5) priority = 'low';
 
                 gaps.push({
-                    competency_name: comp.name,
+                    competency_name: compName,
                     description: comp.desc || '',
-                    current_level: currentScore,
+                    current_score: currentScore,
+                    current_level_normalized: normalizeScoreToScale(currentScore),
                     required_level: requiredLevel,
-                    gap: gap,
-                    recommended_training: comp.rec || comp.recommended_training || '',
+                    gap: Math.round(gap * 10) / 10,
+                    recommended_training: comp.rec || trainingNeeds[compName]?.recommended_training || '',
                     priority: priority,
                     score_below_threshold: currentScore < threshold,
+                    has_training_need_config: Boolean(trainingNeeds[compName]),
                 });
             }
         }
@@ -128,8 +164,11 @@ export async function handleTnaAction(req, res, action) {
                 employee_id: employeeId,
                 employee_name: employee.name,
                 position: employee.position,
+                assessment_id: assessment?.id || null,
+                assessment_date: assessment?.created_at || null,
                 gaps,
                 competency_config: competencies,
+                training_needs_config: trainingNeeds,
             },
         });
     }
@@ -618,6 +657,103 @@ export async function handleTnaAction(req, res, action) {
         const [rows] = await pool.query(query, params);
 
         return res.json({ data: rows });
+    }
+
+    if (action === 'tna/import-competencies') {
+        requireTna(req);
+        requireRole(req, ['superadmin', 'manager', 'hr']);
+
+        const positionName = String(req.body?.position_name || '').trim();
+        const defaultRequiredLevel = Number(req.body?.default_required_level || 3);
+
+        if (!positionName) {
+            throw { status: 400, message: 'Position name is required', code: 'INVALID_INPUT' };
+        }
+
+        const config = await getCompetencyConfig(positionName);
+        if (!config || !config.competencies) {
+            throw { status: 404, message: 'No competency config found for this position', code: 'NOT_FOUND' };
+        }
+
+        let competencies = config.competencies;
+        if (typeof competencies === 'string') {
+            try { competencies = JSON.parse(competencies); } catch { competencies = []; }
+        }
+
+        const imported = [];
+        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+        for (const comp of competencies) {
+            if (!comp.name) continue;
+
+            const id = generateUuid();
+            await pool.query(
+                `INSERT INTO training_needs (id, position_name, competency_name, required_level)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE required_level = VALUES(required_level)`,
+                [id, positionName, comp.name, defaultRequiredLevel]
+            );
+            imported.push(comp.name);
+        }
+
+        return res.json({
+            data: {
+                position_name: positionName,
+                competencies_imported: imported.length,
+                competency_names: imported,
+                default_required_level: defaultRequiredLevel,
+            },
+        });
+    }
+
+    if (action === 'tna/bulk-create-need-records') {
+        requireTna(req);
+        requireRole(req, ['superadmin', 'manager', 'hr']);
+
+        const employeeId = String(req.body?.employee_id || '').trim();
+        const gaps = req.body?.gaps || [];
+
+        if (!employeeId) {
+            throw { status: 400, message: 'Employee ID is required', code: 'INVALID_INPUT' };
+        }
+
+        const created = [];
+        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+        for (const gap of gaps) {
+            if (!gap.competency_name || !gap.training_need_id) continue;
+
+            const id = generateUuid();
+            await pool.query(
+                `INSERT INTO training_need_records 
+                 (id, employee_id, training_need_id, current_level, gap_level, priority, status, identified_by, identified_at, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, 'identified', ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE 
+                 current_level = VALUES(current_level),
+                 gap_level = VALUES(gap_level),
+                 priority = VALUES(priority)`,
+                [
+                    id,
+                    employeeId,
+                    gap.training_need_id,
+                    gap.current_score || 0,
+                    gap.gap || 0,
+                    gap.priority || 'medium',
+                    req.currentUser.employee_id,
+                    now,
+                    gap.notes || ''
+                ]
+            );
+            created.push(gap.competency_name);
+        }
+
+        return res.json({
+            data: {
+                employee_id: employeeId,
+                records_created: created.length,
+                competency_names: created,
+            },
+        });
     }
 
     throw { status: 404, message: `Unknown TNA action: ${action}`, code: 'NOT_FOUND' };
