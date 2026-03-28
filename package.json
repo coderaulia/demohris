@@ -1,7 +1,8 @@
 {
-  "name": "tna-app-vanaila",
+  "name": "demo-kpi",
+  "productName": "HR Performance Suite",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -9,9 +10,12 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "node server/app.js",
+    "dev:full": "npm run dev:server & npm run dev",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/app.js",
+    "start:prod": "NODE_ENV=production node server/app.js",
+    "deploy:hostinger": "npm run build && npm run package:backend",
     "package:backend": "powershell -ExecutionPolicy Bypass -File scripts/package-backend.ps1",
     "qa:rls-audit": "node scripts/qa/rls-policy-audit.mjs",
     "qa:migrations": "node scripts/qa/migration-safety-check.mjs",

@@ -1,8 +1,8 @@
 # Hostinger Deployment Guide
 
-This guide covers deploying the HR Performance Suite to Hostinger with separate frontend and backend.
+This guide covers deploying the HR Performance Suite to Hostinger using the modern **Node.js Web Apps** deployment method (recommended) or **VPS** for more control.
 
-## Architecture
+## Architecture Overview
 
 ```
                     ┌─────────────────┐
@@ -11,29 +11,23 @@ This guide covers deploying the HR Performance Suite to Hostinger with separate 
                              │
               ┌──────────────┴──────────────┐
               │                             │
-    ┌─────────▼──────────┐      ┌──────────▼────────┐
-    │  GitHub Actions    │      │  GitHub Actions   │
-    │  (Frontend Deploy)  │      │  (Backend Deploy) │
-    └─────────┬──────────┘      └──────────┬────────┘
-              │                            │
-              │ FTP                        │ FTP/SFTP
-              │                            │
-    ┌─────────▼──────────┐      ┌──────────▼────────┐
-    │  Hostinger Static  │      │  Hostinger Node.js │
-    │     Website        │      │      App          │
-    │  (public_html)     │      │   (Node.js)       │
-    └────────────────────┘      └──────────┬────────┘
-                                           │
-                                           │ MySQL
-                                  ┌────────▼────────┐
-                                  │  Hostinger     │
-                                  │  MySQL DB      │
-                                  └────────────────┘
+     ┌────────▼────────┐       ┌────────────▼────────────┐
+     │  Hostinger     │       │   Hostinger Node.js     │
+     │  Web Apps      │       │   Web Apps (Full-Stack) │
+     │  (Vite Build)  │       │                        │
+     └────────────────┘       └────────────┬────────────┘
+                                          │
+                              ┌───────────┴───────────┐
+                              │                       │
+                     ┌────────▼────────┐    ┌────────▼────────┐
+                     │  Express API    │    │  MySQL DB      │
+                     │  (Port 3000)    │    │  (External)    │
+                     └─────────────────┘    └────────────────┘
 ```
 
 ---
 
-## Part 1: Hostinger Setup
+## Part 1: Hostinger Setup (Node.js Web Apps - Recommended)
 
 ### 1.1 Create MySQL Database
 
@@ -45,102 +39,43 @@ This guide covers deploying the HR Performance Suite to Hostinger with separate 
    - Password: (note this)
 4. Note the **hostname** (usually `localhost` or a specific host like `mysql.yourdomain.com`)
 
-### 1.2 Create Node.js Application (Backend)
+### 1.2 Create Node.js Web App (Full-Stack Deployment)
 
-1. Go to **Hosting** → **Node.js Apps** (or **Websites** → **Node.js**)
-2. Click **Create Application**
-3. Configure:
-   - **Runtime:** Node.js 20.x
-   - **Application root:** `/` (or a subdirectory like `/api`)
-   - **Start command:** `npm start`
-   - **Build command:** `npm install`
-4. Note the **Application URL** (e.g., `https://api.yourdomain.com`)
+1. Log into **hPanel**
+2. Go to **Websites** → **Add Website**
+3. Select **Node.js Apps**
+4. Choose **Import Git Repository** (recommended) or **Upload ZIP**
+5. For Git Repository:
+   - Connect your GitHub account
+   - Select repository: `xenosweb-org/demo-kpi`
+   - Branch: `main`
+6. Configure build settings:
+   - **Build command:** `npm run build`
+   - **Start command:** `npm run start`
+   - **Node.js version:** `20.x`
+7. Click **Deploy**
 
-### 1.3 Create Static Website (Frontend)
+### 1.3 Configure Environment Variables
 
-1. Go to **Hosting** → **File Manager**
-2. Navigate to `public_html`
-3. We'll deploy the built frontend here via FTPS
-
----
-
-## Part 2: GitHub Secrets Configuration
-
-Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions**
-
-### Frontend Secrets
-
-| Secret Name | Value | Description |
-|------------|-------|-------------|
-| `VITE_API_BASE_URL` | `https://api.yourdomain.com/api` | Backend API URL |
-| `HOSTINGER_FTP_HOST` | `files.yourdomain.com` | FTPS hostname |
-| `HOSTINGER_FTP_USER` | `your-ftp-username` | FTPS username |
-| `HOSTINGER_FTP_PASSWORD` | `your-ftp-password` | FTPS password |
-| `HOSTINGER_FTP_REMOTE_DIR` | `/public_html` | Remote directory |
-| `VITE_FEATURE_KPI` | `true` | Enable KPI module |
-| `VITE_FEATURE_PROBATION` | `true` | Enable probation |
-| `VITE_FEATURE_PIP` | `true` | Enable PIP |
-| `VITE_FEATURE_TNA` | `true` | Enable TNA |
-| `VITE_FEATURE_LMS` | `true` | Enable LMS |
-| `SITE_BASE_URL` | `https://yourdomain.com` | Frontend URL for health checks |
-
-### Backend Secrets
-
-| Secret Name | Value | Description |
-|------------|-------|-------------|
-| `HOSTINGER_BACKEND_FTP_HOST` | `files.yourdomain.com` | FTPS hostname |
-| `HOSTINGER_BACKEND_FTP_USER` | `your-ftp-username` | FTPS username |
-| `HOSTINGER_BACKEND_FTP_PASSWORD` | `your-ftp-password` | FTPS password |
-| `HOSTINGER_BACKEND_FTP_REMOTE_DIR` | `/api` or `/` | Backend app root |
-
----
-
-## Part 3: Deploy Backend First
-
-### 3.1 Create Backend Deployment Package
-
-```bash
-npm install
-npm run package:backend
-```
-
-This creates `deploy/backend-hostinger.zip`.
-
-### 3.2 Upload Backend via FTPS
-
-1. Connect to Hostinger FTPS using FileZilla or similar:
-   - Host: `files.yourdomain.com`
-   - User: `your-ftp-username`
-   - Password: `your-ftp-password`
-   - Protocol: FTPS (explicit)
-
-2. Navigate to your Node.js app directory
-
-3. Upload the contents of `deploy/backend-hostinger/`:
-   - `server/`
-   - `migrations/`
-   - `mysql-setup.sql`
-   - `mysql-demo-seed.sql`
-   - `package.json`
-   - `.env.example`
-   - `README.md`
-
-### 3.3 Configure Backend Environment Variables
-
-In Hostinger Node.js app settings, add these environment variables:
+In the Node.js Web App dashboard, go to **Environment Variables** and add:
 
 ```env
-PORT=3000
-SESSION_SECRET=your-strong-random-secret-here
+# Database
 MYSQL_HOST=your-mysql-host
 MYSQL_PORT=3306
 MYSQL_DATABASE=demo_kpi
 MYSQL_USER=your-db-user
 MYSQL_PASSWORD=your-db-password
-CORS_ALLOWED_ORIGINS=https://yourdomain.com
-SESSION_COOKIE_DOMAIN=
-SESSION_COOKIE_SAME_SITE=none
-SESSION_COOKIE_SECURE=true
+
+# Security
+SESSION_SECRET=generate-a-strong-random-string-here
+NODE_ENV=production
+PORT=3000
+
+# CORS (your domain)
+CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+
+# Feature Flags
 ENABLE_KPI=true
 ENABLE_PROBATION=true
 ENABLE_PIP=true
@@ -148,49 +83,74 @@ ENABLE_TNA=true
 ENABLE_LMS=true
 ```
 
-### 3.4 Import Database Schema
+### 1.4 Import Database Schema
 
 1. Go to **Databases** → **phpMyAdmin**
 2. Select your `demo_kpi` database
-3. Import `mysql-setup.sql`
-4. Import `mysql-demo-seed.sql` (optional, for demo data)
-5. Import `migrations/20260315_tna_tables.sql` (for TNA tables)
+3. Import files in order:
+   - `mysql-setup.sql`
+   - `mysql-demo-seed.sql` (optional)
+   - `migrations/20260315_tna_tables.sql`
+   - `migrations/004_create_module_settings.sql` (NEW - Module System)
 
-### 3.5 Restart Node.js App
+---
 
-In Hostinger Node.js app settings, click **Restart** or **Stop** then **Start**.
+## Part 2: Configure Environment Variables (Frontend Build)
 
-Test the API:
-```bash
-curl https://api.yourdomain.com/api?action=auth/session
+For the frontend build to work correctly with environment variables, you can set build-time variables:
+
+### Option A: In hostinger.json (Recommended)
+
+The `hostinger.json` file already configures the build:
+
+```json
+{
+  "framework": "express",
+  "buildCommand": "npm run build",
+  "startCommand": "npm run start",
+  "nodeVersion": "20",
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "3000",
+    "VITE_API_BASE_URL": "/api"
+  }
+}
 ```
 
----
+### Option B: Build Environment Variables
 
-## Part 4: Deploy Frontend
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `VITE_API_BASE_URL` | `/api` | API endpoint (relative for same-domain) |
+| `VITE_FEATURE_KPI` | `true` | Enable KPI module |
+| `VITE_FEATURE_PROBATION` | `true` | Enable probation |
+| `VITE_FEATURE_PIP` | `true` | Enable PIP |
+| `VITE_FEATURE_TNA` | `true` | Enable TNA |
+| `VITE_FEATURE_LMS` | `true` | Enable LMS |
+| `VITE_SESSION_TIMEOUT_MINUTES` | `30` | Session timeout |
 
-### 4.1 Configure GitHub Secrets for Frontend
-
-Make sure all secrets in **Part 2** are set.
-
-### 4.2 Trigger Deployment
-
-Push to `main` branch or go to **Actions** → **Deploy Frontend to Hostinger** → **Run workflow**.
-
-The workflow will:
-1. Build the frontend with your `VITE_API_BASE_URL`
-2. Deploy `dist/` to Hostinger via FTPS
+**Note:** `VITE_*` variables are baked in at build time. Changes require a rebuild.
 
 ---
 
-## Part 5: Verify Deployment
+## Part 3: Automatic Deployment via GitHub
 
-### Frontend Health Check
-Visit `https://yourdomain.com/` and verify the login page loads.
+When you push to `main`, Hostinger will automatically:
+1. Pull the latest code from GitHub
+2. Run `npm install`
+3. Run `npm run build`
+4. Start the application
 
-### Backend Health Check
+### Manual Redeploy
+In Hostinger Node.js Web App dashboard, click **Redeploy** or go to **Deployments** → **Create deployment**.
+
+---
+
+## Part 4: Verify Deployment
+
+### Health Check
 ```bash
-curl https://api.yourdomain.com/api?action=auth/session
+curl https://yourdomain.com/api?action=auth/session
 ```
 
 Should return `{"profile": null}` for unauthenticated request.
@@ -199,50 +159,74 @@ Should return `{"profile": null}` for unauthenticated request.
 Email: `admin.demo@xenos.local`
 Password: `Demo123!`
 
+### Module Manager
+After login, go to **Settings** → **Module Manager** to enable/disable modules.
+
 ---
 
 ## Troubleshooting
 
-### Frontend Shows 502 Bad Gateway
-- Check that the backend Node.js app is running
-- Verify `VITE_API_BASE_URL` points to correct backend URL
+### Deployment Failed
+1. Check **Deployments** → **Deployment Logs** in Hostinger
+2. Common issues:
+   - Missing environment variables
+   - Build command failed (check package.json scripts)
+   - Wrong Node.js version
 
-### Backend Returns 404
-- Verify the Node.js app started successfully
-- Check Hostinger logs for errors
-- Ensure `PORT` environment variable matches Hostinger's assigned port
+### 502 Bad Gateway
+- The Node.js app may have crashed
+- Check logs in Hostinger dashboard
+- Verify `PORT` is set to `3000`
 
 ### Database Connection Failed
-- Verify MySQL credentials in environment variables
-- Ensure MySQL database exists
-- Check if Hostinger requires `MYSQL_SOCKET` instead of `MYSQL_HOST`
+1. Verify MySQL credentials in environment variables
+2. Ensure MySQL database exists
+3. Check if Hostinger requires `MYSQL_SOCKET`
 
 ### CORS Errors
-- Ensure `CORS_ALLOWED_ORIGINS` includes your frontend domain with `https://`
-- For development, you can set it to `*` but never in production
+- Ensure `CORS_ALLOWED_ORIGINS` includes your domain with `https://`
+- Format: `https://yourdomain.com,https://www.yourdomain.com`
 
-### Feature Flags Not Working
-- Backend: Check `ENABLE_*` environment variables
-- Frontend: Check `VITE_FEATURE_*` build-time variables (requires rebuild)
-- Rebuild frontend after changing feature flags
+### Module System Not Working
+1. Ensure `migrations/004_create_module_settings.sql` was imported
+2. Check browser console for errors
+3. Verify backend can connect to database
 
 ---
 
 ## Updating Deployments
 
-### Frontend Update
-Simply push to `main` branch - GitHub Actions will rebuild and deploy.
+### Automatic (Recommended)
+Simply push to `main` branch. Hostinger will auto-deploy.
 
-### Backend Update
-1. Make changes to backend code
-2. Run `npm run package:backend`
-3. Upload updated files via FTPS or push to trigger GitHub Actions (if using the backend workflow)
+### Manual
+In Hostinger dashboard → **Deployments** → **Redeploy**
 
 ### Database Migrations
-Run migrations manually via phpMyAdmin or MySQL CLI:
-```bash
-mysql -h your-host -u your-user -p demo_kpi < migrations/filename.sql
-```
+Run via phpMyAdmin:
+1. Go to **Databases** → **phpMyAdmin**
+2. Select `demo_kpi` database
+3. Go to **Import** tab
+4. Upload migration file
+
+---
+
+## Module System (New in v1.0)
+
+The app now has a modular architecture with 17 HR modules:
+
+| Category | Modules |
+|----------|---------|
+| Performance | ASSESSMENT, KPI, PROBATION, PIP |
+| Talent | TNA, LMS, RECRUITMENT, ONBOARDING, SUCCESSION |
+| Operations | LEAVE, ATTENDANCE, PAYROLL, EXPENSES, DOCUMENTS |
+| Analytics | ANALYTICS, WELLNESS |
+
+### Managing Modules
+1. Login as Super Admin
+2. Go to **Settings** → **Module Manager**
+3. Toggle modules on/off
+4. Modules with dependencies must have their dependencies enabled first
 
 ---
 
@@ -253,4 +237,6 @@ mysql -h your-host -u your-user -p demo_kpi < migrations/filename.sql
 - [ ] Enabled `SESSION_COOKIE_SECURE=true`
 - [ ] Set `CORS_ALLOWED_ORIGINS` to your actual domain
 - [ ] Removed demo data in production (or changed demo passwords)
+- [ ] Enabled SSL on your domain
+- [ ] Set `NODE_ENV=production`
 - [ ] Enabled only needed feature flags

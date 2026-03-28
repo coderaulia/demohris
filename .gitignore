@@ -27,7 +27,10 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.production.example
 
+# Production environment (COPY this to .env.production before deploying)
+.env.production
 
 # Security / Sensitive local files
 backups/

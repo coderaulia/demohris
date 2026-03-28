@@ -1,0 +1,11 @@
+{
+  "framework": "express",
+  "buildCommand": "npm run build",
+  "startCommand": "npm run start",
+  "nodeVersion": "20",
+  "distDirectory": "dist",
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "3000"
+  }
+}
