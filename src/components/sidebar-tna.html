@@ -186,6 +186,23 @@
             <div id="tna-view-courses" class="tna-view d-none">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h4 class="mb-0"><i class="bi bi-book text-info me-2"></i>Course Catalog</h4>
+                    <button class="btn btn-primary btn-sm" id="tna-btn-create-course">
+                        <i class="bi bi-plus-circle me-1"></i>New Course
+                    </button>
+                </div>
+                
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body py-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">Filter:</span>
+                            <select class="form-select form-select-sm" id="tna-course-filter" style="max-width: 200px;">
+                                <option value="">All Courses</option>
+                                <option value="active">Active Only</option>
+                                <option value="inactive">Inactive Only</option>
+                            </select>
+                            <input type="text" class="form-control form-control-sm" id="tna-course-search" placeholder="Search courses..." style="max-width: 200px;">
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="row" id="tna-courses-container">
@@ -199,6 +216,24 @@
             <div id="tna-view-enrollments" class="tna-view d-none">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h4 class="mb-0"><i class="bi bi-person-check text-primary me-2"></i>Training Enrollments</h4>
+                    <button class="btn btn-primary btn-sm" id="tna-btn-new-enrollment">
+                        <i class="bi bi-person-plus me-1"></i>New Enrollment
+                    </button>
+                </div>
+                
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body py-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">Status:</span>
+                            <select class="form-select form-select-sm" id="tna-enrollment-filter" style="max-width: 150px;">
+                                <option value="">All</option>
+                                <option value="enrolled">Enrolled</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="card shadow-sm">
@@ -209,15 +244,17 @@
                                     <tr>
                                         <th>Employee</th>
                                         <th>Course</th>
-                                        <th>Enrolled Date</th>
+                                        <th>Provider</th>
+                                        <th>Duration</th>
+                                        <th>Enrolled</th>
                                         <th class="text-center">Status</th>
-                                        <th>Completion Date</th>
+                                        <th>Completed</th>
                                         <th></th>
                                     </tr>
                                 </thead>
                                 <tbody id="tna-enrollments-table-body">
                                     <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">
+                                        <td colspan="8" class="text-center text-muted py-4">
                                             <i class="bi bi-inbox me-2"></i>No enrollments yet
                                         </td>
                                     </tr>

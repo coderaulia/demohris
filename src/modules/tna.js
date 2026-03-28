@@ -45,6 +45,16 @@ function setupEventListeners() {
             await createAllNeedsFromGaps();
             return;
         }
+
+        if (e.target.closest('#tna-btn-create-course')) {
+            await showCreateCourseModal();
+            return;
+        }
+
+        if (e.target.closest('#tna-btn-new-enrollment')) {
+            await showNewEnrollmentModal();
+            return;
+        }
     });
 
     document.getElementById('tna-employee-select')?.addEventListener('change', async (e) => {
@@ -54,12 +64,24 @@ function setupEventListeners() {
         } else if (currentView === 'plans') {
             await loadPlans(employeeId);
         } else if (currentView === 'enrollments') {
-            await loadEnrollments(employeeId);
+            await loadEnrollmentsWithFilter();
         }
     });
 
     document.getElementById('tna-report-department')?.addEventListener('change', async (e) => {
         await loadGapsReport(e.target.value);
+    });
+
+    document.getElementById('tna-enrollment-filter')?.addEventListener('change', async () => {
+        await loadEnrollmentsWithFilter();
+    });
+
+    document.getElementById('tna-course-filter')?.addEventListener('change', async () => {
+        await loadCourses();
+    });
+
+    document.getElementById('tna-course-search')?.addEventListener('input', async () => {
+        await loadCourses();
     });
 }
 
@@ -292,30 +314,61 @@ async function loadCourses() {
     if (!container) return;
 
     try {
-        const courses = await tnaData.fetchTrainingCourses();
+        const filter = document.getElementById('tna-course-filter')?.value || '';
+        const search = (document.getElementById('tna-course-search')?.value || '').toLowerCase();
+        
+        let courses = await tnaData.fetchTrainingCourses(filter !== 'inactive');
+        
+        if (search) {
+            courses = courses.filter(c => 
+                c.course_name?.toLowerCase().includes(search) ||
+                c.description?.toLowerCase().includes(search) ||
+                c.provider?.toLowerCase().includes(search)
+            );
+        }
+        
+        if (filter === 'inactive') {
+            courses = courses.filter(c => !c.is_active);
+        }
+
         if (!courses.length) {
             container.innerHTML = `
                 <div class="col-12 text-center text-muted py-5">
-                    <i class="bi bi-book me-2"></i>No courses available
+                    <i class="bi bi-book me-2"></i>No courses found
                 </div>`;
             return;
         }
 
-        container.innerHTML = courses.map(course => `
+        container.innerHTML = courses.map(course => {
+            const isActive = course.is_active !== 0 && course.is_active !== false;
+            return `
             <div class="col-md-4 col-lg-3 mb-3">
-                <div class="card h-100 shadow-sm">
+                <div class="card h-100 shadow-sm ${!isActive ? 'opacity-50' : ''}">
+                    <div class="card-header bg-transparent py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge ${isActive ? 'bg-success' : 'bg-secondary'}">${isActive ? 'Active' : 'Inactive'}</span>
+                            <button class="btn btn-sm btn-link text-primary p-0" onclick="window.__app.editCourse('${course.id}')">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                        </div>
+                    </div>
                     <div class="card-body">
                         <h6 class="card-title">${escapeHTML(course.course_name)}</h6>
                         <p class="card-text small text-muted">${escapeHTML(course.description || 'No description')}</p>
                         <div class="d-flex justify-content-between align-items-center small">
-                            <span class="text-muted">${course.provider || 'Internal'}</span>
-                            <span class="badge bg-secondary">${course.duration_hours}h</span>
+                            <span class="text-muted">${escapeHTML(course.provider || 'Internal')}</span>
+                            <span class="badge bg-info">${course.duration_hours || 0}h</span>
                         </div>
                         ${course.cost > 0 ? `<div class="mt-2 text-primary fw-bold">${formatCurrency(course.cost)}</div>` : ''}
                     </div>
+                    <div class="card-footer bg-transparent">
+                        <button class="btn btn-sm btn-outline-primary w-100" onclick="window.__app.enrollInCourse('${course.id}', '${escapeInlineArg(course.course_name)}')">
+                            <i class="bi bi-person-plus me-1"></i>Enroll
+                        </button>
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     } catch (error) {
         container.innerHTML = `
             <div class="col-12 text-center text-danger py-5">
@@ -324,42 +377,69 @@ async function loadCourses() {
     }
 }
 
-async function loadEnrollments(employeeId = '') {
+async function loadEnrollmentsWithFilter() {
+    const employeeId = document.getElementById('tna-employee-select')?.value || '';
+    const statusFilter = document.getElementById('tna-enrollment-filter')?.value || '';
+    
     const tbody = document.getElementById('tna-enrollments-table-body');
     if (!tbody) return;
 
     try {
-        const enrollments = await tnaData.fetchEnrollments(employeeId);
-        if (!enrollments.length) {
+        const enrollments = await tnaData.fetchEnrollmentsWithDetails(employeeId);
+        
+        const filtered = statusFilter 
+            ? enrollments.filter(e => e.status === statusFilter)
+            : enrollments;
+
+        if (!filtered.length) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
-                        <i class="bi bi-inbox me-2"></i>No enrollments yet
+                    <td colspan="8" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox me-2"></i>No enrollments found
                     </td>
                 </tr>`;
             return;
         }
 
-        tbody.innerHTML = enrollments.map(enrollment => {
+        tbody.innerHTML = filtered.map(enrollment => {
             const statusBadge = getStatusBadge(enrollment.status);
             return `
                 <tr>
-                    <td>${escapeHTML(state.db[enrollment.employee_id]?.name || enrollment.employee_id)}</td>
-                    <td>${escapeHTML(enrollment.course_id || '-')}</td>
+                    <td>${escapeHTML(enrollment.employee_name || enrollment.employee_id)}</td>
+                    <td>${escapeHTML(enrollment.course_name || enrollment.course_id)}</td>
+                    <td>${escapeHTML(enrollment.provider || '-')}</td>
+                    <td>${enrollment.duration_hours || 0}h</td>
                     <td>${formatDate(enrollment.enrollment_date)}</td>
                     <td class="text-center">${statusBadge}</td>
                     <td>${enrollment.completion_date ? formatDate(enrollment.completion_date) : '-'}</td>
-                    <td></td>
+                    <td class="text-end">
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#" onclick="window.__app.updateEnrollmentStatus('${enrollment.id}', 'enrolled')">Mark Enrolled</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="window.__app.updateEnrollmentStatus('${enrollment.id}', 'in_progress')">Mark In Progress</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="window.__app.updateEnrollmentStatus('${enrollment.id}', 'completed')">Mark Completed</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item text-danger" href="#" onclick="window.__app.updateEnrollmentStatus('${enrollment.id}', 'cancelled')">Cancel</a></li>
+                            </ul>
+                        </div>
+                    </td>
                 </tr>`;
         }).join('');
     } catch (error) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="text-center text-danger py-4">
+                <td colspan="8" class="text-center text-danger py-4">
                     <i class="bi bi-exclamation-triangle me-2"></i>Error: ${escapeHTML(error.message)}
                 </td>
             </tr>`;
     }
+}
+
+async function loadEnrollments(employeeId = '') {
+    await loadEnrollmentsWithFilter();
 }
 
 function loadDepartments() {
@@ -652,9 +732,274 @@ function exportReport() {
     URL.revokeObjectURL(url);
 }
 
+async function showCreateCourseModal() {
+    const result = await notify.prompt({
+        title: 'Create New Course',
+        html: `
+            <div class="text-start">
+                <div class="mb-3">
+                    <label class="form-label">Course Name *</label>
+                    <input type="text" class="form-control" id="course-name-input" placeholder="e.g., Advanced Sales Techniques">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" id="course-desc-input" rows="2" placeholder="Course description..."></textarea>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Provider</label>
+                        <input type="text" class="form-control" id="course-provider-input" placeholder="e.g., Internal, Udemy">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Duration (hours)</label>
+                        <input type="number" class="form-control" id="course-duration-input" value="8" min="1">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Cost (IDR)</label>
+                    <input type="number" class="form-control" id="course-cost-input" value="0" min="0">
+                </div>
+            </div>
+        `,
+        confirmButtonText: 'Create Course',
+        showCancelButton: true,
+        preConfirm: () => {
+            const name = document.getElementById('course-name-input')?.value?.trim();
+            if (!name) {
+                notify.showValidationMessage('Course name is required');
+                return false;
+            }
+            return {
+                course_name: name,
+                description: document.getElementById('course-desc-input')?.value?.trim() || '',
+                provider: document.getElementById('course-provider-input')?.value?.trim() || '',
+                duration_hours: parseInt(document.getElementById('course-duration-input')?.value || '8', 10),
+                cost: parseFloat(document.getElementById('course-cost-input')?.value || '0'),
+            };
+        },
+    });
+
+    if (!result) return;
+
+    try {
+        await notify.withLoading(async () => {
+            await tnaData.createCourse(result);
+        }, 'Creating Course', 'Creating new course...');
+        await notify.success('Course created successfully');
+        await loadCourses();
+    } catch (error) {
+        await notify.error('Error: ' + error.message);
+    }
+}
+
+async function showNewEnrollmentModal() {
+    const db = state.db || {};
+    const employeeOptions = Object.keys(db)
+        .sort((a, b) => (db[a]?.name || '').localeCompare(db[b]?.name || ''))
+        .map(id => `<option value="${escapeHTML(id)}">${escapeHTML(db[id]?.name || id)}</option>`)
+        .join('');
+
+    const courses = await tnaData.fetchTrainingCourses();
+    const courseOptions = courses
+        .map(c => `<option value="${escapeHTML(c.id)}">${escapeHTML(c.course_name)} (${c.duration_hours}h)</option>`)
+        .join('');
+
+    if (!courseOptions) {
+        await notify.warn('No courses available. Create a course first.');
+        return;
+    }
+
+    const result = await notify.prompt({
+        title: 'New Enrollment',
+        html: `
+            <div class="text-start">
+                <div class="mb-3">
+                    <label class="form-label">Employee *</label>
+                    <select class="form-select" id="enroll-employee-input">
+                        <option value="">-- Select Employee --</option>
+                        ${employeeOptions}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Course *</label>
+                    <select class="form-select" id="enroll-course-input">
+                        <option value="">-- Select Course --</option>
+                        ${courseOptions}
+                    </select>
+                </div>
+            </div>
+        `,
+        confirmButtonText: 'Enroll',
+        showCancelButton: true,
+        preConfirm: () => {
+            const employeeId = document.getElementById('enroll-employee-input')?.value?.trim();
+            const courseId = document.getElementById('enroll-course-input')?.value?.trim();
+            if (!employeeId || !courseId) {
+                notify.showValidationMessage('Please select both employee and course');
+                return false;
+            }
+            return { employee_id: employeeId, course_id: courseId };
+        },
+    });
+
+    if (!result) return;
+
+    try {
+        await notify.withLoading(async () => {
+            await tnaData.enrollEmployee(result.employee_id, result.courseId);
+        }, 'Creating Enrollment', 'Enrolling employee...');
+        await notify.success('Enrollment created successfully');
+        await loadEnrollmentsWithFilter();
+        await loadTnaSummary();
+    } catch (error) {
+        await notify.error('Error: ' + error.message);
+    }
+}
+
+async function enrollInCourse(courseId, courseName) {
+    const db = state.db || {};
+    const employeeOptions = Object.keys(db)
+        .sort((a, b) => (db[a]?.name || '').localeCompare(db[b]?.name || ''))
+        .map(id => `<option value="${escapeHTML(id)}">${escapeHTML(db[id]?.name || id)}</option>`)
+        .join('');
+
+    const result = await notify.prompt({
+        title: `Enroll in ${courseName}`,
+        html: `
+            <div class="text-start">
+                <div class="mb-3">
+                    <label class="form-label">Select Employee *</label>
+                    <select class="form-select" id="enroll-employee-input">
+                        <option value="">-- Select Employee --</option>
+                        ${employeeOptions}
+                    </select>
+                </div>
+            </div>
+        `,
+        confirmButtonText: 'Enroll',
+        showCancelButton: true,
+        preConfirm: () => {
+            const employeeId = document.getElementById('enroll-employee-input')?.value?.trim();
+            if (!employeeId) {
+                notify.showValidationMessage('Please select an employee');
+                return false;
+            }
+            return { employee_id: employeeId };
+        },
+    });
+
+    if (!result) return;
+
+    try {
+        await notify.withLoading(async () => {
+            await tnaData.enrollEmployee(result.employee_id, courseId);
+        }, 'Enrolling', `Enrolling employee in ${courseName}...`);
+        await notify.success('Enrollment created successfully');
+        await loadTnaSummary();
+    } catch (error) {
+        await notify.error('Error: ' + error.message);
+    }
+}
+
+async function editCourse(courseId) {
+    const courses = await tnaData.fetchTrainingCourses();
+    const course = courses.find(c => c.id === courseId);
+    if (!course) {
+        await notify.error('Course not found');
+        return;
+    }
+
+    const result = await notify.prompt({
+        title: 'Edit Course',
+        html: `
+            <div class="text-start">
+                <div class="mb-3">
+                    <label class="form-label">Course Name *</label>
+                    <input type="text" class="form-control" id="course-name-input" value="${escapeHTML(course.course_name || '')}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" id="course-desc-input" rows="2">${escapeHTML(course.description || '')}</textarea>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Provider</label>
+                        <input type="text" class="form-control" id="course-provider-input" value="${escapeHTML(course.provider || '')}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Duration (hours)</label>
+                        <input type="number" class="form-control" id="course-duration-input" value="${course.duration_hours || 8}" min="1">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Cost (IDR)</label>
+                        <input type="number" class="form-control" id="course-cost-input" value="${course.cost || 0}" min="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" id="course-active-input">
+                            <option value="1" ${course.is_active ? 'selected' : ''}>Active</option>
+                            <option value="0" ${!course.is_active ? 'selected' : ''}>Inactive</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        `,
+        confirmButtonText: 'Update Course',
+        showCancelButton: true,
+        preConfirm: () => {
+            const name = document.getElementById('course-name-input')?.value?.trim();
+            if (!name) {
+                notify.showValidationMessage('Course name is required');
+                return false;
+            }
+            return {
+                id: courseId,
+                course_name: name,
+                description: document.getElementById('course-desc-input')?.value?.trim() || '',
+                provider: document.getElementById('course-provider-input')?.value?.trim() || '',
+                duration_hours: parseInt(document.getElementById('course-duration-input')?.value || '8', 10),
+                cost: parseFloat(document.getElementById('course-cost-input')?.value || '0'),
+                is_active: document.getElementById('course-active-input')?.value === '1',
+            };
+        },
+    });
+
+    if (!result) return;
+
+    try {
+        await notify.withLoading(async () => {
+            await tnaData.updateCourse(result);
+        }, 'Updating Course', 'Updating course...');
+        await notify.success('Course updated successfully');
+        await loadCourses();
+    } catch (error) {
+        await notify.error('Error: ' + error.message);
+    }
+}
+
+async function updateEnrollmentStatus(enrollmentId, status) {
+    try {
+        await notify.withLoading(async () => {
+            await tnaData.updateEnrollmentStatus(enrollmentId, status);
+        }, 'Updating Status', 'Updating enrollment status...');
+        await notify.success('Enrollment status updated');
+        await loadEnrollmentsWithFilter();
+        await loadTnaSummary();
+    } catch (error) {
+        await notify.error('Error: ' + error.message);
+    }
+}
+
 window.__app = window.__app || {};
 window.__app.initTna = initTna;
 window.__app.createTrainingNeedFromGap = createTrainingNeedFromGap;
 window.__app.viewPlanDetails = viewPlanDetails;
+window.__app.showCreateCourseModal = showCreateCourseModal;
+window.__app.showNewEnrollmentModal = showNewEnrollmentModal;
+window.__app.enrollInCourse = enrollInCourse;
+window.__app.editCourse = editCourse;
+window.__app.updateEnrollmentStatus = updateEnrollmentStatus;
 
 export { initTna };
