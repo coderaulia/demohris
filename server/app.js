@@ -11,6 +11,7 @@ import mysql from 'mysql2/promise';
 import { getTableMeta, getRegisteredTables, isTableRegistered, isTableReadable, isTableWritable } from './modules/registry.js';
 import { isFeatureEnabled } from './features.js';
 import { isTnaEnabled, handleTnaAction } from './modules/tna.js';
+import { handleLmsAction } from './modules/lms.js';
 import {
     getAllModules,
     getModule,
@@ -786,6 +787,14 @@ app.all('/api', async (req, res, next) => {
                 throw new ApiError(404, 'TNA module is not enabled.', 'MODULE_DISABLED');
             }
             await handleTnaAction(req, res, action);
+            return;
+        }
+
+        if (action.startsWith('lms/')) {
+            if (!isFeatureEnabled('LMS')) {
+                throw new ApiError(404, 'LMS module is not enabled.', 'MODULE_DISABLED');
+            }
+            await handleLmsAction(req, res, action);
             return;
         }
 

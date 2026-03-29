@@ -8,3 +8,4 @@ export * from './probation.js';
 export * from './pip.js';
 export * from './sync.js';
 export * from './modules.js';
+export * from './lms.js';
