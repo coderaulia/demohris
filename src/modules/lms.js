@@ -14,6 +14,7 @@ import {
     initializeQuillEditor,
     loadCatalogWithFilters
 } from './lms/courseManager.js';
+import { openLessonViewer } from './lms/lessonViewer.js';
 
 let currentLmsView = 'my-learning';
 const PAGE_SIZE = 20;
@@ -1111,9 +1112,8 @@ window.__app.deleteCourse = async (courseId) => {
         }
     }
 };
-window.__app.continueCourse = (courseId) => {
-    notify.info('Lesson viewer coming in Sprint 2');
-    // TODO: Implement lesson viewer
+window.__app.continueCourse = (enrollmentId) => {
+    openLessonViewer(enrollmentId);
 };
 window.__app.viewCertificate = (enrollmentId) => {
     notify.info('Certificate download coming in Sprint 4');

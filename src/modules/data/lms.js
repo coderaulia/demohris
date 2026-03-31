@@ -159,6 +159,16 @@ export async function completeLesson(enrollmentId, lessonId) {
     });
 }
 
+export async function getEnrollmentDetails(enrollmentId) {
+    const result = await apiRequest('lms/enrollments/get', { enrollment_id: enrollmentId });
+    return result.enrollment || result;
+}
+
+export async function getProgressData(enrollmentId) {
+    const result = await apiRequest('lms/progress/get', { enrollment_id: enrollmentId });
+    return result.progress || result;
+}
+
 // =====================================================
 // QUIZZES
 // =====================================================
