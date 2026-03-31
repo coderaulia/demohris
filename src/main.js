@@ -16,6 +16,7 @@ import recordsHTML from './components/tab-records.html?raw';
 import settingsHTML from './components/tab-settings.html?raw';
 import overlaysHTML from './components/overlays.html?raw';
 import tnaSidebarHTML from './components/sidebar-tna.html?raw';
+import lmsHTML from './components/tab-lms.html?raw';
 import modulesHTML from './components/tab-modules.html?raw';
 
 // Inject components into shell
@@ -32,6 +33,11 @@ document.getElementById('component-modules').innerHTML = modulesHTML;
 // Inject TNA sidebar if feature is enabled
 if (isFeatureEnabled('TNA')) {
     document.getElementById('component-tna').innerHTML = tnaSidebarHTML;
+}
+
+// Inject LMS component if feature is enabled
+if (isFeatureEnabled('LMS')) {
+    document.getElementById('component-lms').innerHTML = lmsHTML;
 }
 
 import { state, subscribe, emit, isAdmin, isManager, isEmployee, setReportFilters } from './lib/store.js';
@@ -62,6 +68,7 @@ import { getRoleScopedEmployeeIds } from './lib/reportFilters.js';
 import * as notify from './lib/notify.js';
 import { initMonitoring } from './lib/monitoring.js';
 import { initTna } from './modules/tna.js';
+import { initLms } from './modules/lms.js';
 import { initModuleManager } from './modules/modules.js';
 import { registerModuleLoader } from './lib/moduleRegistry.js';
 
@@ -144,6 +151,7 @@ function handleRoute() {
     const routeMap = {
         '/': 'tab-tna',
         '/tna': 'tab-tna',
+        '/lms': 'tab-lms',
         '/dashboard': 'tab-dashboard',
         '/employees': 'tab-employees',
         '/assessment': 'tab-assessment',
@@ -174,6 +182,7 @@ function switchTab(tabId) {
     // Update URL hash if not already correct
     const routeForTab = {
         'tab-tna': '/tna',
+        'tab-lms': '/lms',
         'tab-dashboard': '/dashboard',
         'tab-employees': '/employees',
         'tab-assessment': '/assessment',
@@ -195,6 +204,7 @@ function switchTab(tabId) {
         'tab-records': 'nav-records',
         'tab-settings': 'nav-settings',
         'tab-tna': 'nav-tna',
+        'tab-lms': 'nav-lms',
         'tab-modules': 'nav-settings',
     };
 
@@ -221,6 +231,11 @@ function switchTab(tabId) {
     if (tabId === 'tab-tna') {
         if (isFeatureEnabled('TNA')) {
             initTna();
+        }
+    }
+    if (tabId === 'tab-lms') {
+        if (isFeatureEnabled('LMS')) {
+            initLms();
         }
     }
     if (tabId === 'tab-modules') {

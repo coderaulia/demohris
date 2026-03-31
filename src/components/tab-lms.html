@@ -1,0 +1,536 @@
+<!-- LMS Tab - Learning Management System -->
+<div id="tab-lms" class="content-section">
+    <div class="d-flex">
+        <!-- LMS Sidebar -->
+        <nav id="lms-sidebar" class="bg-white border-end" style="width: 260px; min-height: 100vh;">
+            <div class="p-3 border-bottom bg-light">
+                <h5 class="mb-0 text-primary">
+                    <i class="bi bi-mortarboard me-2"></i>Learning Center
+                </h5>
+                <small class="text-muted">Course Management</small>
+            </div>
+            
+            <!-- LMS Summary Cards -->
+            <div class="p-3 border-bottom">
+                <div class="row g-2 text-center">
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-success bg-opacity-10">
+                            <div class="fs-4 fw-bold text-success" id="lms-enrolled-count">0</div>
+                            <small class="text-muted">Enrolled</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-primary bg-opacity-10">
+                            <div class="fs-4 fw-bold text-primary" id="lms-in-progress-count">0</div>
+                            <small class="text-muted">In Progress</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-info bg-opacity-10">
+                            <div class="fs-4 fw-bold text-info" id="lms-completed-count">0</div>
+                            <small class="text-muted">Completed</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-warning bg-opacity-10">
+                            <div class="fs-4 fw-bold text-warning" id="lms-certificates-count">0</div>
+                            <small class="text-muted">Certificates</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LMS Navigation -->
+            <div class="list-group list-group-flush p-2" id="lms-nav-menu">
+                <!-- Student/Employee View -->
+                <a href="#" class="list-group-item list-group-item-action" data-lms-view="my-learning" id="nav-lms-my-learning">
+                    <i class="bi bi-book-half me-2"></i>My Learning
+                </a>
+                <a href="#" class="list-group-item list-group-item-action" data-lms-view="catalog" id="nav-lms-catalog">
+                    <i class="bi bi-journal-bookmark me-2"></i>Course Catalog
+                </a>
+                <a href="#" class="list-group-item list-group-item-action" data-lms-view="my-courses" id="nav-lms-my-courses">
+                    <i class="bi bi-collection me-2"></i>My Courses
+                </a>
+                <a href="#" class="list-group-item list-group-item-action" data-lms-view="certificates" id="nav-lms-certificates">
+                    <i class="bi bi-award me-2"></i>Certificates
+                </a>
+                
+                <!-- Admin View (HR/Manager/Superadmin) -->
+                <div class="border-top mt-2 pt-2">
+                    <small class="text-muted px-2">Admin Tools</small>
+                </div>
+                <a href="#" class="list-group-item list-group-item-action admin-only" data-lms-view="admin-courses" id="nav-lms-admin-courses">
+                    <i class="bi bi-gear me-2"></i>Manage Courses
+                </a>
+                <a href="#" class="list-group-item list-group-item-action admin-only" data-lms-view="admin-enrollments" id="nav-lms-admin-enrollments">
+                    <i class="bi bi-people me-2"></i>Enrollments
+                </a>
+                <a href="#" class="list-group-item list-group-item-action admin-only" data-lms-view="admin-reports" id="nav-lms-admin-reports">
+                    <i class="bi bi-bar-chart me-2"></i>Reports
+                </a>
+            </div>
+
+            <!-- Quick Actions for Admins -->
+            <div class="p-3 border-top mt-auto admin-only" id="lms-admin-actions">
+                <button class="btn btn-primary btn-sm w-100 mb-2" id="lms-btn-create-course">
+                    <i class="bi bi-plus-circle me-1"></i>New Course
+                </button>
+                <button class="btn btn-outline-secondary btn-sm w-100" id="lms-btn-assign-courses">
+                    <i class="bi bi-person-plus me-1"></i>Bulk Assign
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <div class="flex-grow-1 p-4" id="lms-main-content" style="background: #f8f9fa;">
+            
+            <!-- View: My Learning (Student Dashboard) -->
+            <div id="lms-view-my-learning" class="lms-view">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">
+                        <i class="bi bi-book-half text-primary me-2"></i>My Learning Dashboard
+                    </h4>
+                    <button class="btn btn-outline-primary btn-sm" id="lms-btn-browse-catalog">
+                        <i class="bi bi-search me-1"></i>Browse Catalog
+                    </button>
+                </div>
+
+                <!-- Continue Learning -->
+                <div class="card shadow-sm mb-4" id="lms-continue-learning-card">
+                    <div class="card-header bg-white">
+                        <strong><i class="bi bi-play-circle me-2"></i>Continue Learning</strong>
+                    </div>
+                    <div class="card-body" id="lms-continue-learning-body">
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-inbox me-2"></i>You have no active courses
+                        </div>
+                    </div>
+                </div>
+
+                <!-- In Progress Courses -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-white">
+                        <strong><i class="bi bi-hourglass-split text-warning me-2"></i>In Progress</strong>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Course</th>
+                                        <th>Category</th>
+                                        <th>Progress</th>
+                                        <th>Due Date</th>
+                                        <th>Last Accessed</th>
+                                        <th width="100">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lms-in-progress-body">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">
+                                            <i class="bi bi-info-circle me-2"></i>No courses in progress
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recommended for You -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <strong><i class="bi bi-star text-success me-2"></i>Recommended for You</strong>
+                    </div>
+                    <div class="card-body" id="lms-recommended-body">
+                        <div class="row" id="lms-recommended-cards">
+                            <div class="col-12 text-center text-muted py-4">
+                                <i class="bi bi-hourglass-split me-2"></i>Loading recommendations...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Course Catalog -->
+            <div id="lms-view-catalog" class="lms-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">
+                        <i class="bi bi-journal-bookmark text-primary me-2"></i>Course Catalog
+                    </h4>
+                    <div class="btn-group">
+                        <button class="btn btn-primary btn-sm" id="lms-btn-admin-create-course admin-only">
+                            <i class="bi bi-plus-circle me-1"></i>New Course
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Bar -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body py-2">
+                        <div class="row align-items-center">
+                            <div class="col-md-3">
+                                <select class="form-select form-select-sm" id="lms-catalog-category">
+                                    <option value="">All Categories</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select form-select-sm" id="lms-catalog-difficulty">
+                                    <option value="">All Levels</option>
+                                    <option value="beginner">Beginner</option>
+                                    <option value="intermediate">Intermediate</option>
+                                    <option value="advanced">Advanced</option>
+                                    <option value="expert">Expert</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" class="form-control form-control-sm" id="lms-catalog-search" placeholder="Search courses...">
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-secondary btn-sm w-100" id="lms-btn-clear-filters">
+                                    <i class="bi bi-x-circle me-1"></i>Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Course Cards -->
+                <div class="row" id="lms-catalog-cards">
+                    <div class="col-12 text-center text-muted py-5">
+                        <i class="bi bi-hourglass-split me-2"></i>Loading courses...
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <nav id="lms-catalog-pagination" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                    </ul>
+                </nav>
+            </div>
+
+            <!-- View: My Courses -->
+            <div id="lms-view-my-courses" class="lms-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">
+                        <i class="bi bi-collection text-primary me-2"></i>My Courses
+                    </h4>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary active" data-filter="all">All</button>
+                        <button class="btn btn-outline-secondary" data-filter="enrolled">Enrolled</button>
+                        <button class="btn btn-outline-secondary" data-filter="completed">Completed</button>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Course</th>
+                                        <th>Category</th>
+                                        <th>Instructor</th>
+                                        <th>Progress</th>
+                                        <th>Status</th>
+                                        <th>Started</th>
+                                        <th width="120">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lms-my-courses-body">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox me-2"></i>You are not enrolled in any courses
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Certificates -->
+            <div id="lms-view-certificates" class="lms-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">
+                        <i class="bi bi-award text-primary me-2"></i>My Certificates
+                    </h4>
+                </div>
+
+                <div class="row" id="lms-certificates-cards">
+                    <div class="col-12 text-center text-muted py-5">
+                        <i class="bi bi-inbox me-2"></i>You have no certificates yet
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Admin - Manage Courses -->
+            <div id="lms-view-admin-courses" class="lms-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">
+                        <i class="bi bi-gear text-primary me-2"></i>Manage Courses
+                    </h4>
+                    <button class="btn btn-primary btn-sm" id="lms-btn-admin-new-course">
+                        <i class="bi bi-plus-circle me-1"></i>Create Course
+                    </button>
+                </div>
+
+                <!-- Admin Filter -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body py-2">
+                        <div class="row align-items-center">
+                            <div class="col-md-3">
+                                <select class="form-select form-select-sm" id="lms-admin-status">
+                                    <option value="">All Status</option>
+                                    <option value="draft">Draft</option>
+                                    <option value="published">Published</option>
+                                    <option value="archived">Archived</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select form-select-sm" id="lms-admin-category">
+                                    <option value="">All Categories</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" class="form-control form-control-sm" id="lms-admin-search" placeholder="Search...">
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-secondary btn-sm w-100">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Course Table -->
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Course</th>
+                                        <th>Category</th>
+                                        <th>Status</th>
+                                        <th>Enrollments</th>
+                                        <th>Completions</th>
+                                        <th>Avg Score</th>
+                                        <th>Created</th>
+                                        <th width="150">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lms-admin-courses-body">
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox me-2"></i>No courses found
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Admin - Enrollments -->
+            <div id="lms-view-admin-enrollments" class="lms-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">
+                        <i class="bi bi-people text-primary me-2"></i>Enrollment Management
+                    </h4>
+                    <button class="btn btn-primary btn-sm" id="lms-btn-bulk-enroll">
+                        <i class="bi bi-person-plus me-1"></i>Bulk Enroll
+                    </button>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Course</th>
+                                        <th>Status</th>
+                                        <th>Progress</th>
+                                        <th>Enrolled</th>
+                                        <th>Due Date</th>
+                                        <th width="100">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lms-admin-enrollments-body">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox me-2"></i>No enrollments found
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Admin - Reports -->
+            <div id="lms-view-admin-reports" class="lms-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">
+                        <i class="bi bi-bar-chart text-primary me-2"></i>Learning Analytics
+                    </h4>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary" id="lms-btn-export-report">
+                            <i class="bi bi-download me-1"></i>Export
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body text-center">
+                                <div class="fs-2 fw-bold text-primary" id="lms-report-total-enrollments">0</div>
+                                <div class="text-muted">Total Enrollments</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body text-center">
+                                <div class="fs-2 fw-bold text-success" id="lms-report-completions">0</div>
+                                <div class="text-muted">Completed</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body text-center">
+                                <div class="fs-2 fw-bold text-warning" id="lms-report-in-progress">0</div>
+                                <div class="text-muted">In Progress</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body text-center">
+                                <div class="fs-2 fw-bold text-info" id="lms-report-avg-score">-</div>
+                                <div class="text-muted">Avg Score</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Department Chart Placeholder -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header">
+                        <strong>Completions by Department</strong>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="lms-dept-chart" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top Courses -->
+                <div class="card shadow-sm">
+                    <div class="card-header">
+                        <strong>Top Performing Courses</strong>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Course</th>
+                                    <th>Enrollments</th>
+                                    <th>Completion Rate</th>
+                                    <th>Avg Score</th>
+                                    <th>Avg Rating</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lms-top-courses-body">
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        <i class="bi bi-hourglass-split me-2"></i>Loading...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Course Detail/Enroll Modal -->
+<div class="modal fade" id="lms-course-detail-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="lms-course-modal-title">Course Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="lms-course-modal-body">
+                <!-- Dynamic content -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="lms-btn-enroll-course" style="display:none;">
+                    <i class="bi bi-person-plus me-1"></i>Enroll Now
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Course Create/Edit Modal -->
+<div class="modal fade" id="lms-course-form-modal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="lms-form-modal-title">Create Course</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="lms-form-modal-body">
+                <!-- Course form will be here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="lms-btn-save-course">
+                    <i class="bi bi-check-circle me-1"></i>Save Course
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+#lms-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+.lms-view .card {
+    border: none;
+    border-radius: 8px;
+}
+.course-card {
+    transition: transform 0.2s;
+    cursor: pointer;
+}
+.course-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.progress-thin {
+    height: 6px;
+}
+.course-thumbnail {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    background: #e9ecef;
+}
+</style>
