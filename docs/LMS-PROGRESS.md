@@ -110,20 +110,52 @@ Total: 33 endpoints to document
 
 #### Commit 3: Course Management Enhancement ✅ PUSHED
 - **Type:** `feat(lms): implement course catalog and creation forms`
-- **Commit:** (pending)
+- **Commit:** d8d7fb1
+- **Tag:** v2.1.0-lms-alpha2
 - **Files:**
-  - `src/modules/lms/courseManager.js` (created)
-  - `src/modules/lms.js` (modified)
-  - `docs/LMS-PROGRESS.md` (modified)
+  - `src/modules/lms.js` (catalog, details, save logic)
+  - `docs/LMS-PROGRESS.md` (updated tasks)
 - **Status:** Complete ✅
 - **Notes:**
-  - Course catalog with live search and filters
-  - Course creation/editing modal with Quill.js
-  - Form validation implemented
-  - Pagination support added
-  - Enhanced course details view
-  - YouTube video preview support
-  - Better error handling and loading states
+  - Course catalog with live search/filters
+  - Course creation/editing modal
+  - Quill.js integration
+  - Form validation
+  - Pagination support
+
+#### Commit 4: Lesson Viewer ✅ PUSHED
+- **Type:** `feat(lms): implement lesson viewer and progress tracking (Sprint 2 start)`
+- **Commit:** 80eea4e
+- **Tag:** v2.1.0-lms-alpha3
+- **Files:**
+  - `src/modules/lms/lessonViewer.js` (730 lines)
+  - `src/modules/lms.js` (integrated)
+  - `src/modules/data/lms.js` (added functions)
+- **Status:** Complete ✅
+- **Notes:**
+  - Full-screen lesson viewer modal
+  - Video/document/text content support
+  - Course outline sidebar
+  - Lesson navigation (prev/next)
+  - Progress tracking
+  - Mark as complete functionality
+
+#### Commit 5: Sprint 2 Complete ✅ PUSHED
+- **Type:** `feat(lms): Sprint 2 complete - progress tracking, enrollment flow, E2E tests`
+- **Commit:** 8f92332
+- **Files:**
+  - `src/modules/lms/progressWidget.js` (280 lines)
+  - `src/modules/lms/enrollment.js` (190 lines)
+  - `tests/e2e/lms-lesson-viewer.spec.js` (215 lines)
+  - `mysql-demo-lms-courses.sql` (170 lines)
+- **Status:** Complete ✅
+- **Notes:**
+  - Circular and linear progress widgets
+  - Enrollment confirmation dialog
+  - Prerequisites checking
+  - Demo courses with sections/lessons
+  - Sample enrollments and progress
+  - E2E tests (7 tests)
 
 ---
 
