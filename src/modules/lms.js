@@ -1062,13 +1062,18 @@ async function handleEnroll() {
     if (!courseId) return;
 
     try {
-        await lmsData.enrollInCourse(courseId);
-        notify.success('Successfully enrolled in course');
-        bootstrap.Modal.getInstance(document.getElementById('lms-course-detail-modal')).hide();
-        switchLmsView('my-courses');
+        // Get course details
+        const course = await lmsData.getCourse(courseId);
+        
+        // Close course details modal
+        bootstrap.Modal.getInstance(document.getElementById('lms-course-detail-modal'))?.hide();
+        
+        // Show enrollment confirmation
+        await showEnrollmentConfirmation(course);
+        
     } catch (error) {
         console.error('Failed to enroll:', error);
-        notify.error('Failed to enroll in course');
+        notify.error('Failed to start enrollment: ' + (error.message || 'Unknown error'));
     }
 }
 
