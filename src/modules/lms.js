@@ -7,6 +7,13 @@ import { isFeatureEnabled } from '../lib/features.js';
 import { escapeHTML, formatDate } from '../lib/utils.js';
 import * as notify from '../lib/notify.js';
 import * as lmsData from './data/lms.js';
+import { 
+    showCourseFormModal, 
+    getCourseFormData, 
+    validateCourseForm,
+    initializeQuillEditor,
+    loadCatalogWithFilters
+} from './lms/courseManager.js';
 
 let currentLmsView = 'my-learning';
 const PAGE_SIZE = 20;
@@ -741,29 +748,128 @@ async function loadTopCourses() {
 // ==================================================
 
 async function showCreateCourseModal() {
-    const modal = new bootstrap.Modal(document.getElementById('lms-course-form-modal'));
-    document.getElementById('lms-form-modal-title').textContent = 'Create New Course';
-    
-    // TODO: Generate form with Quill.js editor for description
-    const formBody = document.getElementById('lms-form-modal-body');
-    formBody.innerHTML = generateCourseForm();
-    
-    modal.show();
+    await showCourseFormModal(null);
 }
 
 async function showCourseDetails(courseId) {
     try {
+        notify.info('Loading course details...');
         const course = await lmsData.getCourse(courseId);
         const modal = new bootstrap.Modal(document.getElementById('lms-course-detail-modal'));
         
         document.getElementById('lms-course-modal-title').textContent = course.title;
+        
+        const isEnrolled = course.enrollment_status === 'enrolled' || course.enrollment_status === 'in_progress';
+        const isCompleted = course.enrollment_status === 'completed';
+        
         document.getElementById('lms-course-modal-body').innerHTML = `
             <div class="row">
                 <div class="col-md-8">
                     ${course.thumbnail_url 
-                        ? `<img src="${escapeHTML(course.thumbnail_url)}" class="img-fluid rounded mb-3" alt="${escapeHTML(course.title)}">`
+                        ? `<img src="${escapeHTML(course.thumbnail_url)}" class="img-fluid rounded mb-3 w-100" alt="${escapeHTML(course.title)}" style="max-height: 300px; object-fit: cover;">`
                         : ''
                     }
+                    <h6>Description</h6>
+                    <div class="mb-3">${course.description || '<p class="text-muted">No description available</p>'}</div>
+                    
+                    <h6 class="mt-4">What You'll Learn</h6>
+                    <p>${course.short_description || 'Contact instructor for more details'}</p>
+                    
+                    <h6 class="mt-4">Course Details</h6>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <small class="text-muted d-block">Duration</small>
+                            <strong>${course.estimated_duration_minutes || 0} minutes</strong>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted d-block">Difficulty</small>
+                            <strong class="text-capitalize">${course.difficulty_level || 'Beginner'}</strong>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted d-block">Category</small>
+                            <strong>${escapeHTML(course.category || 'General')}</strong>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted d-block">Passing Score</small>
+                            <strong>${course.passing_score || 70}%</strong>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted d-block">Enrolled</small>
+                            <strong>${course.enrollment_count || 0} students</strong>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted d-block">Rating</small>
+                            <strong>${course.avg_rating ? course.avg_rating.toFixed(1) + '/5' : 'N/A'}</strong>
+                        </div>
+                    </div>
+                    
+                    ${course.video_url ? `
+                        <h6 class="mt-4">Preview</h6>
+                        <div class="ratio ratio-16x9">
+                            <iframe src="${escapeHTML(course.video_url.replace('watch?v=', 'embed/'))}" 
+                                title="Course Preview" 
+                                allowfullscreen>
+                            </iframe>
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="col-md-4">
+                    <div class="card sticky-top" style="top: 20px;">
+                        <div class="card-body">
+                            <h6 class="card-title">Enrollment Stats</h6>
+                            <ul class="list-unstyled mb-3">
+                                <li class="mb-2 d-flex justify-content-between">
+                                    <small class="text-muted">Status:</small>
+                                    <span class="badge ${isCompleted ? 'bg-success' : isEnrolled ? 'bg-primary' : 'bg-secondary'}">${isCompleted ? 'Completed' : isEnrolled ? 'Enrolled' : 'Not Enrolled'}</span>
+                                </li>
+                                <li class="mb-2 d-flex justify-content-between">
+                                    <small class="text-muted">Progress:</small>
+                                    <span>${course.progress_percent ? Math.round(course.progress_percent) + '%' : '0%'}</span>
+                                </li>
+                            </ul>
+                            
+                            ${isCompleted ? `
+                                <button class="btn btn-success w-100 mb-2" onclick="window.__app.viewCertificate('${course.enrollment_id}')">
+                                    <i class="bi bi-award me-1"></i>View Certificate
+                                </button>
+                                <button class="btn btn-outline-primary w-100" onclick="window.__app.continueCourse('${course.id}')">
+                                    <i class="bi bi-arrow-clockwise me-1"></i>Review Course
+                                </button>
+                            ` : isEnrolled ? `
+                                <button class="btn btn-primary w-100" onclick="window.__app.continueCourse('${course.id}'); bootstrap.Modal.getInstance(document.getElementById('lms-course-detail-modal')).hide();">
+                                    <i class="bi bi-play-circle me-1"></i>Continue Learning
+                                </button>
+                            ` : `
+                                <button class="btn btn-primary w-100" id="lms-btn-enroll-course" data-course-id="${course.id}">
+                                    <i class="bi bi-person-plus me-1"></i>Enroll Now
+                                </button>
+                            `}
+                            
+                            ${state.currentUser?.role && ['superadmin', 'hr', 'manager'].includes(state.currentUser.role) ? `
+                                <hr class="my-3">
+                                <button class="btn btn-outline-secondary btn-sm w-100" onclick="window.__app.editCourse('${course.id}'); bootstrap.Modal.getInstance(document.getElementById('lms-course-detail-modal')).hide();">
+                                    <i class="bi bi-pencil me-1"></i>Edit Course
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Store course ID for enrollment button
+        const enrollBtn = document.getElementById('lms-btn-enroll-course');
+        if (enrollBtn) {
+            enrollBtn.dataset.courseId = course.id;
+        }
+        
+        modal.show();
+        notify.close();
+    } catch (error) {
+        console.error('Failed to load course details:', error);
+        notify.error('Failed to load course details');
+    }
+}
                     <h6>Description</h6>
                     <p>${course.description || 'No description available'}</p>
                     
@@ -901,44 +1007,52 @@ function generateCourseForm(course = {}) {
 }
 
 async function handleSaveCourse() {
-    const title = document.getElementById('course-title').value.trim();
-    if (!title) {
-        notify.error('Course title is required');
+    // Get form data
+    const courseData = getCourseFormData();
+    if (!courseData) {
+        notify.error('Failed to read form data');
         return;
     }
-
-    const courseData = {
-        title,
-        short_description: document.getElementById('course-short-desc').value.trim(),
-        description: document.getElementById('course-description-editor').innerHTML,
-        category: document.getElementById('course-category').value,
-        difficulty_level: document.getElementById('course-difficulty').value,
-        estimated_duration_minutes: parseInt(document.getElementById('course-duration').value) || 0,
-        passing_score: parseInt(document.getElementById('course-passing-score').value) || 70,
-        thumbnail_url: document.getElementById('course-thumbnail').value.trim(),
-        content_url: document.getElementById('course-video').value.trim(),
-        is_mandatory: document.getElementById('course-mandatory').checked
-    };
-
-    const courseId = document.getElementById('course-id').value;
-
+    
+    // Validate
+    const errors = validateCourseForm(courseData);
+    if (errors.length > 0) {
+        notify.error(errors.join('<br>'));
+        return;
+    }
+    
+    // Show loading
+    const saveBtn = document.getElementById('lms-btn-save-course');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+    
     try {
-        const result = courseId 
-            ? await lmsData.updateCourse(courseId, courseData)
+        const result = courseData.id 
+            ? await lmsData.updateCourse(courseData.id, courseData)
             : await lmsData.createCourse(courseData);
         
-        notify.success(courseId ? 'Course updated successfully' : 'Course created successfully');
+        notify.success(courseData.id ? 'Course updated successfully!' : 'Course created successfully!');
         
-        bootstrap.Modal.getInstance(document.getElementById('lms-course-form-modal')).hide();
-        
-        if (currentLmsView === 'admin-courses') {
-            loadAdminCourses();
-        } else if (currentLmsView === 'catalog') {
-            loadCatalog();
+        // Close modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('lms-course-form-modal'));
+        if (modal) {
+            modal.hide();
         }
+        
+        // Refresh appropriate view
+        if (currentLmsView === 'admin-courses') {
+            await loadAdminCourses();
+        } else if (currentLmsView === 'catalog') {
+            await loadCatalog();
+        }
+        
     } catch (error) {
         console.error('Failed to save course:', error);
         notify.error('Failed to save course: ' + (error.message || 'Unknown error'));
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalText;
     }
 }
 
@@ -1004,4 +1118,22 @@ window.__app.continueCourse = (courseId) => {
 window.__app.viewCertificate = (enrollmentId) => {
     notify.info('Certificate download coming in Sprint 4');
     // TODO: Implement certificate download
+};
+window.__app.clearCatalogFilters = () => {
+    const searchInput = document.getElementById('lms-catalog-search');
+    const categorySelect = document.getElementById('lms-catalog-category');
+    const difficultySelect = document.getElementById('lms-catalog-difficulty');
+    
+    if (searchInput) searchInput.value = '';
+    if (categorySelect) categorySelect.value = '';
+    if (difficultySelect) difficultySelect.value = '';
+    
+    loadCatalog();
+};
+window.__app.goToPage = (page) => {
+    const search = document.getElementById('lms-catalog-search')?.value || '';
+    const category = document.getElementById('lms-catalog-category')?.value || '';
+    const difficulty = document.getElementById('lms-catalog-difficulty')?.value || '';
+    
+    loadCatalogWithFilters({ search, category, difficulty_level: difficulty, page });
 };
