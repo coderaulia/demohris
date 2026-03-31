@@ -2,9 +2,9 @@
 // LMS COURSE MANAGER - Course CRUD and Form Management
 // ==================================================
 
-import { state } from '../lib/store.js';
-import { escapeHTML } from '../lib/utils.js';
-import * as notify from '../lib/notify.js';
+import { state } from '../../lib/store.js';
+import { escapeHTML } from '../../lib/utils.js';
+import * as notify from '../../lib/notify.js';
 import * as lmsData from '../data/lms.js';
 
 let quillEditor = null;

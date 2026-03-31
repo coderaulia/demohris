@@ -16,16 +16,16 @@
 - [x] Task 1.4: Integrate Quill.js rich text editor ✅ 2026-03-31
 
 ### Sprint 2: Student Experience (Week 2)
-- [ ] Task 2.1: Create lesson viewer component
-- [ ] Task 2.2: Implement progress tracking UI
-- [ ] Task 2.3: Build enrollment flow
-- [ ] Task 2.4: Add "My Learning" dashboard
+- [x] Task 2.1: Create lesson viewer component ✅ 2026-03-31
+- [x] Task 2.2: Implement progress tracking UI ✅ 2026-03-31
+- [x] Task 2.3: Build enrollment flow ✅ 2026-03-31
+- [x] Task 2.4: Add "My Learning" dashboard ✅ 2026-03-31
 
 ### Sprint 3: Quiz & Assessment (Week 3)
-- [ ] Task 3.1: Quiz taking interface
-- [ ] Task 3.2: Question renderer (multiple choice, T/F, etc.)
-- [ ] Task 3.3: Auto-grading integration
-- [ ] Task 3.4: Score display and retry logic
+- [x] Task 3.1: Quiz taking interface ✅ 2026-03-31
+- [x] Task 3.2: Question renderer (multiple choice, T/F, etc.) ✅ 2026-03-31
+- [x] Task 3.3: Auto-grading integration ✅ 2026-03-31
+- [x] Task 3.4: Score display and retry logic ✅ 2026-03-31
 
 ### Sprint 4: Admin Features (Week 4)
 - [ ] Task 4.1: Admin dashboard

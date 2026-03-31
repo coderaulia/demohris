@@ -2,8 +2,8 @@
 // LMS PROGRESS WIDGETS - Visual Progress Components
 // ==================================================
 
-import { state } from '../lib/store.js';
-import { escapeHTML } from '../lib/utils.js';
+import { state } from '../../lib/store.js';
+import { escapeHTML } from '../../lib/utils.js';
 
 // ==================================================
 // CIRCULAR PROGRESS INDICATOR

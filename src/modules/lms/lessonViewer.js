@@ -2,10 +2,11 @@
 // LMS LESSON VIEWER - Course Content Player
 // ==================================================
 
-import { state } from '../lib/store.js';
-import { escapeHTML, formatDate, formatDateTime } from '../lib/utils.js';
-import * as notify from '../lib/notify.js';
+import { state } from '../../lib/store.js';
+import { escapeHTML, formatDate, formatDateTime } from '../../lib/utils.js';
+import * as notify from '../../lib/notify.js';
 import * as lmsData from '../data/lms.js';
+import { startQuiz as startQuizModal } from './quizTaker.js';
 
 let currentEnrollment = null;
 let currentSection = null;
@@ -598,12 +599,15 @@ function findStartLesson(section, progress) {
 }
 
 // ==================================================
-// QUIZ HANDLER (PLACEHOLDER)
+// QUIZ HANDLER
 // ==================================================
 
 async function startQuiz(lessonId) {
-    notify.info('Quiz functionality coming in Sprint 3');
-    // TODO: Implement quiz modal in Sprint 3
+    if (!currentEnrollment) {
+        notify.error('No active enrollment');
+        return;
+    }
+    await startQuizModal(lessonId, currentEnrollment);
 }
 
 // ==================================================

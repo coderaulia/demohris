@@ -2,9 +2,9 @@
 // LMS ENROLLMENT FLOW - Enrollment Confirmation and Management
 // ==================================================
 
-import { state } from '../lib/store.js';
-import { escapeHTML, formatDate, formatDateTime } from '../lib/utils.js';
-import * as notify from '../lib/notify.js';
+import { state } from '../../lib/store.js';
+import { escapeHTML, formatDate, formatDateTime } from '../../lib/utils.js';
+import * as notify from '../../lib/notify.js';
 import * as lmsData from '../data/lms.js';
 import { openLessonViewer } from './lessonViewer.js';
 

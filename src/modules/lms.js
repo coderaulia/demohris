@@ -867,66 +867,7 @@ async function showCourseDetails(courseId) {
         modal.show();
         notify.close();
     } catch (error) {
-        console.error('Failed to load course details:', error);
-        notify.error('Failed to load course details');
-    }
-}
-                    <h6>Description</h6>
-                    <p>${course.description || 'No description available'}</p>
-                    
-                    <h6>What You'll Learn</h6>
-                    <p>${course.short_description || ''}</p>
-                    
-                    <h6 class="mt-4">Course Details</h6>
-                    <div class="row">
-                        <div class="col-6 mb-2">
-                            <small class="text-muted">Duration</small>
-                            <div>${course.estimated_duration_minutes || 0} minutes</div>
-                        </div>
-                        <div class="col-6 mb-2">
-                            <small class="text-muted">Difficulty</small>
-                            <div>${course.difficulty_level || 'Beginner'}</div>
-                        </div>
-                        <div class="col-6 mb-2">
-                            <small class="text-muted">Category</small>
-                            <div>${course.category || 'General'}</div>
-                        </div>
-                        <div class="col-6 mb-2">
-                            <small class="text-muted">Passing Score</small>
-                            <div>${course.passing_score || 70}%</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h6 class="card-title">Enrollment Stats</h6>
-                            <ul class="list-unstyled">
-                                <li class="mb-2">
-                                    <small class="text-muted">Enrolled:</small>
-                                    <span class="float-end">${course.enrollment_count || 0}</span>
-                                </li>
-                                <li class="mb-2">
-                                    <small class="text-muted">Completed:</small>
-                                    <span class="float-end">${course.completion_count || 0}</span>
-                                </li>
-                                <li class="mb-2">
-                                    <small class="text-muted">Avg Rating:</small>
-                                    <span class="float-end">${course.avg_rating ? course.avg_rating.toFixed(1) : '-'}</span>
-                                </li>
-                            </ul>
-                            <button class="btn btn-primary w-100" onclick="window.__app.enrollInCourse('${course.id}')">
-                                <i class="bi bi-person-plus me-1"></i>Enroll Now
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        modal.show();
-    } catch (error) {
-        console.error('Failed to load course details:', error);
+console.error('Failed to load course details:', error);
         notify.error('Failed to load course details');
     }
 }
