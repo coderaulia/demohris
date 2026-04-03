@@ -28,6 +28,32 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-03 - React Shell + Adapter Migration Baseline
+- Commit/PR: pending
+- Type: refactor(frontend) | docs
+- Scope: React + TypeScript shell, adapter architecture, shared contracts
+- Completed:
+  - Added isolated React app at `apps/web-react` (React 19, TypeScript, Vite, Router, TanStack Query).
+  - Added shared contract package at `packages/contracts` using Zod schemas aligned to golden fixtures.
+  - Added centralized adapter transport switch with `authAdapter`, `lmsAdapter`, and `tnaAdapter`.
+  - Added `AuthProvider` that resolves Supabase JWT session first and falls back to legacy `auth/session`.
+  - Added shell routes (`/dashboard`, `/lms/*`, `/tna/*`) with route guard, layout, and error boundary.
+  - Migrated first safe frontend slice: dashboard shell only.
+  - Added docs:
+    - `docs/frontend-architecture.md`
+    - `docs/frontend-migration-checklist.md`
+  - Verified `apps/web-react` production build passes.
+- Gap Found:
+  - LMS and TNA screens remain placeholders in React shell by design.
+  - Auth parity evidence in staging is still blocked by backend DB connectivity for configured local target.
+- Next Follow-up:
+  - [ ] Complete auth parity validation against staging-ready backend target.
+  - [ ] Migrate next safe slice (module list or read-only LMS summary) via adapters.
+  - [ ] Add adapter-level contract regression tests in frontend workspace.
+- Notes:
+  - Legacy frontend remains untouched and available as fallback.
+  - Migration remains reversible through centralized adapter routing.
+
 ## 2026-04-03 - Supabase Auth Stabilization and Staging Validation Harness
 - Commit/PR: pending
 - Type: refactor(auth) | test | docs
