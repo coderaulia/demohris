@@ -8,6 +8,15 @@ Purpose: define a reality-based, incremental full-stack migration path for HR Pe
 - Frontend direction: **React + TypeScript + Vite**, still deployable as static build on Hostinger.
 - Auth direction: replace `express-session` with **Supabase Auth (JWT)** and role-aware backend checks.
 
+## Execution Update (2026-04-03)
+- Completed in current slice:
+  - dual-auth bridge foundation (session + Supabase JWT acceptance)
+  - frozen golden contract fixtures and contract tests
+  - Supabase profile + minimal RLS migration SQL foundation
+- Explicitly not migrated yet:
+  - LMS and TNA business logic/domain data paths
+  - legacy endpoint retirement
+
 ## Phase 0 - Reality Check (Code-Verified)
 
 ### 1) Current Architecture Summary
@@ -261,4 +270,3 @@ demo-kpi/
 ### 6) Exact platform recommendation
 - **Choose Supabase first for this codebase.**
 - Cloudflare Workers can be introduced later for edge-specific workloads after core auth/data migration stabilizes.
-

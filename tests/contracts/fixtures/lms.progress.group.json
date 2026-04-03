@@ -1,0 +1,42 @@
+{
+  "id": "lms/progress/*",
+  "route": "/api?action=lms/progress/*",
+  "method": "POST",
+  "actions": [
+    {
+      "action": "lms/progress/get",
+      "requestBody": {
+        "enrollment_id": "uuid",
+        "lesson_id": "optional-uuid"
+      },
+      "responseRequiredKeys": [
+        "success",
+        "progress"
+      ]
+    },
+    {
+      "action": "lms/progress/update",
+      "requestBody": {
+        "enrollment_id": "uuid",
+        "lesson_id": "uuid",
+        "progress_percent": 35,
+        "time_spent_seconds": 120
+      },
+      "responseRequiredKeys": [
+        "success"
+      ]
+    },
+    {
+      "action": "lms/progress/complete-lesson",
+      "requestBody": {
+        "enrollment_id": "uuid",
+        "lesson_id": "uuid"
+      },
+      "responseRequiredKeys": [
+        "success",
+        "enrollment"
+      ]
+    }
+  ]
+}
+

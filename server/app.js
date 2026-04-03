@@ -8,6 +8,9 @@ import express from 'express';
 import session from 'express-session';
 import mysql from 'mysql2/promise';
 
+import { createDualAuthBridgeMiddleware } from './compat/authBridge.js';
+import { verifySupabaseJwt } from './compat/supabaseClient.js';
+import { normalizeAuthSessionResponse, normalizeErrorResponse } from './compat/responseNormalizer.js';
 import { getTableMeta, getRegisteredTables, isTableRegistered, isTableReadable, isTableWritable } from './modules/registry.js';
 import { isFeatureEnabled } from './features.js';
 import { isTnaEnabled, handleTnaAction } from './modules/tna.js';
@@ -42,7 +45,7 @@ const SESSION_COOKIE_SECURE = ['1', 'true', 'yes', 'on'].includes(
     String(process.env.SESSION_COOKIE_SECURE || (SESSION_COOKIE_SAME_SITE === 'none' ? 'true' : process.env.NODE_ENV === 'production')).trim().toLowerCase()
 );
 
-const pool = mysql.createPool({
+export const pool = mysql.createPool({
     host: process.env.MYSQL_HOST || '127.0.0.1',
     port: Number(process.env.MYSQL_PORT || 3306),
     database: process.env.MYSQL_DATABASE || 'demo_kpi',
@@ -178,7 +181,7 @@ function buildOrder(orders = []) {
     return ` ORDER BY ${orders.map(order => `${escapeId(order?.column)} ${order?.ascending ? 'ASC' : 'DESC'}`).join(', ')}`;
 }
 
-async function queryRows(table, { filters = [], orders = [], limit = null } = {}) {
+export async function queryRows(table, { filters = [], orders = [], limit = null } = {}) {
     const values = [];
     let sql = `SELECT * FROM ${escapeId(table)}`;
     sql += buildWhere(filters, values);
@@ -191,7 +194,7 @@ async function queryRows(table, { filters = [], orders = [], limit = null } = {}
     return rows.map(row => normalizeRow(table, row));
 }
 
-async function getRowByPrimaryKey(table, id) {
+export async function getRowByPrimaryKey(table, id) {
     const primaryKey = getPrimaryKey(table);
     const rows = await queryRows(table, {
         filters: [{ op: 'eq', column: primaryKey, value: id }],
@@ -237,6 +240,40 @@ async function getCurrentUser(req) {
     req.currentUser = profile;
     return profile;
 }
+
+async function resolveSessionBridgeUser(sessionUserId) {
+    if (!sessionUserId) return null;
+    return await getRowByPrimaryKey('employees', sessionUserId);
+}
+
+async function resolveJwtBridgeUser(claims = {}) {
+    const sub = String(claims?.sub || '').trim();
+    const email = String(claims?.email || '').trim().toLowerCase();
+
+    if (sub) {
+        const byAuthId = await queryRows('employees', {
+            filters: [{ op: 'eq', column: 'auth_id', value: sub }],
+            limit: 1,
+        });
+        if (byAuthId[0]) return byAuthId[0];
+    }
+
+    if (email) {
+        const byEmail = await queryRows('employees', {
+            filters: [{ op: 'eq', column: 'auth_email', value: email }],
+            limit: 1,
+        });
+        if (byEmail[0]) return byEmail[0];
+    }
+
+    return null;
+}
+
+const dualAuthBridgeMiddleware = createDualAuthBridgeMiddleware({
+    resolveSessionUser: resolveSessionBridgeUser,
+    resolveJwtUser: resolveJwtBridgeUser,
+    verifyJwt: verifySupabaseJwt,
+});
 
 async function getAccessibleEmployeeIds(req) {
     const user = await getCurrentUser(req);
@@ -523,7 +560,7 @@ async function handleAuthAction(req, res, action) {
 
     if (action === 'auth/session') {
         const user = await getCurrentUser(req);
-        res.json({ profile: user || null });
+        res.json(normalizeAuthSessionResponse(user || null));
         return;
     }
 
@@ -714,6 +751,7 @@ app.use(session({
         maxAge: 1000 * 60 * 60 * 8,
     },
 }));
+app.use(dualAuthBridgeMiddleware);
 
 app.get('/api/health', async (_req, res, next) => {
     try {
@@ -820,21 +858,12 @@ if (fs.existsSync(distDir)) {
 
 app.use((error, _req, res, _next) => {
     const status = Number(error?.status || 500);
-    const message = error?.message || 'Internal server error';
-    const code = error?.code || 'SERVER_ERROR';
-    const details = error?.details || '';
 
     if (status >= 500) {
         console.error(error);
     }
 
-    res.status(status).json({
-        error: {
-            message,
-            code,
-            details,
-        },
-    });
+    res.status(status).json(normalizeErrorResponse(error));
 });
 
 app.listen(PORT, () => {

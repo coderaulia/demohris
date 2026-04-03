@@ -21,6 +21,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | LMS Sprint 4 (Admin Features) | In progress | Completed feature set | Dashboard, bulk assignment, analytics, certificate hardening not finalized | High | Team | Implement Sprint 4 backlog in sequence |
 | API Documentation | Partial | Fully documented and verified | Endpoint behavior/status matrix incomplete | Medium | Team | Keep `docs/api-endpoint.md` updated per feature delivery |
 | API/Code Consistency Sync | In progress | Fully aligned contract | Endpoint examples + regression tests still pending after route/action sync | High | Team | Add API tests and finalize per-action examples |
+| Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Needs staging rollout and integration parity checks | High | Team | Validate dual-auth in staging and keep legacy fallback active |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
 
 ## Feature Roadmap Backlog
@@ -57,7 +58,7 @@ Goal: migrate to React + TypeScript + Vite frontend and Supabase-first backend w
 | Refactor Phase | Status | Objective | Gate to Exit |
 |---|---|---|---|
 | Phase A - Architecture hardening / inventory | In progress | Freeze API contracts, role matrix, and migration inventory | Contract fixtures + baseline tests approved |
-| Phase B - Database and auth foundation | Planned | Stand up Supabase, migrate schema, implement JWT auth bridge | Dual-auth bridge validated in staging |
+| Phase B - Database and auth foundation | In progress | Stand up Supabase, migrate schema, implement JWT auth bridge | Dual-auth bridge validated in staging |
 | Phase C - Backend domain migration | Planned | Migrate auth and domain APIs (LMS first, then TNA) | LMS/TNA parity tests pass against new backend |
 | Phase D - Frontend shell migration | Planned | Introduce React+TS app shell with adapter data layer | React shell routes/auth guards stable in staging |
 | Phase E - Module-by-module cutover | Planned | Incrementally switch modules to new stack | UAT signoff per module with rollback plan |

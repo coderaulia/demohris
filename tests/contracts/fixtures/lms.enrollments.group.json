@@ -1,0 +1,84 @@
+{
+  "id": "lms/enrollments/*",
+  "route": "/api?action=lms/enrollments/*",
+  "method": "POST",
+  "actions": [
+    {
+      "action": "lms/enrollments/list",
+      "requestBody": {
+        "course_id": "optional-uuid",
+        "status": "optional-status",
+        "page": 1,
+        "limit": 20
+      },
+      "responseRequiredKeys": [
+        "success",
+        "enrollments"
+      ]
+    },
+    {
+      "action": "lms/enrollments/get",
+      "requestBody": {
+        "enrollment_id": "uuid"
+      },
+      "responseRequiredKeys": [
+        "success",
+        "enrollment"
+      ]
+    },
+    {
+      "action": "lms/enrollments/enroll",
+      "requestBody": {
+        "course_id": "uuid",
+        "employee_id": "optional-employee-id",
+        "enrollment_type": "self|assigned"
+      },
+      "responseRequiredKeys": [
+        "success",
+        "enrollment"
+      ]
+    },
+    {
+      "action": "lms/enrollments/unenroll",
+      "requestBody": {
+        "enrollment_id": "uuid"
+      },
+      "responseRequiredKeys": [
+        "success"
+      ]
+    },
+    {
+      "action": "lms/enrollments/my-courses",
+      "requestBody": {
+        "status": "optional-status",
+        "page": 1,
+        "limit": 20
+      },
+      "responseRequiredKeys": [
+        "success",
+        "enrollments"
+      ]
+    },
+    {
+      "action": "lms/enrollments/start",
+      "requestBody": {
+        "course_id": "uuid"
+      },
+      "responseRequiredKeys": [
+        "success",
+        "enrollment"
+      ]
+    },
+    {
+      "action": "lms/enrollments/complete",
+      "requestBody": {
+        "enrollment_id": "uuid"
+      },
+      "responseRequiredKeys": [
+        "success",
+        "enrollment"
+      ]
+    }
+  ]
+}
+

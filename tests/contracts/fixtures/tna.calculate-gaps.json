@@ -1,0 +1,23 @@
+{
+  "id": "tna/calculate-gaps",
+  "route": "/api?action=tna/calculate-gaps",
+  "method": "POST",
+  "request": {
+    "body": {
+      "employee_id": "EMP-0001",
+      "threshold": 7
+    }
+  },
+  "response": {
+    "status": 200,
+    "requiredTopLevelKeys": [
+      "data"
+    ],
+    "requiredDataKeys": [
+      "employee_id",
+      "position",
+      "gaps"
+    ]
+  }
+}
+

@@ -1,0 +1,79 @@
+{
+  "id": "modules/*",
+  "route": "/api/modules?action=*",
+  "method": "POST",
+  "actions": [
+    {
+      "action": "list",
+      "requestBody": {},
+      "responseRequiredKeys": [
+        "success",
+        "modules"
+      ]
+    },
+    {
+      "action": "get",
+      "requestBody": {
+        "moduleId": "LMS"
+      },
+      "responseRequiredKeys": [
+        "success",
+        "module"
+      ]
+    },
+    {
+      "action": "update",
+      "requestBody": {
+        "moduleId": "LMS",
+        "settings": {
+          "enabled": true
+        }
+      },
+      "responseRequiredKeys": [
+        "success"
+      ]
+    },
+    {
+      "action": "toggle",
+      "requestBody": {
+        "moduleId": "LMS",
+        "enable": true
+      },
+      "responseRequiredKeys": [
+        "success",
+        "module"
+      ]
+    },
+    {
+      "action": "activity",
+      "requestBody": {
+        "moduleId": "LMS",
+        "limit": 20,
+        "offset": 0
+      },
+      "responseRequiredKeys": [
+        "success",
+        "activity"
+      ]
+    },
+    {
+      "action": "by-category",
+      "requestBody": {
+        "category": "talent"
+      },
+      "responseRequiredKeys": [
+        "success",
+        "modules"
+      ]
+    },
+    {
+      "action": "active",
+      "requestBody": {},
+      "responseRequiredKeys": [
+        "success",
+        "modules"
+      ]
+    }
+  ]
+}
+

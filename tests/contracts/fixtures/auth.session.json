@@ -1,0 +1,16 @@
+{
+  "id": "auth/session",
+  "route": "/api?action=auth/session",
+  "method": "GET",
+  "request": {
+    "body": {}
+  },
+  "response": {
+    "status": 200,
+    "requiredTopLevelKeys": [
+      "profile"
+    ],
+    "profileCanBeNull": true
+  }
+}
+

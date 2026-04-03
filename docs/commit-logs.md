@@ -28,6 +28,27 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-03 - Supabase Foundation + Dual-Auth Bridge Baseline
+- Commit/PR: pending
+- Type: refactor(backend) | test | docs
+- Scope: auth bridge foundation, contract freeze, Supabase profile/RLS base
+- Completed:
+  - Added golden contract fixtures for auth, LMS enrollments/progress, TNA calculate-gaps, and module endpoints.
+  - Added contract and auth-bridge tests (`npm run qa:contracts`).
+  - Implemented backend dual-auth bridge middleware (legacy session first, then Supabase JWT).
+  - Added Supabase migration foundation (`profiles` table + minimal RLS policies).
+  - Added migration runbook doc: `docs/supabase-backend-migration.md`.
+- Gap Found:
+  - Supabase staging rollout and real JWT integration tests are not executed yet.
+  - LMS/TNA domain logic is intentionally still on legacy backend.
+- Next Follow-up:
+  - [ ] Validate dual-auth bridge in staging with real Supabase JWT.
+  - [ ] Add integration contract tests for auth/session parity.
+  - [ ] Prepare first non-critical domain cutover after auth stabilization.
+- Notes:
+  - Session auth remains active fallback by design.
+  - No legacy endpoint removal in this slice.
+
 ## 2026-04-03 - Full-Stack Refactor Planning Baseline
 - Commit/PR: pending
 - Type: docs(refactor)

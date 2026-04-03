@@ -1,0 +1,23 @@
+{
+  "id": "auth/login",
+  "route": "/api?action=auth/login",
+  "method": "POST",
+  "request": {
+    "body": {
+      "email": "user@example.com",
+      "password": "********"
+    }
+  },
+  "response": {
+    "status": 200,
+    "requiredTopLevelKeys": [
+      "profile"
+    ],
+    "requiredProfileKeys": [
+      "employee_id",
+      "role",
+      "auth_email"
+    ]
+  }
+}
+
