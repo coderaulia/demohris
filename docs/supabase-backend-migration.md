@@ -2,6 +2,25 @@
 
 Purpose: stabilize Supabase-backed auth for `demo-kpi` using a dual-auth bridge and contract-first controls, without migrating LMS/TNA logic yet.
 
+## Execution Update (2026-04-03, DB Baseline Slice)
+- Added full Supabase baseline migrations through:
+  - `0003_core_auth_and_modules.sql`
+  - `0004_lms_core_tables.sql`
+  - `0005_lms_progress_quiz_tables.sql`
+  - `0006_tna_baseline_tables.sql`
+  - `0007_rls_baseline.sql`
+  - `0008_seed_helpers_and_triggers.sql`
+  - `0009_kpi_baseline_tables.sql`
+- Added deterministic seed data:
+  - `supabase/seeds/seed_dev_staging.sql`
+- Added auth user provisioning script:
+  - `scripts/qa/supabase-provision-auth-users.mjs`
+- Added provisioning command:
+  - `npm run qa:supabase:auth-users`
+- Provisioning status:
+  - `npm run qa:supabase:provision` -> pass
+  - `npm run qa:supabase:auth-users` -> pass
+
 ## Scope and Guardrails
 - Keep legacy Express + MySQL runtime active.
 - Keep current API contract stable.
@@ -187,6 +206,26 @@ To finish staging parity validation:
 1. Run backend against reachable MySQL (or point `BACKEND_BASE_URL` to staging backend with DB access).
 2. Re-run `npm run qa:auth:staging`.
 3. Confirm parity report and failure-case outcomes.
+
+## Step 12 - Supabase Schema/Seed Baseline Outcome
+
+What is now true:
+- Supabase dev/staging has a complete runnable schema baseline for:
+  - core/auth/module tables
+  - LMS baseline tables
+  - TNA baseline tables
+  - KPI/probation/PIP baseline tables
+- Seeded deterministic non-production baseline data is available for contract-safe development.
+- Test auth users can be provisioned and mapped to seeded employees/profiles.
+
+What is still legacy:
+- Express runtime query engine is still MySQL-based for most domain handlers.
+- `/api/health` still fails if MySQL is unavailable (`ECONNREFUSED 127.0.0.1:3306`).
+- Full backend domain cutover to Supabase query path is deferred to next migration slices.
+
+Related docs:
+- `docs/supabase-schema-baseline.md`
+- `docs/supabase-seed-plan.md`
 
 ## Step 11 - Status, Migrated Domain, Next Slice
 

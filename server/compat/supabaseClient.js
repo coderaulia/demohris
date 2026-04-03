@@ -63,7 +63,7 @@ export async function verifySupabaseJwt(token) {
 
 function mapRole(rawRole) {
     const normalized = String(rawRole || '').trim().toLowerCase();
-    if (['employee', 'manager', 'hr', 'superadmin'].includes(normalized)) {
+    if (['employee', 'manager', 'director', 'hr', 'superadmin'].includes(normalized)) {
         return normalized;
     }
     return 'employee';

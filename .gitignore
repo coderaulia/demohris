@@ -40,6 +40,7 @@ seed_*.json
 seed_*.sql
 *_seed.json
 *_seed.sql
+!supabase/seeds/seed_dev_staging.sql
 *.dump
 *.bak
 *.tmp

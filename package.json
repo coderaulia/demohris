@@ -25,6 +25,7 @@
     "qa:hardening": "npm run qa:migrations && npm run qa:rls-audit",
     "qa:contracts": "node --test tests/contracts/*.test.mjs",
     "qa:supabase:provision": "node scripts/qa/supabase-provision.mjs",
+    "qa:supabase:auth-users": "node scripts/qa/supabase-provision-auth-users.mjs",
     "qa:auth:staging": "node scripts/qa/supabase-auth-staging-check.mjs"
   },
   "devDependencies": {

@@ -24,6 +24,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | API Documentation | Partial | Fully documented and verified | Endpoint behavior/status matrix incomplete | Medium | Team | Keep `docs/api-endpoint.md` updated per feature delivery |
 | API/Code Consistency Sync | In progress | Fully aligned contract | Endpoint examples + regression tests still pending after route/action sync | High | Team | Add API tests and finalize per-action examples |
 | Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Provisioning complete; parity evidence still pending | High | Team | Keep legacy fallback active and finalize auth parity evidence |
+| Supabase Schema + Seed Baseline | Completed (dev/staging baseline) | Supabase is the active development/staging data foundation | Backend runtime still has legacy MySQL query coupling for domain handlers | High | Team | Start backend domain query cutover from MySQL to Supabase by module |
 | Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Backend target in `BACKEND_BASE_URL` fails health check due MySQL connectivity (`ECONNREFUSED 127.0.0.1:3306`) | High | Team | Run backend with reachable DB (or point to staging backend) and rerun `qa:auth:staging` |
 | React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Shell exists, but LMS/TNA screens are still legacy placeholders | High | Team | Migrate next safe view through adapters after auth parity unblocks |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
@@ -63,6 +64,7 @@ Goal: migrate to React + TypeScript + Vite frontend and Supabase-first backend w
 |---|---|---|---|
 | Phase A - Architecture hardening / inventory | In progress | Freeze API contracts, role matrix, and migration inventory | Contract fixtures + baseline tests approved |
 | Phase B - Database and auth foundation | In progress | Stand up Supabase, migrate schema, implement JWT auth bridge | Dual-auth bridge validated in staging |
+| Phase B.1 - Supabase schema/seed baseline | Completed | Replace dummy MySQL data as dev/staging data source with Supabase schema + seed | Migrations and seeds applied; auth seed users provisioned |
 | Phase C - Backend domain migration | Planned | Migrate auth and domain APIs (LMS first, then TNA) | LMS/TNA parity tests pass against new backend |
 | Phase D - Frontend shell migration | In progress | React+TS app shell + adapters + dual-auth provider | Shell build passes and dashboard route is stable with auth guard |
 | Phase E - Module-by-module cutover | Planned | Incrementally switch modules to new stack | UAT signoff per module with rollback plan |
@@ -70,3 +72,7 @@ Goal: migrate to React + TypeScript + Vite frontend and Supabase-first backend w
 
 Primary architecture recommendation: Supabase-first backend.  
 Fallback/secondary: add Cloudflare Workers later only for edge-oriented workloads after core migration stabilizes.
+
+Data foundation note:
+- Dummy MySQL seed files are retired as development source-of-truth.
+- Legacy MySQL runtime path remains temporary compatibility code until domain query cutover is completed.

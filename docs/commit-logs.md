@@ -28,6 +28,33 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-03 - Supabase Schema + Seed Baseline Milestone
+- Commit/PR: pending
+- Type: refactor(db) | docs | chore
+- Scope: full Supabase baseline migrations, deterministic seed data, auth-profile provisioning runbook
+- Completed:
+  - Added Supabase migrations for core/module, LMS, TNA, compatibility triggers, RLS baseline, and KPI/probation/PIP baseline (`0003`-`0009`).
+  - Added deterministic non-production seed file: `supabase/seeds/seed_dev_staging.sql`.
+  - Updated provisioning script to apply schema + seed in one command:
+    - `npm run qa:supabase:provision`
+  - Added auth user/profile provisioning script:
+    - `npm run qa:supabase:auth-users`
+  - Applied migrations and seed to linked dev/staging Supabase targets.
+  - Added schema and seed docs:
+    - `docs/supabase-schema-baseline.md`
+    - `docs/supabase-seed-plan.md`
+  - Updated migration/project status docs with baseline validation outcomes.
+- Gap Found:
+  - Legacy Express runtime still executes most domain SQL via MySQL pool.
+  - Backend health/auth parity remains blocked when MySQL is unavailable.
+- Next Follow-up:
+  - [ ] Begin module-by-module backend query cutover to Supabase (start with low-risk read endpoints).
+  - [ ] Add Supabase-backed integration smoke tests for one LMS and one TNA authenticated path.
+  - [ ] Keep contract fixtures frozen; update only with explicit drift documentation.
+- Notes:
+  - Dummy MySQL seed files are no longer treated as development source-of-truth for data.
+  - Migration remains reversible while legacy runtime compatibility path is still present.
+
 ## 2026-04-03 - React Shell + Adapter Migration Baseline
 - Commit/PR: pending
 - Type: refactor(frontend) | docs

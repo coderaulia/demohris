@@ -91,6 +91,26 @@ async function applyMigrations(envLabel, projectRef, dbPassword) {
     ], {
         env: { ...process.env, SUPABASE_ACCESS_TOKEN: env('SUPABASE_ACCESS_TOKEN') },
     });
+
+    const seedFile = path.join(rootDir, 'supabase', 'seeds', 'seed_dev_staging.sql');
+    if (!fs.existsSync(seedFile)) {
+        console.log(`- Seed skipped for ${envLabel}: ${seedFile} not found.`);
+        return;
+    }
+
+    console.log(`- Applying seed file to ${envLabel}: ${seedFile}`);
+    await run('npx', [
+        'supabase@latest',
+        'db',
+        'query',
+        '--linked',
+        '--file',
+        seedFile,
+        '--workdir',
+        cliWorkdir,
+    ], {
+        env: { ...process.env, SUPABASE_ACCESS_TOKEN: env('SUPABASE_ACCESS_TOKEN') },
+    });
 }
 
 async function main() {
@@ -115,7 +135,7 @@ async function main() {
     await applyMigrations('dev', devRef, devDbPassword);
     await applyMigrations('staging', stagingRef, stagingDbPassword);
 
-    console.log('\nSupabase migration foundation applied to dev and staging.');
+    console.log('\nSupabase migration and seed baseline applied to dev and staging.');
 }
 
 main().catch(error => {
