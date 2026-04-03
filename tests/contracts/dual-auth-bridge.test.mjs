@@ -78,6 +78,46 @@ test('dual-auth bridge falls back to anonymous when no auth exists', async () =>
     assert.equal(req.currentUser, null);
 });
 
+test('dual-auth bridge falls back to anonymous when JWT is invalid', async () => {
+    const middleware = createDualAuthBridgeMiddleware({
+        resolveSessionUser: async () => null,
+        resolveJwtUser: async () => null,
+        verifyJwt: async () => null,
+    });
+
+    const req = {
+        session: {},
+        headers: { authorization: 'Bearer definitely-invalid' },
+    };
+    await runMiddleware(middleware, req);
+
+    assert.equal(req.authContext.source, 'anonymous');
+    assert.equal(req.authContext.tokenPresent, true);
+    assert.equal(req.user, null);
+});
+
+test('dual-auth bridge does not crash when resolved user has missing role', async () => {
+    const middleware = createDualAuthBridgeMiddleware({
+        resolveSessionUser: async () => null,
+        resolveJwtUser: async () => ({
+            employee_id: 'EMP-ROLE-MISSING',
+            auth_email: 'missing-role@example.com',
+            role: '',
+        }),
+        verifyJwt: async () => ({ sub: 'sub-role-missing', email: 'missing-role@example.com' }),
+    });
+
+    const req = {
+        session: {},
+        headers: { authorization: 'Bearer valid-token' },
+    };
+    await runMiddleware(middleware, req);
+
+    assert.equal(req.authContext.source, 'supabase-jwt');
+    assert.equal(req.user.employee_id, 'EMP-ROLE-MISSING');
+    assert.equal(req.user.role, '');
+});
+
 test('session and jwt sources produce compatible req.user shape', async () => {
     const sessionMiddleware = createDualAuthBridgeMiddleware({
         resolveSessionUser: async () => ({ ...baseUser }),
@@ -102,4 +142,3 @@ test('session and jwt sources produce compatible req.user shape', async () => {
         'req.user shape must match for both auth sources'
     );
 });
-

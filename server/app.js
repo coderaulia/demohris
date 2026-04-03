@@ -9,7 +9,7 @@ import session from 'express-session';
 import mysql from 'mysql2/promise';
 
 import { createDualAuthBridgeMiddleware } from './compat/authBridge.js';
-import { verifySupabaseJwt } from './compat/supabaseClient.js';
+import { verifySupabaseJwt, syncSupabaseProfileFromEmployee } from './compat/supabaseClient.js';
 import { normalizeAuthSessionResponse, normalizeErrorResponse } from './compat/responseNormalizer.js';
 import { getTableMeta, getRegisteredTables, isTableRegistered, isTableReadable, isTableWritable } from './modules/registry.js';
 import { isFeatureEnabled } from './features.js';
@@ -246,24 +246,108 @@ async function resolveSessionBridgeUser(sessionUserId) {
     return await getRowByPrimaryKey('employees', sessionUserId);
 }
 
+let employeesEmailColumnKnown = null;
+
+async function hasEmployeesEmailColumn() {
+    if (employeesEmailColumnKnown !== null) return employeesEmailColumnKnown;
+    try {
+        const [rows] = await pool.query(
+            `SELECT COUNT(*) AS cnt
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = 'employees'
+               AND COLUMN_NAME = 'email'`
+        );
+        employeesEmailColumnKnown = Number(rows?.[0]?.cnt || 0) > 0;
+    } catch {
+        employeesEmailColumnKnown = false;
+    }
+    return employeesEmailColumnKnown;
+}
+
+async function findEmployeeByAuthId(sub) {
+    if (!sub) return null;
+    const rows = await queryRows('employees', {
+        filters: [{ op: 'eq', column: 'auth_id', value: sub }],
+        limit: 1,
+    });
+    return rows[0] || null;
+}
+
+async function findEmployeeByMappedEmail(email) {
+    if (!email) return null;
+
+    const byAuthEmail = await queryRows('employees', {
+        filters: [{ op: 'eq', column: 'auth_email', value: email }],
+        limit: 1,
+    });
+    if (byAuthEmail[0]) return byAuthEmail[0];
+
+    if (await hasEmployeesEmailColumn()) {
+        try {
+            const byEmail = await queryRows('employees', {
+                filters: [{ op: 'eq', column: 'email', value: email }],
+                limit: 1,
+            });
+            if (byEmail[0]) return byEmail[0];
+        } catch {
+            // Keep bridge resilient if email column exists in some envs only.
+        }
+    }
+
+    return null;
+}
+
+async function assignJwtIdentityToEmployee(employeeId, { sub, email }) {
+    if (!employeeId || !sub) return;
+    await pool.query(
+        `UPDATE employees
+         SET auth_id = ?,
+             auth_email = COALESCE(NULLIF(?, ''), auth_email)
+         WHERE employee_id = ?`,
+        [sub, String(email || '').trim().toLowerCase(), employeeId]
+    );
+}
+
+async function syncSupabaseProfileSafe({ claims, employee }) {
+    try {
+        await syncSupabaseProfileFromEmployee({ claims, employee });
+    } catch (error) {
+        console.warn('Supabase profile sync failed:', error?.message || error);
+    }
+}
+
 async function resolveJwtBridgeUser(claims = {}) {
     const sub = String(claims?.sub || '').trim();
     const email = String(claims?.email || '').trim().toLowerCase();
 
-    if (sub) {
-        const byAuthId = await queryRows('employees', {
-            filters: [{ op: 'eq', column: 'auth_id', value: sub }],
-            limit: 1,
+    const byAuthId = await findEmployeeByAuthId(sub);
+    const byEmail = await findEmployeeByMappedEmail(email);
+
+    // Safety: prevent ambiguous identity binding.
+    if (byAuthId && byEmail && String(byAuthId.employee_id) !== String(byEmail.employee_id)) {
+        console.warn('JWT identity collision detected for sub/email mapping', {
+            sub,
+            email,
+            authEmployeeId: byAuthId.employee_id,
+            emailEmployeeId: byEmail.employee_id,
         });
-        if (byAuthId[0]) return byAuthId[0];
+        return null;
     }
 
-    if (email) {
-        const byEmail = await queryRows('employees', {
-            filters: [{ op: 'eq', column: 'auth_email', value: email }],
-            limit: 1,
-        });
-        if (byEmail[0]) return byEmail[0];
+    if (byAuthId) {
+        await syncSupabaseProfileSafe({ claims, employee: byAuthId });
+        return byAuthId;
+    }
+
+    if (byEmail) {
+        // First JWT login path for legacy users: bind auth_id deterministically.
+        await assignJwtIdentityToEmployee(byEmail.employee_id, { sub, email });
+        const refreshed = await getRowByPrimaryKey('employees', byEmail.employee_id);
+        if (refreshed) {
+            await syncSupabaseProfileSafe({ claims, employee: refreshed });
+            return refreshed;
+        }
     }
 
     return null;

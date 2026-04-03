@@ -1,6 +1,6 @@
 # Supabase Backend Migration
 
-Purpose: establish a safe Supabase migration foundation for `demo-kpi` using a dual-auth bridge and contract-first controls, without migrating LMS/TNA logic yet.
+Purpose: stabilize Supabase-backed auth for `demo-kpi` using a dual-auth bridge and contract-first controls, without migrating LMS/TNA logic yet.
 
 ## Scope and Guardrails
 - Keep legacy Express + MySQL runtime active.
@@ -9,6 +9,7 @@ Purpose: establish a safe Supabase migration foundation for `demo-kpi` using a d
   - legacy session cookie
   - Supabase JWT
 - Do not migrate LMS/TNA business logic in this slice.
+- Do not remove legacy auth fallback in this stage.
 
 ## Step 0 - Contract Freeze (Completed)
 
@@ -70,8 +71,24 @@ Behavior:
 Unified request shape:
 - `req.user` and `req.currentUser` are always normalized to the same employee profile shape.
 - `req.authContext` captures source metadata (`legacy-session`, `supabase-jwt`, `anonymous`).
+- Invalid/missing JWTs fall back safely to anonymous auth context (no crash).
 
-## Step 3 - Supabase Auth + Profile Model (Foundation Completed)
+## Step 3 - Profile Sync Strategy (Implemented)
+
+Deterministic mapping implementation:
+1. Resolve JWT `sub` against `employees.auth_id`.
+2. If not found, resolve JWT email against `employees.auth_email`.
+3. If still not found and `employees.email` column exists, resolve against `employees.email`.
+4. On first JWT login with email match:
+   - bind `employees.auth_id = <jwt.sub>`
+   - normalize `employees.auth_email = <jwt.email>`
+5. If `sub` and email map to different employees -> reject identity binding (safe deny).
+
+Compatibility/consistency:
+- Profile sync to Supabase `public.profiles` is attempted via service-role key (best effort).
+- Sync failures do not crash request path and do not remove legacy session fallback.
+
+## Step 4 - Supabase Auth + Profile Model (Foundation Completed)
 
 Added migration foundation:
 - `supabase/migrations/0001_profiles_auth.sql`
@@ -81,9 +98,9 @@ Added migration foundation:
 
 Role resolution direction:
 - JWT claim role (from `raw_app_meta_data.role`) seeds profile role.
-- Backend currently maps JWT identity (`sub`/`email`) to legacy employee record for compatibility.
+- Effective runtime role stays sourced from mapped legacy employee record until full domain migration.
 
-## Step 4 - Database Foundation (Minimal Completed)
+## Step 5 - Database Foundation (Minimal Completed)
 
 Added:
 - `supabase/migrations/README.md`
@@ -95,7 +112,7 @@ MySQL -> Postgres domain migration map (planned):
 - TNA: migrate after LMS critical contract parity
 - KPI/Probation/PIP: later slices
 
-## Step 5 - RLS Foundation (Minimal Completed)
+## Step 6 - RLS Foundation (Minimal Completed)
 
 Added:
 - `supabase/migrations/0002_profiles_rls.sql`
@@ -104,17 +121,19 @@ Policies included:
 - user can read own profile
 - admin roles (`manager`, `hr`, `superadmin`) can read broader profiles
 
-## Step 6 - Compatibility Layer (Completed For Foundation)
+## Step 7 - Compatibility Layer (Completed For Foundation)
 
 Added:
 - Supabase JWT verifier wrapper: `server/compat/supabaseClient.js`
 - Backend dual-auth adapter: `server/compat/authBridge.js`
 - API response normalizer: `server/compat/responseNormalizer.js`
+- Provisioning helper: `scripts/qa/supabase-provision.mjs`
+- Staging auth parity checker: `scripts/qa/supabase-auth-staging-check.mjs`
 
 Contract stability:
 - Existing response contracts remain unchanged for frozen endpoints.
 
-## Step 7 - First Safe Cutover Domain
+## Step 8 - First Safe Cutover Domain
 
 Chosen domain: **auth/session bootstrap**.
 
@@ -123,7 +142,7 @@ Why:
 - validates dual-auth bridge path early
 - keeps downstream domain handlers unchanged
 
-## Step 8 - Test Plan and Current Results
+## Step 9 - Test Plan and Current Results
 
 ### Contract tests
 - Verify fixture freeze completeness and route coverage.
@@ -134,22 +153,47 @@ Why:
 - JWT-only auth works.
 - Session takes precedence when both exist.
 - `req.user` shape is identical across auth sources.
+- Invalid JWT fallback behaves safely.
+- Missing role in resolved user context does not crash bridge.
 
 ### Regression smoke
 - LMS and TNA routing remains wired after bridge insertion.
 
 Current command result:
 - `npm run qa:contracts` -> pass
+- `npm run qa:supabase:provision` -> blocked (missing env variables)
+- `npm run qa:auth:staging` -> blocked (missing `SUPABASE_URL` and related secrets)
+- `npm run build` -> pass
 
-## Step 9 - Status, Migrated Domain, Next Slice
+## Step 10 - Staging Validation Status
+
+Current status: **blocked by missing Supabase staging credentials in runtime environment**.
+
+Required env to execute real staging validation:
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_ACCESS_TOKEN`
+- `SUPABASE_PROJECT_REF_DEV`
+- `SUPABASE_PROJECT_REF_STAGING`
+- `SUPABASE_DB_PASSWORD_DEV` / `SUPABASE_DB_PASSWORD_STAGING` (or shared `SUPABASE_DB_PASSWORD`)
+- `SUPABASE_TEST_EMAIL`
+- `SUPABASE_TEST_PASSWORD`
+
+After env is supplied:
+1. run `npm run qa:supabase:provision`
+2. run backend in staging-like config
+3. run `npm run qa:auth:staging`
+4. confirm parity report and failure-case outcomes
+
+## Step 11 - Status, Migrated Domain, Next Slice
 
 - Dual-auth bridge status: **implemented**
 - Migrated domain in this slice: **auth/session bootstrap**
 - Next slice recommendation:
-  1. add contract-backed integration tests for `auth/login` + `auth/session` in staging
-  2. provision Supabase project environments and run `0001/0002` migrations
-  3. introduce profile synchronization playbook from legacy employee records
-  4. keep LMS/TNA on legacy backend until auth parity is proven stable
+  1. execute real Supabase staging validation once env credentials are provided
+  2. capture parity results (session vs JWT) for same user in staging report
+  3. add alerting for identity-collision cases during first-JWT binding
+  4. keep LMS/TNA on legacy backend until parity is confirmed
 
 ## Reversibility
 
@@ -158,4 +202,3 @@ This slice is reversible:
 - JWT path can be disabled by removing `SUPABASE_URL`.
 - No LMS/TNA logic has been migrated.
 - No legacy endpoint has been removed.
-

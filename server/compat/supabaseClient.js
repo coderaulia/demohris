@@ -61,3 +61,57 @@ export async function verifySupabaseJwt(token) {
     }
 }
 
+function mapRole(rawRole) {
+    const normalized = String(rawRole || '').trim().toLowerCase();
+    if (['employee', 'manager', 'hr', 'superadmin'].includes(normalized)) {
+        return normalized;
+    }
+    return 'employee';
+}
+
+export async function syncSupabaseProfileFromEmployee({
+    claims = {},
+    employee = {},
+}) {
+    const { url } = getSupabaseConfig();
+    const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+    if (!url || !serviceRoleKey) {
+        return { status: 'skipped', reason: 'missing_supabase_service_role' };
+    }
+
+    const id = String(claims?.sub || '').trim();
+    if (!id) {
+        return { status: 'skipped', reason: 'missing_sub_claim' };
+    }
+
+    const email = String(claims?.email || employee?.auth_email || '').trim().toLowerCase();
+    const role = mapRole(employee?.role || claims?.role);
+    const metadata = {
+        employee_id: employee?.employee_id || '',
+        source: 'dual-auth-bridge',
+        synced_at: new Date().toISOString(),
+    };
+
+    const payload = [{ id, email, role, metadata }];
+    const response = await fetch(`${url}/rest/v1/profiles`, {
+        method: 'POST',
+        headers: {
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        const message = await response.text().catch(() => '');
+        return {
+            status: 'error',
+            reason: 'upsert_failed',
+            details: message,
+        };
+    }
+
+    return { status: 'ok' };
+}

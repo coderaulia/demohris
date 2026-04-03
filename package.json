@@ -23,7 +23,9 @@
     "qa:e2e": "playwright test",
     "qa:e2e:ui": "playwright test --ui",
     "qa:hardening": "npm run qa:migrations && npm run qa:rls-audit",
-    "qa:contracts": "node --test tests/contracts/*.test.mjs"
+    "qa:contracts": "node --test tests/contracts/*.test.mjs",
+    "qa:supabase:provision": "node scripts/qa/supabase-provision.mjs",
+    "qa:auth:staging": "node scripts/qa/supabase-auth-staging-check.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

@@ -28,6 +28,29 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-03 - Supabase Auth Stabilization and Staging Validation Harness
+- Commit/PR: pending
+- Type: refactor(auth) | test | docs
+- Scope: Supabase JWT stabilization, deterministic profile sync, staging validation scripts
+- Completed:
+  - Implemented deterministic first-JWT identity binding (`auth_id` + `auth_email`) with collision guard.
+  - Added best-effort Supabase `profiles` sync from legacy employee role mapping.
+  - Added staging/provision command scripts:
+    - `npm run qa:supabase:provision`
+    - `npm run qa:auth:staging`
+  - Added failure-case contract tests for invalid JWT and missing-role safety behavior.
+  - Updated migration docs with auth dependency map and validation workflow.
+- Gap Found:
+  - Real staging validation is blocked because Supabase credentials are not available in runtime env.
+  - Expired JWT and unmapped-user runtime checks depend on optional test tokens/accounts.
+- Next Follow-up:
+  - [ ] Supply staging Supabase credentials and run provisioning + auth staging checks.
+  - [ ] Capture parity report (session vs JWT) for same test user.
+  - [ ] Record real failure-case outcomes in migration doc.
+- Notes:
+  - Legacy session fallback remains active and unchanged.
+  - LMS/TNA logic was intentionally not migrated.
+
 ## 2026-04-03 - Supabase Foundation + Dual-Auth Bridge Baseline
 - Commit/PR: pending
 - Type: refactor(backend) | test | docs
@@ -89,7 +112,7 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
   - This sync specifically targets backend/frontend/docs consistency drift.
 
 ## 2026-03-31 - LMS Sprint 1 to Sprint 3 Delivered
-- Commit/PR: Multiple commits (see `docs/LMS-PROGRESS.md`)
+- Commit/PR: Multiple commits (legacy LMS progress doc history)
 - Type: feat
 - Scope: LMS course management, student experience, quiz and assessment
 - Completed:
@@ -102,7 +125,7 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
   - Full API endpoint documentation is still incomplete.
 - Next Follow-up:
   - [ ] Implement admin dashboard, bulk assignment, analytics, and certificate generation completion checks.
-  - [ ] Finish E2E tests listed in `docs/LMS-PROGRESS.md`.
+  - [ ] Finish LMS E2E tests in `tests/e2e`.
   - [ ] Validate and finalize endpoint-level status in `docs/api-endpoint.md`.
 - Notes:
-  - Existing progress source: `docs/LMS-PROGRESS.md`.
+  - Existing progress references were originally tracked in LMS progress docs.

@@ -13,9 +13,12 @@ Purpose: define a reality-based, incremental full-stack migration path for HR Pe
   - dual-auth bridge foundation (session + Supabase JWT acceptance)
   - frozen golden contract fixtures and contract tests
   - Supabase profile + minimal RLS migration SQL foundation
+  - deterministic profile sync strategy and staging validation scripts
 - Explicitly not migrated yet:
   - LMS and TNA business logic/domain data paths
   - legacy endpoint retirement
+- Blockers:
+  - Supabase staging credentials are not present in runtime environment, so live staging validation is pending.
 
 ## Phase 0 - Reality Check (Code-Verified)
 

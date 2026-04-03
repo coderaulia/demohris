@@ -7,9 +7,9 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 - Project: demo-kpi
 - Primary active module: LMS
 - Reference docs:
-  - `docs/LMS-PROGRESS.md`
   - `docs/commit-logs.md`
   - `docs/api-endpoint.md`
+  - `docs/supabase-backend-migration.md`
 
 ## Overall Status
 
@@ -22,6 +22,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | API Documentation | Partial | Fully documented and verified | Endpoint behavior/status matrix incomplete | Medium | Team | Keep `docs/api-endpoint.md` updated per feature delivery |
 | API/Code Consistency Sync | In progress | Fully aligned contract | Endpoint examples + regression tests still pending after route/action sync | High | Team | Add API tests and finalize per-action examples |
 | Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Needs staging rollout and integration parity checks | High | Team | Validate dual-auth in staging and keep legacy fallback active |
+| Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Missing Supabase environment credentials in runtime environment | High | Team | Provide staging credentials and run `qa:supabase:provision` + `qa:auth:staging` |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
 
 ## Feature Roadmap Backlog
@@ -32,7 +33,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | Bulk course assignment | Planned | Speeds up enrollment at scale | Assignments module | TBD | Sprint 4 item |
 | Analytics and reports | Planned | Required for learning performance tracking | Course analytics data quality | TBD | Sprint 4 item |
 | Certificate generation finalization | Planned | Completion proof for learners | Enrollment/progress accuracy | TBD | Sprint 4 item |
-| Full LMS E2E test suite | Planned | Reduces regression risk | Stable UI flows | TBD | Listed in `docs/LMS-PROGRESS.md` |
+| Full LMS E2E test suite | Planned | Reduces regression risk | Stable UI flows | TBD | Track in QA board and `tests/e2e` specs |
 | Full API endpoint validation | Planned | Ensures backend/frontend contract reliability | Endpoint inventory | TBD | Track in `docs/api-endpoint.md` |
 
 ## Weekly Update Template
