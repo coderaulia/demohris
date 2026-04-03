@@ -30,7 +30,7 @@ export function LoginPage() {
         <main className="surface centered">
             <form className="card form-card" onSubmit={onSubmit}>
                 <h1>Sign In</h1>
-                <p>Uses legacy `auth/login` and supports Supabase JWT fallback in session resolution.</p>
+                <p>Uses Supabase Auth when configured, with legacy session fallback only in migration modes.</p>
                 <label>
                     Email
                     <input

@@ -21,6 +21,11 @@ Purpose: stabilize Supabase-backed auth for `demo-kpi` using a dual-auth bridge 
   - `npm run qa:supabase:provision` -> pass
   - `npm run qa:supabase:auth-users` -> pass
 
+## Production Rollout Note (2026-04-03)
+- Public deployment scope is restricted to React shell + Supabase-backed auth/session context.
+- LMS/TNA routes in the React shell are feature-flagged and remain off until their backend paths are migrated.
+- Legacy backend dual-auth bridge remains available for migration compatibility, but production-safe shell routes do not require MySQL-backed API calls.
+
 ## Scope and Guardrails
 - Keep legacy Express + MySQL runtime active.
 - Keep current API contract stable.

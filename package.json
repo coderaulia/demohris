@@ -9,9 +9,11 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:web-react": "npm run dev --prefix apps/web-react",
     "dev:server": "node server/app.js",
     "dev:full": "npm run dev:server & npm run dev",
     "build": "vite build",
+    "build:web-react": "npm run build --prefix apps/web-react",
     "preview": "vite preview",
     "start": "node server/app.js",
     "start:prod": "NODE_ENV=production node server/app.js",

@@ -61,14 +61,15 @@ packages/contracts
 - `VITE_API_TARGET` controls routing mode:
   - `legacy`
   - `supabase`
-  - `auto` (default; currently falls back to legacy for non-cutover actions)
+  - `auto`
+- In `supabase` target mode, non-cutover actions are blocked (no silent fallback to legacy).
 - No direct `fetch` is used in React pages/components.
 
 ## Auth Model in React Shell
 - `AuthProvider` flow:
-1. Attempt Supabase session read (`@supabase/supabase-js`).
-2. If JWT exists, call backend `auth/session` with Bearer token.
-3. If no JWT profile is resolved, fallback to cookie session `auth/session`.
+1. Attempt Supabase session + `profiles` read directly (`@supabase/supabase-js`).
+2. In migration modes (`auto`/`legacy`), fallback to backend `auth/session` path when needed.
+3. In production Supabase mode, do not depend on legacy auth routes.
 4. Expose unified auth context:
    - `user`
    - `role`
@@ -80,12 +81,13 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
 ## Routing and Guards
 - Routes:
   - `/dashboard`
-  - `/lms/*`
-  - `/tna/*`
   - `/login`
+- Feature-flagged routes:
+  - `/lms/*` via `VITE_ENABLE_LMS_ROUTE`
+  - `/tna/*` via `VITE_ENABLE_TNA_ROUTE`
 - `RouteGuard` gates authenticated routes.
 - `AppErrorBoundary` isolates shell-level runtime failures.
-- `AppLayout` keeps legacy app link for reversible migration.
+- `AppLayout` can optionally show legacy app link via `VITE_SHOW_LEGACY_APP_LINK`.
 
 ## Data Fetching Rules
 - TanStack Query is used for async state.
@@ -105,6 +107,10 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_ANON_KEY`
   - `VITE_LEGACY_APP_URL`
+  - `VITE_ENABLE_LMS_ROUTE`
+  - `VITE_ENABLE_TNA_ROUTE`
+  - `VITE_SHOW_LEGACY_APP_LINK`
+- SPA fallback is provided via `apps/web-react/public/.htaccess`.
 
 ## Migration Constraints Preserved
 - LMS/TNA production UI flows are not rewritten in this slice.

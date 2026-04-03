@@ -27,8 +27,8 @@ export function AppLayout() {
 
                 <nav className="sidebar-nav">
                     <SidebarLink to="/dashboard" label="Dashboard" />
-                    <SidebarLink to="/lms" label="LMS (Legacy Placeholder)" />
-                    <SidebarLink to="/tna" label="TNA (Legacy Placeholder)" />
+                    {env.enableLmsRoute ? <SidebarLink to="/lms" label="LMS (Legacy Placeholder)" /> : null}
+                    {env.enableTnaRoute ? <SidebarLink to="/tna" label="TNA (Legacy Placeholder)" /> : null}
                 </nav>
 
                 <div className="sidebar-meta">
@@ -40,9 +40,11 @@ export function AppLayout() {
                         <small>Role</small>
                         <p>{auth.role || '-'}</p>
                     </div>
-                    <a href={env.legacyAppUrl} className="legacy-link">
-                        Open Legacy App
-                    </a>
+                    {env.showLegacyAppLink ? (
+                        <a href={env.legacyAppUrl} className="legacy-link">
+                            Open Legacy App
+                        </a>
+                    ) : null}
                 </div>
             </aside>
 

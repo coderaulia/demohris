@@ -28,6 +28,37 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-03 - Production Deploy Cutover Preparation (Hostinger + Supabase)
+- Commit/PR: pending
+- Type: chore(deploy) | refactor(frontend) | docs
+- Scope: live-safe frontend routing, Supabase-first auth path, Hostinger/Supabase runbooks
+- Completed:
+  - Updated React env model for production-safe defaults (`VITE_API_TARGET=supabase`).
+  - Added route-level feature flags for non-migrated modules:
+    - `VITE_ENABLE_LMS_ROUTE`
+    - `VITE_ENABLE_TNA_ROUTE`
+    - `VITE_SHOW_LEGACY_APP_LINK`
+  - Updated auth adapter to use Supabase session/profile directly for login/session/logout in Supabase mode.
+  - Added strict transport guard so Supabase target does not silently call legacy endpoints for non-cutover actions.
+  - Added SPA fallback file for Hostinger static serving:
+    - `apps/web-react/public/.htaccess`
+  - Added production deployment docs:
+    - `docs/production-deploy-plan.md`
+    - `docs/hostinger-autodeploy-runbook.md`
+    - `docs/supabase-production-runbook.md`
+  - Updated architecture/status docs with live scope classification and rollout constraints.
+- Gap Found:
+  - LMS/TNA domain handlers are still legacy MySQL-coupled and are intentionally not live in this release scope.
+  - Full production backend domain cutover to Supabase is still pending.
+- Next Follow-up:
+  - [ ] Apply migrations to production Supabase project and validate RLS/auth with real production users.
+  - [ ] Execute Hostinger GitHub auto-deploy using `apps/web-react` build settings and run smoke checklist.
+  - [ ] Migrate first LMS/TNA read-only endpoint to Supabase before enabling route flags.
+- Notes:
+  - Production launch scope is intentionally minimal and reversible.
+  - Service-role credentials remain backend/ops-only and are not used in frontend build/runtime.
+  - Deployment execution status: pending external run on Hostinger/Supabase production credentials.
+
 ## 2026-04-03 - Supabase Schema + Seed Baseline Milestone
 - Commit/PR: pending
 - Type: refactor(db) | docs | chore

@@ -1,11 +1,29 @@
-import { Navigate, createBrowserRouter } from 'react-router-dom';
+import { Navigate, createBrowserRouter, type RouteObject } from 'react-router-dom';
 
 import { AppLayout } from '@/components/AppLayout';
+import { env } from '@/lib/env';
 import { RouteGuard } from '@/components/RouteGuard';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LmsPlaceholderPage } from '@/pages/LmsPlaceholderPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { TnaPlaceholderPage } from '@/pages/TnaPlaceholderPage';
+
+const moduleRoutes: RouteObject[] = [
+];
+
+if (env.enableLmsRoute) {
+    moduleRoutes.push({
+        path: 'lms/*',
+        element: <LmsPlaceholderPage />,
+    });
+}
+
+if (env.enableTnaRoute) {
+    moduleRoutes.push({
+        path: 'tna/*',
+        element: <TnaPlaceholderPage />,
+    });
+}
 
 export const router = createBrowserRouter([
     {
@@ -28,14 +46,7 @@ export const router = createBrowserRouter([
                 path: 'dashboard',
                 element: <DashboardPage />,
             },
-            {
-                path: 'lms/*',
-                element: <LmsPlaceholderPage />,
-            },
-            {
-                path: 'tna/*',
-                element: <TnaPlaceholderPage />,
-            },
+            ...moduleRoutes,
         ],
     },
     {
