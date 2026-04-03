@@ -1,7 +1,19 @@
 -- 0001_profiles_auth.sql
 -- Foundation for Supabase Auth role resolution in demo-kpi migration.
 
-create type if not exists public.app_role as enum ('employee', 'manager', 'hr', 'superadmin');
+do $$
+begin
+    if not exists (
+        select 1
+        from pg_type t
+        join pg_namespace n on n.oid = t.typnamespace
+        where t.typname = 'app_role'
+          and n.nspname = 'public'
+    ) then
+        create type public.app_role as enum ('employee', 'manager', 'hr', 'superadmin');
+    end if;
+end
+$$;
 
 create table if not exists public.profiles (
     id uuid primary key references auth.users (id) on delete cascade,
@@ -74,4 +86,3 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row
 execute function public.handle_auth_user_created();
-

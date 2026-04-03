@@ -21,8 +21,8 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | LMS Sprint 4 (Admin Features) | In progress | Completed feature set | Dashboard, bulk assignment, analytics, certificate hardening not finalized | High | Team | Implement Sprint 4 backlog in sequence |
 | API Documentation | Partial | Fully documented and verified | Endpoint behavior/status matrix incomplete | Medium | Team | Keep `docs/api-endpoint.md` updated per feature delivery |
 | API/Code Consistency Sync | In progress | Fully aligned contract | Endpoint examples + regression tests still pending after route/action sync | High | Team | Add API tests and finalize per-action examples |
-| Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Needs staging rollout and integration parity checks | High | Team | Validate dual-auth in staging and keep legacy fallback active |
-| Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Missing Supabase environment credentials in runtime environment | High | Team | Provide staging credentials and run `qa:supabase:provision` + `qa:auth:staging` |
+| Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Provisioning complete; parity evidence still pending | High | Team | Keep legacy fallback active and finalize auth parity evidence |
+| Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Backend target in `BACKEND_BASE_URL` fails health check due MySQL connectivity (`ECONNREFUSED 127.0.0.1:3306`) | High | Team | Run backend with reachable DB (or point to staging backend) and rerun `qa:auth:staging` |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
 
 ## Feature Roadmap Backlog

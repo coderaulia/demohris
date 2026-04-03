@@ -1,8 +1,32 @@
+import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 
 const rootDir = process.cwd();
-const supabaseDir = path.join(rootDir, 'supabase');
+const cliWorkdir = rootDir;
+
+function loadDotEnv(filePath = path.join(rootDir, '.env')) {
+    if (!fs.existsSync(filePath)) return;
+    const content = fs.readFileSync(filePath, 'utf8');
+    for (const rawLine of content.split(/\r?\n/)) {
+        const line = String(rawLine || '').trim();
+        if (!line || line.startsWith('#')) continue;
+        const idx = line.indexOf('=');
+        if (idx <= 0) continue;
+        const key = line.slice(0, idx).trim();
+        let value = line.slice(idx + 1).trim();
+        if (
+            (value.startsWith('"') && value.endsWith('"'))
+            || (value.startsWith("'") && value.endsWith("'"))
+        ) {
+            value = value.slice(1, -1);
+        }
+        if (!key) continue;
+        if (!process.env[key]) process.env[key] = value;
+    }
+}
+
+loadDotEnv();
 
 function env(name) {
     return String(process.env[name] || '').trim();
@@ -52,7 +76,7 @@ async function applyMigrations(envLabel, projectRef, dbPassword) {
         '--password',
         dbPassword,
         '--workdir',
-        supabaseDir,
+        cliWorkdir,
     ], {
         env: { ...process.env, SUPABASE_ACCESS_TOKEN: env('SUPABASE_ACCESS_TOKEN') },
     });
@@ -61,8 +85,9 @@ async function applyMigrations(envLabel, projectRef, dbPassword) {
         'supabase@latest',
         'db',
         'push',
+        '--yes',
         '--workdir',
-        supabaseDir,
+        cliWorkdir,
     ], {
         env: { ...process.env, SUPABASE_ACCESS_TOKEN: env('SUPABASE_ACCESS_TOKEN') },
     });
@@ -97,4 +122,3 @@ main().catch(error => {
     console.error('\nSupabase provisioning failed:', error.message);
     process.exit(1);
 });
-

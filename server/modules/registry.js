@@ -1,7 +1,7 @@
-import { getTableMeta as getOriginalTableMeta, TABLE_META } from '../tableMeta.js';
+import { TABLE_META } from '../tableMeta.js';
 import { isFeatureEnabled } from '../features.js';
 
-const tableRegistry = new Map(TABLE_META);
+const tableRegistry = new Map(Object.entries(TABLE_META || {}));
 const permissionRegistry = new Map();
 
 export function getTableMeta(table) {

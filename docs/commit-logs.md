@@ -38,13 +38,18 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
   - Added staging/provision command scripts:
     - `npm run qa:supabase:provision`
     - `npm run qa:auth:staging`
+  - Updated QA scripts to load `.env` directly (no external dotenv dependency).
+  - Fixed `supabase/migrations/0001_profiles_auth.sql` to use a Postgres-compatible enum creation block.
+  - Fixed provisioning script workdir to run from repository root and enabled non-interactive `db push`.
+  - Ran Supabase provisioning successfully; migrations are up to date for dev and staging targets.
+  - Added strict backend health preflight in staging auth check to detect DB/connectivity issues before parity assertions.
   - Added failure-case contract tests for invalid JWT and missing-role safety behavior.
   - Updated migration docs with auth dependency map and validation workflow.
 - Gap Found:
-  - Real staging validation is blocked because Supabase credentials are not available in runtime env.
+  - Real auth parity validation is blocked because backend target fails health check (MySQL `ECONNREFUSED 127.0.0.1:3306`).
   - Expired JWT and unmapped-user runtime checks depend on optional test tokens/accounts.
 - Next Follow-up:
-  - [ ] Supply staging Supabase credentials and run provisioning + auth staging checks.
+  - [ ] Run backend with reachable DB (or point `BACKEND_BASE_URL` to staging backend) and rerun `npm run qa:auth:staging`.
   - [ ] Capture parity report (session vs JWT) for same test user.
   - [ ] Record real failure-case outcomes in migration doc.
 - Notes:

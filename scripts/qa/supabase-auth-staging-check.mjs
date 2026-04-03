@@ -1,3 +1,29 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+function loadDotEnv(filePath = path.join(process.cwd(), '.env')) {
+    if (!fs.existsSync(filePath)) return;
+    const content = fs.readFileSync(filePath, 'utf8');
+    for (const rawLine of content.split(/\r?\n/)) {
+        const line = String(rawLine || '').trim();
+        if (!line || line.startsWith('#')) continue;
+        const idx = line.indexOf('=');
+        if (idx <= 0) continue;
+        const key = line.slice(0, idx).trim();
+        let value = line.slice(idx + 1).trim();
+        if (
+            (value.startsWith('"') && value.endsWith('"'))
+            || (value.startsWith("'") && value.endsWith("'"))
+        ) {
+            value = value.slice(1, -1);
+        }
+        if (!key) continue;
+        if (!process.env[key]) process.env[key] = value;
+    }
+}
+
+loadDotEnv();
+
 function env(name, fallback = '') {
     const value = process.env[name];
     if (value === undefined || value === null || String(value).trim() === '') return fallback;
@@ -52,6 +78,16 @@ async function backendRequest({ baseUrl, action, method = 'POST', body = {}, jwt
     return { status: response.status, payload, setCookie: response.headers.get('set-cookie') || '' };
 }
 
+async function assertBackendHealthy(baseUrl) {
+    const response = await fetch(`${baseUrl}/api/health`, { method: 'GET' });
+    const payload = await parseJsonSafe(response);
+    if (!response.ok || payload?.ok !== true) {
+        throw new Error(
+            `Backend health check failed (${response.status}): ${JSON.stringify(payload)}`
+        );
+    }
+}
+
 function assert(condition, message) {
     if (!condition) throw new Error(message);
 }
@@ -70,6 +106,8 @@ async function main() {
     console.log('== Supabase auth staging validation ==');
     console.log(`Backend base URL: ${backendBaseUrl}`);
     console.log(`Supabase URL: ${supabaseUrl}`);
+
+    await assertBackendHealthy(backendBaseUrl);
 
     const supabaseSession = await signInSupabase({
         supabaseUrl,
@@ -194,4 +232,3 @@ main().catch(error => {
     console.error('\nAuth staging validation failed:', error.message);
     process.exit(1);
 });
-

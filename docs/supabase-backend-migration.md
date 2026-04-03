@@ -161,13 +161,13 @@ Why:
 
 Current command result:
 - `npm run qa:contracts` -> pass
-- `npm run qa:supabase:provision` -> blocked (missing env variables)
-- `npm run qa:auth:staging` -> blocked (missing `SUPABASE_URL` and related secrets)
+- `npm run qa:supabase:provision` -> pass (dev + staging migrations up to date)
+- `npm run qa:auth:staging` -> blocked by backend health check (`/api/health` -> MySQL `ECONNREFUSED 127.0.0.1:3306`)
 - `npm run build` -> pass
 
 ## Step 10 - Staging Validation Status
 
-Current status: **blocked by missing Supabase staging credentials in runtime environment**.
+Current status: **partially validated, parity blocked by backend DB connectivity on configured target**.
 
 Required env to execute real staging validation:
 - `SUPABASE_URL`
@@ -179,18 +179,21 @@ Required env to execute real staging validation:
 - `SUPABASE_TEST_EMAIL`
 - `SUPABASE_TEST_PASSWORD`
 
-After env is supplied:
-1. run `npm run qa:supabase:provision`
-2. run backend in staging-like config
-3. run `npm run qa:auth:staging`
-4. confirm parity report and failure-case outcomes
+Execution status:
+1. `npm run qa:supabase:provision` completed successfully.
+2. `npm run qa:auth:staging` now performs a strict backend health preflight and fails early when DB is unavailable.
+
+To finish staging parity validation:
+1. Run backend against reachable MySQL (or point `BACKEND_BASE_URL` to staging backend with DB access).
+2. Re-run `npm run qa:auth:staging`.
+3. Confirm parity report and failure-case outcomes.
 
 ## Step 11 - Status, Migrated Domain, Next Slice
 
 - Dual-auth bridge status: **implemented**
 - Migrated domain in this slice: **auth/session bootstrap**
 - Next slice recommendation:
-  1. execute real Supabase staging validation once env credentials are provided
+  1. execute real Supabase staging validation once backend DB connectivity is healthy for `BACKEND_BASE_URL`
   2. capture parity results (session vs JWT) for same user in staging report
   3. add alerting for identity-collision cases during first-JWT binding
   4. keep LMS/TNA on legacy backend until parity is confirmed
