@@ -28,6 +28,25 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-03 - Full-Stack Refactor Planning Baseline
+- Commit/PR: pending
+- Type: docs(refactor)
+- Scope: architecture decision, migration phases, risk register, execution checklist
+- Completed:
+  - Added `docs/refactor-master-plan.md` with code-verified current-state analysis.
+  - Evaluated Supabase-first vs Workers-first against current LMS/TNA/auth coupling.
+  - Defined target architecture (React+TS+Vite + Supabase-first), migration phases A-F, and rollback-driven risk register.
+  - Added refactor track into `docs/project-status.md` without removing LMS progress history.
+- Gap Found:
+  - No automated contract test suite yet for migration-critical LMS/TNA paths.
+  - Auth bridge implementation details still pending execution phase.
+- Next Follow-up:
+  - [ ] Build API contract fixtures and parity tests for LMS/TNA/auth.
+  - [ ] Provision Supabase staging and define schema migration runbook.
+  - [ ] Implement dual-auth bridge before any production cutover.
+- Notes:
+  - Refactor strategy explicitly avoids big-bang rewrite and preserves Hostinger frontend deploy compatibility.
+
 ## 2026-04-03 - API/Docs/Implementation Consistency Sync
 - Commit/PR: pending
 - Type: docs | fix | refactor

@@ -49,3 +49,19 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 - Next Week Plan:
   - [ ] <task>
 ```
+
+## Refactor Track (2026-04-03 Baseline)
+
+Goal: migrate to React + TypeScript + Vite frontend and Supabase-first backend without breaking LMS/TNA/business flows.
+
+| Refactor Phase | Status | Objective | Gate to Exit |
+|---|---|---|---|
+| Phase A - Architecture hardening / inventory | In progress | Freeze API contracts, role matrix, and migration inventory | Contract fixtures + baseline tests approved |
+| Phase B - Database and auth foundation | Planned | Stand up Supabase, migrate schema, implement JWT auth bridge | Dual-auth bridge validated in staging |
+| Phase C - Backend domain migration | Planned | Migrate auth and domain APIs (LMS first, then TNA) | LMS/TNA parity tests pass against new backend |
+| Phase D - Frontend shell migration | Planned | Introduce React+TS app shell with adapter data layer | React shell routes/auth guards stable in staging |
+| Phase E - Module-by-module cutover | Planned | Incrementally switch modules to new stack | UAT signoff per module with rollback plan |
+| Phase F - Legacy cleanup | Planned | Remove express-session and legacy generic paths | Legacy endpoints retired with no critical regressions |
+
+Primary architecture recommendation: Supabase-first backend.  
+Fallback/secondary: add Cloudflare Workers later only for edge-oriented workloads after core migration stabilizes.
