@@ -103,6 +103,10 @@ export function hideLoading() {
     Swal.close();
 }
 
+export function close() {
+    Swal.close();
+}
+
 export async function withLoading(task, title = 'Please wait...', text = 'Processing request...') {
     showLoading(title, text);
     try {

@@ -27,6 +27,18 @@ function requireRole(req, roles = []) {
     return user;
 }
 
+function getInput(req, key, defaultValue = '') {
+    const bodyValue = req.body?.[key];
+    if (bodyValue !== undefined && bodyValue !== null && bodyValue !== '') {
+        return bodyValue;
+    }
+    const queryValue = req.query?.[key];
+    if (queryValue !== undefined && queryValue !== null && queryValue !== '') {
+        return queryValue;
+    }
+    return defaultValue;
+}
+
 function generateUuid() {
     return crypto.randomUUID();
 }
@@ -175,8 +187,8 @@ export async function handleTnaAction(req, res, action) {
 
     if (action === 'tna/needs') {
         requireTna(req);
-        const employeeId = String(req.query?.employee_id || '').trim();
-        const status = String(req.query?.status || '').trim();
+        const employeeId = String(getInput(req, 'employee_id', '')).trim();
+        const status = String(getInput(req, 'status', '')).trim();
 
         let filters = [];
         if (employeeId) {
@@ -271,8 +283,8 @@ export async function handleTnaAction(req, res, action) {
 
     if (action === 'tna/plans') {
         requireTna(req);
-        const employeeId = String(req.query?.employee_id || '').trim();
-        const status = String(req.query?.status || '').trim();
+        const employeeId = String(getInput(req, 'employee_id', '')).trim();
+        const status = String(getInput(req, 'status', '')).trim();
 
         let filters = [];
         if (employeeId) {
@@ -319,7 +331,7 @@ export async function handleTnaAction(req, res, action) {
     if (action === 'tna/plan/get') {
         requireTna(req);
 
-        const planId = String(req.query?.id || '').trim();
+        const planId = String(getInput(req, 'id', '')).trim();
         if (!planId) {
             throw { status: 400, message: 'Plan ID is required', code: 'INVALID_INPUT' };
         }
@@ -467,7 +479,7 @@ export async function handleTnaAction(req, res, action) {
 
     if (action === 'tna/needs-config') {
         requireTna(req);
-        const positionName = String(req.query?.position || '').trim();
+        const positionName = String(getInput(req, 'position', '')).trim();
 
         let filters = [];
         if (positionName) {
@@ -509,7 +521,8 @@ export async function handleTnaAction(req, res, action) {
 
     if (action === 'tna/courses') {
         requireTna(req);
-        const isActive = req.query?.active !== 'false';
+        const activeFlag = String(getInput(req, 'active', 'true')).toLowerCase();
+        const isActive = activeFlag !== 'false';
 
         const rows = await queryRows('training_courses', {
             filters: isActive ? [{ op: 'eq', column: 'is_active', value: 1 }] : [],
@@ -520,8 +533,8 @@ export async function handleTnaAction(req, res, action) {
 
     if (action === 'tna/enrollments') {
         requireTna(req);
-        const employeeId = String(req.query?.employee_id || '').trim();
-        const status = String(req.query?.status || '').trim();
+        const employeeId = String(getInput(req, 'employee_id', '')).trim();
+        const status = String(getInput(req, 'status', '')).trim();
 
         let filters = [];
         if (employeeId) {
@@ -597,7 +610,7 @@ export async function handleTnaAction(req, res, action) {
         requireTna(req);
         requireRole(req, ['superadmin', 'manager', 'director', 'hr']);
 
-        const period = String(req.query?.period || '').trim();
+        const period = String(getInput(req, 'period', '')).trim();
 
         const [totalNeeds] = await pool.query('SELECT COUNT(*) as cnt FROM training_need_records');
         const [completedNeeds] = await pool.query('SELECT COUNT(*) as cnt FROM training_need_records WHERE status = ?', ['completed']);
@@ -625,7 +638,7 @@ export async function handleTnaAction(req, res, action) {
         requireTna(req);
         requireRole(req, ['superadmin', 'manager', 'director', 'hr']);
 
-        const department = String(req.query?.department || '').trim();
+        const department = String(getInput(req, 'department', '')).trim();
 
         let query = `
             SELECT 
@@ -846,7 +859,7 @@ export async function handleTnaAction(req, res, action) {
 
     if (action === 'tna/enrollments-with-details') {
         requireTna(req);
-        const employeeId = String(req.query?.employee_id || '').trim();
+        const employeeId = String(getInput(req, 'employee_id', '')).trim();
 
         let query = `
             SELECT 
@@ -884,7 +897,7 @@ export async function handleTnaAction(req, res, action) {
         requireTna(req);
         requireRole(req, ['superadmin', 'manager', 'director', 'hr']);
 
-        const department = String(req.query?.department || '').trim();
+        const department = String(getInput(req, 'department', '')).trim();
 
         let query = `
             SELECT 

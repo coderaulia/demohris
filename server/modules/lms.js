@@ -1,21 +1,5 @@
 import { pool } from '../app.js';
 
-const LMS_TABLES = {
-    courses: 'courses',
-    sections: 'course_sections',
-    lessons: 'lessons',
-    questions: 'quiz_questions',
-    enrollments: 'course_enrollments',
-    progress: 'lesson_progress',
-    attempts: 'quiz_attempts',
-    reviews: 'course_reviews',
-    learningPaths: 'learning_paths',
-    pathCourses: 'learning_path_courses',
-    assignments: 'course_assignments',
-    certificates: 'course_certificates',
-    analytics: 'course_analytics'
-};
-
 function generateId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
         const r = Math.random() * 16 | 0;
@@ -116,6 +100,8 @@ export async function handleLmsAction(req, res, action) {
             
             case 'lms/enrollments/list':
                 return await listEnrollments(req, res, currentUser);
+            case 'lms/enrollments/get':
+                return await getEnrollment(req, res, currentUser);
             case 'lms/enrollments/enroll':
                 return await enrollInCourse(req, res, currentUser);
             case 'lms/enrollments/unenroll':
@@ -773,6 +759,33 @@ async function listEnrollments(req, res, currentUser) {
     res.json({ success: true, enrollments, page: parseInt(page), limit: parseInt(limit) });
 }
 
+async function getEnrollment(req, res, currentUser) {
+    const { enrollment_id } = req.body;
+    if (!enrollment_id) {
+        return res.status(400).json({ error: 'enrollment_id is required' });
+    }
+
+    const [rows] = await pool.query(
+        `SELECT e.*, c.title as course_title
+         FROM course_enrollments e
+         LEFT JOIN courses c ON e.course_id = c.id
+         WHERE e.id = ?
+         LIMIT 1`,
+        [enrollment_id]
+    );
+
+    if (rows.length === 0) {
+        return res.status(404).json({ error: 'Enrollment not found' });
+    }
+
+    const enrollment = rows[0];
+    if (!isAdmin(currentUser) && enrollment.employee_id !== currentUser.employee_id) {
+        return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    res.json({ success: true, enrollment: normalizeRow(enrollment) });
+}
+
 async function enrollInCourse(req, res, currentUser) {
     const { course_id, employee_id, enrollment_type } = req.body;
     
@@ -915,6 +928,48 @@ async function startCourse(req, res, currentUser) {
     const [updated] = await pool.query('SELECT * FROM course_enrollments WHERE id = ?', [enrollment.id]);
     
     res.json({ success: true, enrollment: updated[0] });
+}
+
+async function getLessonProgress(req, res, currentUser) {
+    const { enrollment_id, lesson_id } = req.body;
+
+    if (!enrollment_id) {
+        return res.status(400).json({ error: 'enrollment_id is required' });
+    }
+
+    const [enrollments] = await pool.query('SELECT * FROM course_enrollments WHERE id = ?', [enrollment_id]);
+    if (enrollments.length === 0) {
+        return res.status(404).json({ error: 'Enrollment not found' });
+    }
+
+    const enrollment = enrollments[0];
+    if (!isAdmin(currentUser) && enrollment.employee_id !== currentUser.employee_id) {
+        return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const progressParams = [enrollment_id];
+    let progressSql = 'SELECT * FROM lesson_progress WHERE enrollment_id = ?';
+    if (lesson_id) {
+        progressSql += ' AND lesson_id = ?';
+        progressParams.push(lesson_id);
+    }
+    progressSql += ' ORDER BY last_accessed_at DESC';
+
+    const [progressRows] = await pool.query(progressSql, progressParams);
+    const lessons = progressRows.map(normalizeRow);
+
+    const payload = {
+        enrollment_id,
+        progress_percent: Number(enrollment.progress_percent || 0),
+        status: enrollment.status || 'enrolled',
+        lessons,
+    };
+
+    if (lesson_id) {
+        payload.lesson = lessons[0] || null;
+    }
+
+    res.json({ success: true, progress: payload });
 }
 
 async function updateLessonProgress(req, res, currentUser) {

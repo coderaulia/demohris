@@ -124,6 +124,10 @@ export async function getMyEnrollments(params = {}) {
     return await apiRequest('lms/enrollments/my-courses', params);
 }
 
+export async function getMyCourses(params = {}) {
+    return await getMyEnrollments(params);
+}
+
 export async function startCourse(courseId) {
     return await apiRequest('lms/enrollments/start', { course_id: courseId });
 }
@@ -145,6 +149,14 @@ export async function updateLessonProgress(enrollmentId, lessonId, progressPerce
     });
 }
 
+export async function updateProgress(payload = {}) {
+    const enrollmentId = payload.enrollment_id || payload.enrollmentId;
+    const lessonId = payload.lesson_id || payload.lessonId;
+    const progressPercent = payload.progress_percent ?? payload.progressPercent ?? 0;
+    const timeSpentSeconds = payload.time_spent_seconds ?? payload.timeSpentSeconds ?? 0;
+    return await updateLessonProgress(enrollmentId, lessonId, progressPercent, timeSpentSeconds);
+}
+
 export async function getLessonProgress(enrollmentId, lessonId) {
     return await apiRequest('lms/progress/get', { 
         enrollment_id: enrollmentId,
@@ -153,9 +165,16 @@ export async function getLessonProgress(enrollmentId, lessonId) {
 }
 
 export async function completeLesson(enrollmentId, lessonId) {
-    return await apiRequest('lms/progress/complete-lesson', { 
+    if (typeof enrollmentId === 'object' && enrollmentId !== null) {
+        const payload = enrollmentId;
+        return await apiRequest('lms/progress/complete-lesson', {
+            enrollment_id: payload.enrollment_id || payload.enrollmentId,
+            lesson_id: payload.lesson_id || payload.lessonId,
+        });
+    }
+    return await apiRequest('lms/progress/complete-lesson', {
         enrollment_id: enrollmentId,
-        lesson_id: lessonId
+        lesson_id: lessonId,
     });
 }
 
@@ -183,6 +202,19 @@ export async function submitQuiz(enrollmentId, lessonId, answers) {
 
 export async function getQuizAttempt(attemptId) {
     return await apiRequest('lms/quizzes/get-attempt', { attempt_id: attemptId });
+}
+
+export async function getQuizAttempts(lessonId, enrollmentId) {
+    const response = await apiRequest('db/query', {
+        table: 'quiz_attempts',
+        action: 'select',
+        filters: [
+            { op: 'eq', column: 'lesson_id', value: lessonId },
+            { op: 'eq', column: 'enrollment_id', value: enrollmentId },
+        ],
+        orders: [{ column: 'submitted_at', ascending: false }],
+    });
+    return { attempts: response?.data || [] };
 }
 
 // =====================================================
