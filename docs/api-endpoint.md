@@ -161,3 +161,45 @@ Contract impact:
 Out of scope in this slice:
 - LMS mutation and assessment/certificate actions stay on legacy/MySQL path.
 - TNA endpoint groups remain legacy/MySQL-backed and frontend-flagged off.
+
+## 2026-04-04 LMS Read Parity Hardening Audit
+
+Supabase-backed LMS read endpoints (via `LMS_READ_SOURCE`):
+- `lms/enrollments/list`
+- `lms/enrollments/get`
+- `lms/enrollments/my-courses`
+- `lms/progress/get`
+
+Remaining legacy LMS endpoints:
+- `lms/enrollments/enroll|unenroll|start|complete`
+- `lms/progress/update|complete-lesson`
+- `lms/quizzes/*`
+- `lms/assignments/*`
+- `lms/certificates/*`
+- `lms/courses/*`, `lms/sections/*`, `lms/lessons/*`, `lms/questions/*`, `lms/reviews/*`, `lms/dashboard/*`
+
+Parity hardening applied:
+- response-shape compatibility mappers added in `server/compat/supabaseLmsRead.js`:
+  - `toEnrollmentListParityRow`
+  - `toEnrollmentGetParityRow`
+  - `toMyCoursesParityRow`
+- `certificate_issued` is normalized to legacy-compatible numeric shape (`0|1`) in parity mappers.
+- my-courses ordering aligned with legacy null behavior:
+  - `last_accessed_at.desc.nullslast,created_at.desc`
+- progress ordering aligned to null-safe legacy behavior:
+  - `last_accessed_at.desc.nullslast`
+
+Role/access parity assumptions (unchanged from legacy):
+- employee:
+  - can read own enrollments and own progress
+  - `lms/enrollments/list` requires `course_id` and is not scoped to self by design (legacy behavior)
+- manager/hr/superadmin:
+  - treated as admin for read checks via `isAdmin`
+- `get` and `progress/get` keep not-found before forbidden distinction:
+  - missing enrollment -> `404`
+  - enrollment exists but not authorized -> `403`
+
+Route enablement decision:
+- LMS React route remains feature-flagged off.
+- blocker: full LMS visible route still depends on non-migrated mutation and quiz/certificate flows.
+- blocker: staging smoke run requires LMS test credentials to be provided for `qa:lms:cutover`.

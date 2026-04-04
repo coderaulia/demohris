@@ -23,7 +23,6 @@ function parseJsonArray(value, fallback = []) {
 function parseEnrollmentRow(row = {}) {
     return {
         ...row,
-        certificate_issued: Boolean(row.certificate_issued),
     };
 }
 
@@ -177,6 +176,7 @@ export async function fetchLmsEnrollmentsFromSupabase({
     employeeId = '',
     page = 1,
     limit = 20,
+    orderBy = '',
 }) {
     const pageSafe = Math.max(1, Number.parseInt(page, 10) || 1);
     const limitSafe = Math.max(1, Number.parseInt(limit, 10) || 20);
@@ -190,7 +190,7 @@ export async function fetchLmsEnrollmentsFromSupabase({
             status: status ? { type: 'eq', value: status } : null,
             employee_id: employeeId ? { type: 'eq', value: employeeId } : null,
         },
-        order: employeeId ? 'last_accessed_at.desc,created_at.desc' : 'created_at.desc',
+        order: String(orderBy || '').trim() || (employeeId ? 'last_accessed_at.desc.nullslast,created_at.desc' : 'created_at.desc'),
         limit: limitSafe,
         offset,
     });
@@ -245,8 +245,84 @@ export async function fetchLmsProgressFromSupabase({
             enrollment_id: { type: 'eq', value: id },
             lesson_id: lessonId ? { type: 'eq', value: lessonId } : null,
         },
-        order: 'last_accessed_at.desc',
+        order: 'last_accessed_at.desc.nullslast',
     });
 
     return (rows || []).map(parseLessonProgressRow);
+}
+
+function normalizeEnrollmentParity(row = {}) {
+    const next = { ...row };
+    if (typeof next.certificate_issued === 'boolean') {
+        next.certificate_issued = next.certificate_issued ? 1 : 0;
+    }
+    return next;
+}
+
+export function toEnrollmentListParityRow(row = {}) {
+    const next = normalizeEnrollmentParity(row);
+    const employee_name = row.employee_name ?? null;
+    const department = row.department ?? null;
+    const position = row.position ?? null;
+    const course_title = row.course_title ?? null;
+
+    delete next.title;
+    delete next.description;
+    delete next.category;
+    delete next.thumbnail_url;
+    delete next.estimated_duration_minutes;
+    delete next.difficulty_level;
+
+    return {
+        ...next,
+        employee_name,
+        department,
+        position,
+        course_title,
+    };
+}
+
+export function toEnrollmentGetParityRow(row = {}) {
+    const next = normalizeEnrollmentParity(row);
+    const course_title = row.course_title ?? null;
+
+    delete next.title;
+    delete next.description;
+    delete next.category;
+    delete next.thumbnail_url;
+    delete next.estimated_duration_minutes;
+    delete next.difficulty_level;
+    delete next.employee_name;
+    delete next.department;
+    delete next.position;
+
+    return {
+        ...next,
+        course_title,
+    };
+}
+
+export function toMyCoursesParityRow(row = {}) {
+    const next = normalizeEnrollmentParity(row);
+    const title = row.title ?? null;
+    const description = row.description ?? null;
+    const category = row.category ?? null;
+    const thumbnail_url = row.thumbnail_url ?? null;
+    const estimated_duration_minutes = row.estimated_duration_minutes ?? null;
+    const difficulty_level = row.difficulty_level ?? null;
+
+    delete next.employee_name;
+    delete next.department;
+    delete next.position;
+    delete next.course_title;
+
+    return {
+        ...next,
+        title,
+        description,
+        category,
+        thumbnail_url,
+        estimated_duration_minutes,
+        difficulty_level,
+    };
 }

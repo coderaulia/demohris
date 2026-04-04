@@ -294,6 +294,47 @@ Route exposure decision:
 - No immediate frontend route enablement change.
 - LMS React route remains feature-flagged until end-to-end parity is validated in staging/live smoke.
 
+## Step 15 - LMS Read Parity Hardening (2026-04-04)
+
+Scope:
+- Harden parity for:
+  - `lms/enrollments/list`
+  - `lms/enrollments/get`
+  - `lms/enrollments/my-courses`
+  - `lms/progress/get`
+
+Hardening updates:
+- Added compatibility mappers in `server/compat/supabaseLmsRead.js`:
+  - `toEnrollmentListParityRow`
+  - `toEnrollmentGetParityRow`
+  - `toMyCoursesParityRow`
+- Aligned `certificate_issued` to legacy-compatible numeric shape (`0|1`) for read responses.
+- Aligned null ordering semantics with legacy behavior:
+  - my-courses: `last_accessed_at.desc.nullslast,created_at.desc`
+  - progress: `last_accessed_at.desc.nullslast`
+- Preserved role and not-found/forbidden sequencing in `server/modules/lms.js` read handlers.
+
+Test coverage additions:
+- Extended `tests/contracts/lms-read-cutover.test.mjs` with:
+  - response-shape parity checks
+  - ordering behavior checks
+  - upstream failure safety checks
+  - role/access and not-found-before-forbidden source checks
+- Extended smoke script `scripts/qa/lms-read-cutover-smoke.mjs` with:
+  - unauthorized checks
+  - invalid enrollment and lesson edge checks
+  - optional admin/other-user/empty-user parity scenarios
+
+Current validation state:
+- `npm run qa:contracts` -> pass
+- `npm run qa:lms:cutover` -> blocked in this environment (missing `SUPABASE_LMS_TEST_EMAIL`)
+
+Route enablement decision:
+- Keep LMS React route feature-flagged off.
+- Do not enable full LMS route until:
+  1. staging smoke parity runs with real LMS credentials,
+  2. required visible LMS flows no longer depend on legacy mutation/quiz/certificate endpoints.
+
 ## Reversibility
 
 This slice is reversible:

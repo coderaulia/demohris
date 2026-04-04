@@ -28,6 +28,30 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - LMS Read Parity Hardening and Rollout Readiness Checks
+- Commit/PR: pending
+- Type: test(lms) | refactor(api) | docs
+- Scope: Supabase LMS read parity hardening for `enrollments/list|get|my-courses` and `progress/get`
+- Completed:
+  - Added LMS parity mappers in `server/compat/supabaseLmsRead.js` to keep response shape aligned with legacy handlers.
+  - Aligned null-order behavior for my-courses/progress queries using `.nullslast` ordering.
+  - Added role/access contract checks for employee vs admin reads and not-found-before-forbidden behavior.
+  - Extended LMS smoke harness with edge and access scenarios:
+    - unauthorized
+    - invalid enrollment id
+    - invalid lesson id
+    - optional admin/other-user/empty-user checks
+  - Updated API and migration docs with explicit route enablement decision.
+- Gap Found:
+  - LMS mutation/quiz/certificate flows remain legacy-backed and block full LMS route enablement.
+  - Staging smoke requires LMS test credentials (`SUPABASE_LMS_TEST_EMAIL/PASSWORD`) to complete live parity evidence.
+- Next Follow-up:
+  - [ ] Run `npm run qa:lms:cutover` in staging with LMS credential set and capture results.
+  - [ ] Keep LMS route feature-flagged off until smoke + role parity is verified end-to-end.
+  - [ ] Begin next slice: TNA read-only summary/reporting endpoint cutover.
+- Notes:
+  - Rollback remains env-driven with `LMS_READ_SOURCE=legacy`.
+
 ## 2026-04-04 - Second Backend Domain Cutover Milestone (LMS Read Endpoints)
 - Commit/PR: pending
 - Type: refactor(api) | test | docs

@@ -4,6 +4,9 @@ import {
     fetchLmsEnrollmentsFromSupabase,
     fetchLmsProgressFromSupabase,
     resolveLmsReadSource,
+    toEnrollmentGetParityRow,
+    toEnrollmentListParityRow,
+    toMyCoursesParityRow,
 } from '../compat/supabaseLmsRead.js';
 
 function generateId() {
@@ -743,10 +746,11 @@ async function listEnrollments(req, res, currentUser) {
             status: status || '',
             page,
             limit,
+            orderBy: 'created_at.desc',
         });
         return res.json({
             success: true,
-            enrollments: supabaseResponse.enrollments,
+            enrollments: (supabaseResponse.enrollments || []).map(toEnrollmentListParityRow),
             page: supabaseResponse.page,
             limit: supabaseResponse.limit,
         });
@@ -796,7 +800,7 @@ async function getEnrollment(req, res, currentUser) {
         if (!isAdmin(currentUser) && enrollment.employee_id !== currentUser.employee_id) {
             return res.status(403).json({ error: 'Not authorized' });
         }
-        return res.json({ success: true, enrollment: normalizeRow(enrollment) });
+        return res.json({ success: true, enrollment: normalizeRow(toEnrollmentGetParityRow(enrollment)) });
     }
 
     const [rows] = await pool.query(
@@ -891,10 +895,11 @@ async function getMyEnrollments(req, res, currentUser) {
             employeeId: currentUser.employee_id,
             page,
             limit,
+            orderBy: 'last_accessed_at.desc.nullslast,created_at.desc',
         });
         return res.json({
             success: true,
-            enrollments: supabaseResponse.enrollments,
+            enrollments: (supabaseResponse.enrollments || []).map(toMyCoursesParityRow),
             page: supabaseResponse.page,
             limit: supabaseResponse.limit,
         });
