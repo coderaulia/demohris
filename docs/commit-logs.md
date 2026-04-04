@@ -28,6 +28,22 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Hard Fix For Hostinger Output Directory Detection
+- Commit/PR: pending
+- Type: fix(deploy)
+- Scope: ensure build artifacts are detectable regardless Hostinger root/output path interpretation
+- Completed:
+  - Added `apps/web-react/scripts/mirror-dist.mjs` to mirror `dist` to fallback locations.
+  - Updated React build scripts to run mirror step automatically.
+  - Updated Hostinger runbook with correct root/output pairs for Vite preset.
+- Gap Found:
+  - Hostinger project-level root/output settings can still override valid build outputs if mispaired.
+- Next Follow-up:
+  - [ ] Use one valid root/output pair and redeploy.
+  - [ ] Confirm logs no longer show `No output directory found after build`.
+- Notes:
+  - This fix targets Hostinger output discovery behavior after a successful Vite build.
+
 ## 2026-04-04 - Fix Hostinger Rollup `zod` Resolution
 - Commit/PR: pending
 - Type: fix(deploy)

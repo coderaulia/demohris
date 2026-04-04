@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "build:strict": "tsc --noEmit -p tsconfig.json && vite build",
+    "build": "vite build && node ./scripts/mirror-dist.mjs",
+    "build:strict": "tsc --noEmit -p tsconfig.json && vite build && node ./scripts/mirror-dist.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

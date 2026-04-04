@@ -43,6 +43,7 @@ If Hostinger defaults to `Express` preset in the review screen:
 Why this is hardened:
 - Root `npm run build` now always runs the frontend-only build pipeline.
 - Build pipeline installs `apps/web-react` dependencies with `--include=dev` so `vite`/`typescript` tools are always available in CI.
+- React build now mirrors output to multiple fallback `dist` locations to avoid Hostinger output-path mismatch errors.
 
 ## Hostinger Environment Variables (Frontend)
 
@@ -109,6 +110,17 @@ From the "Review build settings" page shown:
 - Root directory: `./`
 - Build/output: must be overridden to build `apps/web-react` and publish `apps/web-react/dist`
 - Start command: must be `npm run hostinger:start` to avoid booting legacy MySQL backend
+
+## If You Use Vite Preset Instead Of Express
+
+Use one of these safe pairs:
+
+1. Root directory `./` + Output `dist` + Build `npm run build`
+2. Root directory `apps/web-react` + Output `dist` + Build `npm run build`
+
+Avoid mixing:
+- Root `apps/web-react` with output `apps/web-react/dist`
+- Root `./` with output `apps/web-react/apps/web-react/dist`
 
 ## Rollback
 
