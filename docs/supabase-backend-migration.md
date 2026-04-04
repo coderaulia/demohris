@@ -335,6 +335,57 @@ Route enablement decision:
   1. staging smoke parity runs with real LMS credentials,
   2. required visible LMS flows no longer depend on legacy mutation/quiz/certificate endpoints.
 
+## Step 16 - First TNA Read-Only Cutover (2026-04-04)
+
+Cutover slice completed:
+- `tna/summary`
+
+Selected first TNA read-only slice and rationale:
+- selected: `tna/summary`
+- reason:
+  - lowest-risk aggregate read endpoint
+  - no mutation behavior coupling
+  - stable contract shape already consumed by reporting dashboards
+
+Implementation:
+- Added `server/compat/supabaseTnaRead.js`:
+  - `resolveTnaReadSource()` with `TNA_READ_SOURCE=legacy|supabase|auto`
+  - `fetchTnaSummaryFromSupabase()` returning legacy-compatible keys
+- Updated `server/modules/tna.js`:
+  - only `tna/summary` is source-selectable in this slice
+  - legacy MySQL summary path retained for fallback and rollback
+- Added contract + fixture coverage:
+  - `tests/contracts/tna-read-cutover.test.mjs`
+  - `tests/contracts/fixtures/tna.summary.json`
+  - `tests/contracts/golden-fixtures.test.mjs` action/fixture wiring update
+- Added smoke harness:
+  - `scripts/qa/tna-read-cutover-smoke.mjs`
+  - `npm run qa:tna:cutover`
+
+Contract parity status:
+- preserved required response keys:
+  - `total_needs_identified`
+  - `needs_completed`
+  - `active_plans`
+  - `total_enrollments`
+  - `enrollments_completed`
+  - `critical_gaps`
+  - `high_gaps`
+- preserved body/query period filter compatibility for `period` input through existing `getInput(...)` behavior.
+
+Validation status:
+- `node --test tests/contracts/tna-read-cutover.test.mjs` -> pass
+- `npm run qa:contracts` -> pass
+- `npm run qa:tna:cutover` -> blocked in current environment (missing `SUPABASE_TNA_ADMIN_TEST_EMAIL`)
+
+Route enablement decision:
+- Keep TNA route feature-flagged off.
+- Do not expose TNA route until visible screens are fully backed by migrated + smoke-verified read endpoints.
+
+Remaining TNA blockers:
+- read reporting endpoints `tna/gaps-report` and `tna/lms-report` still legacy-backed
+- mutation flows (`plan/*`, `needs/*`, `enroll*`, import/migration actions) still legacy-backed
+
 ## Reversibility
 
 This slice is reversible:

@@ -21,6 +21,7 @@ test('contract freeze fixtures exist for mandatory endpoints', () => {
         'lms.enrollments.group.json',
         'lms.progress.group.json',
         'tna.calculate-gaps.json',
+        'tna.summary.json',
         'modules.group.json',
     ];
 
@@ -59,6 +60,7 @@ test('golden contract actions are still routed in backend sources', () => {
     const lmsEnrollments = readFixture('lms.enrollments.group.json');
     const lmsProgress = readFixture('lms.progress.group.json');
     const tnaCalcGaps = readFixture('tna.calculate-gaps.json');
+    const tnaSummary = readFixture('tna.summary.json');
     const modulesGroup = readFixture('modules.group.json');
 
     assert.ok(appSource.includes(`'${authLogin.id}'`), 'auth/login route is missing in server/app.js');
@@ -73,6 +75,7 @@ test('golden contract actions are still routed in backend sources', () => {
     }
 
     assert.ok(tnaSource.includes(`'${tnaCalcGaps.id}'`), 'Missing TNA action tna/calculate-gaps');
+    assert.ok(tnaSource.includes(`'${tnaSummary.id}'`), 'Missing TNA action tna/summary');
 
     for (const actionEntry of modulesGroup.actions) {
         assert.ok(
@@ -81,4 +84,3 @@ test('golden contract actions are still routed in backend sources', () => {
         );
     }
 });
-

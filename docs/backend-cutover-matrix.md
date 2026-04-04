@@ -68,7 +68,7 @@ Files verified:
 | `lms/dashboard/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/assignments/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/certificates/*` | blocked | MySQL | not tested | feature-flagged off | high-risk; defer |
-| `tna/*` | blocked | MySQL | contract only (`calculate-gaps`) | feature-flagged off | defer read summary first |
+| `tna/*` | in progress (summary read cut over) | mixed: Supabase for `summary` via source switch, MySQL for all other actions | contract + adapter integration + smoke harness (pending env creds) | feature-flagged off | first TNA read-only slice completed for `tna/summary` |
 | shell-required backend reads | live-safe | N/A for current shell | integration tested via frontend shell smoke | public live | shell currently does not require LMS/TNA backend routes |
 
 ## STEP 2 - First Safe Cutover Slice
@@ -105,6 +105,39 @@ Validation:
   - `scripts/qa/lms-read-cutover-smoke.mjs`
   - `npm run qa:lms:cutover`
 
+## STEP 4 - Third Safe Cutover Slice
+
+Selected slice:
+- TNA read action:
+  - `tna/summary`
+
+Why lowest risk:
+- read-only aggregate counters
+- no mutation coupling
+- stable existing response contract
+- no dependency on mutation-heavy TNA plan/enrollment workflows
+
+Implementation:
+- Added `server/compat/supabaseTnaRead.js` for Supabase count-based summary reads.
+- Added source switch:
+  - `TNA_READ_SOURCE=legacy|supabase|auto`
+  - `auto` uses Supabase when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` exist.
+- Updated `server/modules/tna.js` so only `tna/summary` is source-selectable.
+- Kept all other TNA endpoints on legacy path.
+
+Validation:
+- Contract + adapter tests:
+  - `tests/contracts/tna-read-cutover.test.mjs`
+  - `tests/contracts/golden-fixtures.test.mjs` includes `tna.summary.json`
+- Authenticated smoke harness:
+  - `scripts/qa/tna-read-cutover-smoke.mjs`
+  - `npm run qa:tna:cutover`
+  - current status: blocked in this environment due missing `SUPABASE_TNA_ADMIN_TEST_EMAIL`
+
+Route exposure decision:
+- Keep TNA React route feature-flagged off.
+- Do not enable TNA route until visible screens are fully backed by migrated and parity-tested reads.
+
 ## STEP 6 - Repeatable Cutover Pattern
 
 Use this checklist for every next slice:
@@ -130,4 +163,4 @@ Use this checklist for every next slice:
 - LMS/TNA frontend routes stay disabled.
 - No new frontend route exposure in this cutover commit.
 - Next recommended slice:
-  - TNA read-only summary/reporting endpoints after LMS read-slice stabilization.
+  - TNA read reporting expansion (`tna/gaps-report` or `tna/lms-report`) after `tna/summary` smoke parity passes with real credentials.

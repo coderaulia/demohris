@@ -203,3 +203,46 @@ Route enablement decision:
 - LMS React route remains feature-flagged off.
 - blocker: full LMS visible route still depends on non-migrated mutation and quiz/certificate flows.
 - blocker: staging smoke run requires LMS test credentials to be provided for `qa:lms:cutover`.
+
+## 2026-04-04 Cutover Update - Third Supabase Endpoint Slice (TNA Read)
+
+Cutover scope in this milestone:
+- `tna/summary`
+
+Selected first TNA read-only slice and risk rationale:
+- selected: `tna/summary`
+- lowest-risk reason:
+  - aggregate read-only counts
+  - no mutation side effects
+  - no complex report joins
+  - supports admin shell reporting checks without enabling full TNA module
+
+Data-source behavior:
+- `TNA_READ_SOURCE=supabase` -> force Supabase reads (requires `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`)
+- `TNA_READ_SOURCE=auto` -> Supabase when configured, else legacy MySQL
+- `TNA_READ_SOURCE=legacy` -> force legacy MySQL reads
+
+Supabase tables required for this slice:
+- `training_need_records`
+- `training_plans`
+- `training_enrollments`
+
+Contract impact:
+- no required key changes
+- existing response keys remain:
+  - `total_needs_identified`
+  - `needs_completed`
+  - `active_plans`
+  - `total_enrollments`
+  - `enrollments_completed`
+  - `critical_gaps`
+  - `high_gaps`
+
+Out of scope in this slice:
+- all TNA mutations remain on legacy/MySQL path
+- `tna/gaps-report` and `tna/lms-report` remain legacy/MySQL-backed
+- TNA frontend route remains feature-flagged off
+
+Validation status:
+- `npm run qa:contracts` -> pass (includes `tests/contracts/tna-read-cutover.test.mjs`)
+- `npm run qa:tna:cutover` -> blocked in current environment (missing `SUPABASE_TNA_ADMIN_TEST_EMAIL`)

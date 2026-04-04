@@ -1,0 +1,25 @@
+{
+  "id": "tna/summary",
+  "route": "/api?action=tna/summary",
+  "method": "POST",
+  "request": {
+    "body": {
+      "period": "2026-04"
+    }
+  },
+  "response": {
+    "status": 200,
+    "requiredTopLevelKeys": [
+      "data"
+    ],
+    "requiredDataKeys": [
+      "total_needs_identified",
+      "needs_completed",
+      "active_plans",
+      "total_enrollments",
+      "enrollments_completed",
+      "critical_gaps",
+      "high_gaps"
+    ]
+  }
+}

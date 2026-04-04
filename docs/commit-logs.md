@@ -28,6 +28,36 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - First TNA Read-Only Supabase Cutover (Summary)
+- Commit/PR: pending
+- Type: refactor(tna) | test | docs
+- Scope: `tna/summary` read-only endpoint cutover from MySQL to Supabase
+- Completed:
+  - Added Supabase TNA-read adapter:
+    - `server/compat/supabaseTnaRead.js`
+  - Added source switch:
+    - `TNA_READ_SOURCE=legacy|supabase|auto`
+  - Cut over `tna/summary` in `server/modules/tna.js` with legacy fallback preserved.
+  - Preserved summary response contract keys and numeric semantics.
+  - Added contract coverage:
+    - `tests/contracts/tna-read-cutover.test.mjs`
+    - `tests/contracts/fixtures/tna.summary.json`
+    - updated `tests/contracts/golden-fixtures.test.mjs`
+  - Added authenticated smoke harness:
+    - `scripts/qa/tna-read-cutover-smoke.mjs`
+    - `npm run qa:tna:cutover`
+  - Updated API/cutover/migration docs for slice status and rollout rules.
+- Gap Found:
+  - Smoke run is blocked in current environment because `SUPABASE_TNA_ADMIN_TEST_EMAIL` is not set.
+  - `tna/gaps-report`, `tna/lms-report`, and all TNA mutations remain legacy-backed.
+- Next Follow-up:
+  - [ ] Set TNA smoke credentials and run `npm run qa:tna:cutover` against staging/live-safe backend.
+  - [ ] Keep TNA frontend route feature-flagged off until smoke parity is verified.
+  - [ ] Migrate next TNA read reporting slice (`tna/gaps-report` or `tna/lms-report`) with contract parity tests.
+- Notes:
+  - Rollback remains env-driven with `TNA_READ_SOURCE=legacy`.
+  - This slice intentionally avoids TNA mutation cutover.
+
 ## 2026-04-04 - LMS Read Parity Hardening and Rollout Readiness Checks
 - Commit/PR: pending
 - Type: test(lms) | refactor(api) | docs

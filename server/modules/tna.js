@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { queryRows, getRowByPrimaryKey, pool } from '../app.js';
 import { isFeatureEnabled } from '../features.js';
+import { fetchTnaSummaryFromSupabase, resolveTnaReadSource } from '../compat/supabaseTnaRead.js';
 
 export function isTnaEnabled() {
     return isFeatureEnabled('TNA');
@@ -611,6 +612,12 @@ export async function handleTnaAction(req, res, action) {
         requireRole(req, ['superadmin', 'manager', 'director', 'hr']);
 
         const period = String(getInput(req, 'period', '')).trim();
+        const sourceState = resolveTnaReadSource();
+
+        if (sourceState.source === 'supabase') {
+            const summary = await fetchTnaSummaryFromSupabase();
+            return res.json({ data: summary });
+        }
 
         const [totalNeeds] = await pool.query('SELECT COUNT(*) as cnt FROM training_need_records');
         const [completedNeeds] = await pool.query('SELECT COUNT(*) as cnt FROM training_need_records WHERE status = ?', ['completed']);
