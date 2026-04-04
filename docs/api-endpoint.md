@@ -549,3 +549,83 @@ Contract/QA additions:
 - `tests/contracts/lms-sprint4-admin.test.mjs`
 - `scripts/qa/lms-sprint4-admin-smoke.mjs` (`npm run qa:lms:sprint4`)
 - `npm run qa:contracts` -> pass
+
+### Employees Actions
+| Action | Status | Notes |
+|---|---|---|
+| `employees/insights` | Implemented | Per-employee KPI + Assessment + LMS aggregates |
+
+## 2026-04-04 New Endpoint - `employees/insights`
+
+Action: `employees/insights`  
+Method: POST  
+Module: `server/modules/employees.js`  
+Source switch: `EMPLOYEES_INSIGHTS_SOURCE=legacy|supabase|auto` (default: `auto`)
+
+### Request
+```json
+{ "employee_id": "EMP001" }
+```
+
+### Response
+```json
+{
+  "success": true,
+  "source": "supabase",
+  "insights": {
+    "kpi": {
+      "latest_score": 87.5,
+      "trend": "up",
+      "record_count": 12
+    },
+    "assessment": {
+      "gap_level": "medium",
+      "last_assessed_at": "2026-03-01T00:00:00Z",
+      "history_count": 4
+    },
+    "lms": {
+      "enrolled_count": 5,
+      "completed_count": 3,
+      "completion_pct": 60
+    }
+  }
+}
+```
+
+### Field notes
+- `kpi.latest_score`: if `target_snapshot` is available, expressed as % of target; otherwise raw value. `null` when no records.
+- `kpi.trend`: `"up"` / `"down"` / `"flat"` / `null`. Requires ≥ 2 scored periods.
+- `assessment.gap_level`: derived from `training_need_records.gap_level` average. `null` when no records.
+- `lms.completion_pct`: `0` when `enrolled_count = 0`.
+
+### Source behavior
+- `EMPLOYEES_INSIGHTS_SOURCE=supabase` → direct Supabase REST queries on `kpi_records`, `training_need_records`, `course_enrollments`
+- `EMPLOYEES_INSIGHTS_SOURCE=legacy` → `db/query` reads from MySQL
+- `EMPLOYEES_INSIGHTS_SOURCE=auto` (default) → Supabase when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set, else legacy
+
+### Access guard
+| Role | Allowed targets |
+|---|---|
+| `superadmin` | Any employee |
+| `hr` | Any employee |
+| `director` | Any employee |
+| `manager` | Self + direct reports (`employees.manager_id = req.user.employee_id`) |
+| `employee` | Self only |
+
+### Error responses
+| Status | Code | Condition |
+|---|---|---|
+| 400 | `INVALID_INPUT` | `employee_id` missing |
+| 401 | `AUTH_REQUIRED` | No session or JWT |
+| 403 | `FORBIDDEN` | Access to non-authorized employee |
+
+### Contract
+- Zod schema: `EmployeeInsightsSchema` in `packages/contracts/src/employees.ts`
+- Contract test: `tests/contracts/employees-insights.test.mjs` (54 pass total after addition)
+- Smoke test: `scripts/qa/employees-insights-smoke.mjs` (`npm run qa:employees:insights`)
+
+### React integration
+- `employeesAdapter.fetchInsights(employeeId)` in `apps/web-react/src/adapters/employeesAdapter.ts`
+- Separate `useQuery` in `EmployeeDetailPage` with `enabled` gated on `detailQuery` resolving
+- Skeleton loading state during fetch; no `Deferred` badges when insights load successfully
+- Graceful amber error banner if insights endpoint fails (detail page still works)

@@ -34,7 +34,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | Supabase Auth Stabilization | **Validated** ✅ | Real JWT parity validation against staging | `qa:auth:staging` passes in Supabase-only mode (MySQL down). Evidence in `docs/auth-parity-evidence.md`. Backend is now resilient via `server/pool.js` isolation + Supabase fallbacks in health check and session bridge. | — | Team | Proceed to Phase C mutation cutover |
 | Backend Endpoint Cutover (Phase C) | In progress | Migrate low-risk endpoint groups to Supabase-backed reads first | Verified Supabase read slices now include modules read, LMS read (`enrollments list/get/my-courses`, `progress/get`, `courses list/get`) and TNA read/report (`summary`, `gaps-report`, `lms-report`); LMS mutation slices now include `lms/enrollments/start` and `lms/enrollments/enroll|unenroll` with parity verification, while broader mutation-heavy flows remain legacy-backed | High | Team | Keep LMS/TNA routes flagged off; execute `qa:tna:workflow` in staging, then continue one-mutation-at-a-time cutover |
 | React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Role-aware IA has been rolled out (Core/Workforce/Assessment/Performance/Learning/Organization/System); Dashboard, Employees, and KPI/Assessment read-first workflows are active | High | Team | Validate role-based menu and route guard behavior in staging across superadmin/hr/manager |
-| Employees Module (React Shell) | In progress (read-first) | Legacy-parity employee management workflow in modern shell | Workforce directory + employee insights are active; HR has full visibility, manager is scoped to own team, and mutation-heavy CRUD remains legacy-only | High | Team | Add dedicated backend employee-summary endpoints (latest KPI trend, latest assessment timestamp, LMS completion aggregates) for stronger parity |
+| Employees Module (React Shell) | In progress (read-first + insights) | Legacy-parity employee management workflow in modern shell | Workforce directory + employee insights are active; `employees/insights` endpoint now provides real KPI/Assessment/LMS data per employee — deferred badges removed from detail page | — | Team | Add dedicated backend employee-summary endpoints for deeper drill-down (latest KPI trend per period, full TNA history) |
 | KPI & Assessment Module (React Shell) | In progress (read-first) | Legacy-parity management reporting workflow for KPI and assessment summaries | Summary tabs and grouped department/team breakdown are available; KPI achievement metrics are deferred where backend target fields are not consistently cut over | High | Team | Add dedicated Supabase-safe KPI reporting endpoint set, then unlock deeper drill-down record pages |
 | Production Deploy Cutover (Hostinger + Supabase) | In progress | Live frontend uses Supabase-backed auth/data path for shipped routes | LMS is now enabled in read-only mode (`/lms`, `/lms/my-courses`, `/lms/:courseId`); mutation-heavy LMS/TNA flows remain deferred pending parity gates | High | Team | Keep read-first LMS visible and continue mutation cutover one slice at a time |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
@@ -134,3 +134,12 @@ Cutover note:
   - `resolveSessionBridgeUser` and `getCurrentUser` both fall back to Supabase employee fetch when MySQL fails.
   - `qa:auth:staging` confirms: `employee_id` and `role` are identical between JWT and session paths for `ADM001`.
   - Evidence: `docs/auth-parity-evidence.md`.
+- `employees/insights` endpoint added (2026-04-04):
+  - New `server/modules/employees.js` with `employees/insights` action.
+  - Supabase-first, legacy fallback, `EMPLOYEES_INSIGHTS_SOURCE` switch.
+  - Role-based access: superadmin/hr/director → any; manager → direct reports; employee → self.
+  - Zod contract: `EmployeeInsightsSchema` in `packages/contracts/src/employees.ts`.
+  - Transport domain `employees` added to `apps/web-react/src/adapters/transport.ts`.
+  - `employeesAdapter.fetchInsights()` + `EmployeeDetailPage` now use a separate `useQuery` for insights — no deferred badges when endpoint succeeds.
+  - QA: `npm run qa:contracts` → 54/54 pass; `npm run qa:employees:insights` → pass.
+  - Documented in `docs/api-endpoint.md`.

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { env } from '@/lib/env';
 import { useAuth } from '@/providers/AuthProvider';
+import type { EmployeeInsights } from '@demo-kpi/contracts';
 
 function formatDate(value: string | null) {
     if (!value) return '-';
@@ -22,11 +23,13 @@ function SummarySection({
     title,
     description,
     cards,
+    isLoading,
 }: {
     icon: ReactNode;
     title: string;
     description: string;
     cards: Array<{ label: string; value: string; hint: string; deferred?: boolean }>;
+    isLoading?: boolean;
 }) {
     return (
         <Card>
@@ -38,19 +41,111 @@ function SummarySection({
                 <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {cards.map(card => (
-                    <div key={card.label} className="rounded-lg border p-3">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">{card.label}</p>
-                        <p className="text-2xl font-semibold">{card.value}</p>
-                        <p className="text-xs text-muted-foreground">{card.hint}</p>
-                        {card.deferred ? (
-                            <Badge variant="outline" className="mt-2">Deferred</Badge>
-                        ) : null}
-                    </div>
-                ))}
+                {isLoading
+                    ? Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="rounded-lg border p-3 animate-pulse">
+                            <div className="h-3 w-20 rounded bg-muted mb-2" />
+                            <div className="h-6 w-16 rounded bg-muted" />
+                        </div>
+                    ))
+                    : cards.map(card => (
+                        <div key={card.label} className="rounded-lg border p-3">
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">{card.label}</p>
+                            <p className="text-2xl font-semibold">{card.value}</p>
+                            <p className="text-xs text-muted-foreground">{card.hint}</p>
+                            {card.deferred ? (
+                                <Badge variant="outline" className="mt-2">Deferred</Badge>
+                            ) : null}
+                        </div>
+                    ))
+                }
             </CardContent>
         </Card>
     );
+}
+
+function trendLabel(trend: 'up' | 'down' | 'flat' | null): string {
+    if (trend === 'up') return '↑ Up';
+    if (trend === 'down') return '↓ Down';
+    if (trend === 'flat') return '→ Stable';
+    return 'No trend';
+}
+
+function gapLabel(gap: 'low' | 'medium' | 'high' | null): string {
+    if (gap === 'low') return 'Low';
+    if (gap === 'medium') return 'Medium';
+    if (gap === 'high') return 'High';
+    return 'No data';
+}
+
+function buildKpiCards(insights: EmployeeInsights | undefined, isLoading: boolean) {
+    if (isLoading || !insights) return [];
+    const { kpi } = insights.insights;
+    return [
+        {
+            label: 'Latest KPI',
+            value: kpi.latest_score !== null ? `${kpi.latest_score}` : 'No data',
+            hint: kpi.latest_score !== null ? 'Most recent period score' : 'No KPI records available',
+        },
+        {
+            label: 'KPI Trend',
+            value: trendLabel(kpi.trend),
+            hint: 'Recent periods vs prior periods',
+        },
+        {
+            label: 'KPI Records',
+            value: String(kpi.record_count),
+            hint: 'Stored KPI records',
+        },
+    ];
+}
+
+function buildAssessmentCards(insights: EmployeeInsights | undefined, isLoading: boolean, lastAssessmentDate: string | null) {
+    if (isLoading || !insights) return [];
+    const { assessment } = insights.insights;
+    return [
+        {
+            label: 'Gap Level',
+            value: gapLabel(assessment.gap_level),
+            hint: assessment.gap_level ? 'Derived from TNA need records' : 'No TNA records found',
+        },
+        {
+            label: 'Last Assessed',
+            value: assessment.last_assessed_at
+                ? formatDate(assessment.last_assessed_at)
+                : (lastAssessmentDate ? formatDate(lastAssessmentDate) : 'No data'),
+            hint: 'Latest TNA or manager assessment date',
+        },
+        {
+            label: 'TNA Records',
+            value: String(assessment.history_count),
+            hint: 'Identified training need records',
+        },
+    ];
+}
+
+function buildLmsCards(insights: EmployeeInsights | undefined, isLoading: boolean) {
+    if (isLoading || !insights) return [];
+    const { lms } = insights.insights;
+    return [
+        {
+            label: 'Total Enrollments',
+            value: String(lms.enrolled_count),
+            hint: 'All LMS enrollments for employee',
+        },
+        {
+            label: 'Completed',
+            value: String(lms.completed_count),
+            hint: `Completion status in LMS`,
+        },
+        {
+            label: 'Completion %',
+            value: lms.enrolled_count > 0 ? `${lms.completion_pct}%` : 'No data',
+            hint: lms.enrolled_count > 0
+                ? `${lms.enrolled_count - lms.completed_count} in progress or pending`
+                : 'No LMS enrollments yet',
+        },
+    ];
 }
 
 export function EmployeeDetailPage() {
@@ -70,6 +165,14 @@ export function EmployeeDetailPage() {
         staleTime: 30_000,
     });
 
+    const insightsQuery = useQuery({
+        queryKey: ['employees', 'insights', decodedEmployeeId],
+        queryFn: () => employeesAdapter.fetchInsights(decodedEmployeeId),
+        enabled: Boolean(decodedEmployeeId) && !detailQuery.isLoading && !detailQuery.isError && Boolean(detailQuery.data),
+        staleTime: 60_000,
+        retry: 1,
+    });
+
     if (!decodedEmployeeId) {
         return (
             <Card className="border-destructive/40">
@@ -80,6 +183,16 @@ export function EmployeeDetailPage() {
             </Card>
         );
     }
+
+    const lastAssessmentDate = (() => {
+        const direct = String((detailQuery.data?.employee as Record<string, unknown> | undefined)?.assessment_updated_at || '').trim();
+        return direct || null;
+    })();
+
+    const insightsLoading = insightsQuery.isLoading || insightsQuery.isFetching;
+    const kpiCards = buildKpiCards(insightsQuery.data, insightsLoading);
+    const assessmentCards = buildAssessmentCards(insightsQuery.data, insightsLoading, lastAssessmentDate);
+    const lmsCards = buildLmsCards(insightsQuery.data, insightsLoading);
 
     return (
         <div className="space-y-6">
@@ -162,23 +275,38 @@ export function EmployeeDetailPage() {
                     <SummarySection
                         icon={<ClipboardList className="size-4 text-primary" />}
                         title="Assessment Summary"
-                        description="Gap level and last-assessment visibility aligned with current readable records."
-                        cards={detailQuery.data.summary.assessment}
+                        description="Gap level and last-assessment visibility from TNA need records."
+                        cards={assessmentCards}
+                        isLoading={insightsLoading}
                     />
 
                     <SummarySection
                         icon={<Target className="size-4 text-primary" />}
                         title="KPI Summary"
-                        description="Latest KPI, trend, and record visibility from read-first sources."
-                        cards={detailQuery.data.summary.kpi}
+                        description="Latest KPI score, trend, and record count from the canonical insights endpoint."
+                        cards={kpiCards}
+                        isLoading={insightsLoading}
                     />
 
                     <SummarySection
                         icon={<GraduationCap className="size-4 text-primary" />}
                         title="LMS Summary"
-                        description="Enrollment counts shown when employee-scoped LMS reads are available."
-                        cards={detailQuery.data.summary.lms}
+                        description="Enrollment count and completion rate from the canonical insights endpoint."
+                        cards={lmsCards}
+                        isLoading={insightsLoading}
                     />
+
+                    {insightsQuery.isError ? (
+                        <Card className="border-amber-500/40">
+                            <CardHeader>
+                                <CardTitle className="text-sm text-amber-600">Insights Unavailable</CardTitle>
+                                <CardDescription>
+                                    KPI, Assessment, and LMS summary data could not be loaded.
+                                    {insightsQuery.error instanceof Error ? ` ${insightsQuery.error.message}` : ''}
+                                </CardDescription>
+                            </CardHeader>
+                        </Card>
+                    ) : null}
 
                     <Card>
                         <CardHeader>

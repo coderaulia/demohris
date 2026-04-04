@@ -3,7 +3,7 @@ import type { ZodTypeAny } from 'zod';
 import { env, type BackendTarget } from '@/lib/env';
 import { HttpError, requestJson } from '@/lib/httpClient';
 
-type Domain = 'auth' | 'lms' | 'tna' | 'modules' | 'db';
+type Domain = 'auth' | 'employees' | 'lms' | 'tna' | 'modules' | 'db';
 type RequestMethod = 'GET' | 'POST';
 type TransportSource = 'legacy' | 'supabase';
 

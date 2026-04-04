@@ -17,6 +17,7 @@ import { getTableMeta, getRegisteredTables, isTableRegistered, isTableReadable, 
 import { isFeatureEnabled } from './features.js';
 import { isTnaEnabled, handleTnaAction } from './modules/tna.js';
 import { handleLmsAction } from './modules/lms.js';
+import { handleEmployeesAction } from './modules/employees.js';
 import {
     getAllModules,
     getModule,
@@ -1074,6 +1075,11 @@ app.all('/api', async (req, res, next) => {
 
         if (action === 'db/query') {
             await handleDbQuery(req, res);
+            return;
+        }
+
+        if (action.startsWith('employees/')) {
+            await handleEmployeesAction(req, res, action);
             return;
         }
 

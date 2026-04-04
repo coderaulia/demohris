@@ -2,10 +2,12 @@ import { z } from 'zod';
 
 import {
     EmployeeDetailResponseSchema,
+    EmployeeInsightsSchema,
     EmployeeListResponseSchema,
     EmployeeRecordSchema,
     EmployeeStatusSchema,
     type EmployeeDetailResponse,
+    type EmployeeInsights,
     type EmployeeRecord,
     type EmployeeRole,
     type EmployeeStatus,
@@ -485,6 +487,18 @@ export const employeesAdapter = {
                 tna: tnaCards,
             },
         });
+    },
+
+    async fetchInsights(employeeId: string): Promise<EmployeeInsights> {
+        const accessToken = await getAuthAccessToken();
+        const response = await transport.execute<EmployeeInsights>({
+            domain: 'employees',
+            action: 'employees/insights',
+            payload: { employee_id: employeeId },
+            schema: EmployeeInsightsSchema,
+            accessToken: accessToken || undefined,
+        });
+        return response;
     },
 
     getFilterOptions(employees: EmployeeRecord[]) {

@@ -85,3 +85,38 @@ export type EmployeeListResponse = z.infer<typeof EmployeeListResponseSchema>;
 export type EmployeeSummaryCard = z.infer<typeof EmployeeSummaryCardSchema>;
 export type EmployeeDetailSummary = z.infer<typeof EmployeeDetailSummarySchema>;
 export type EmployeeDetailResponse = z.infer<typeof EmployeeDetailResponseSchema>;
+
+// ─── Employee Insights ───────────────────────────────────────────────────────
+
+export const EmployeeKpiInsightsSchema = z.object({
+    latest_score: z.number().nullable(),
+    trend: z.enum(['up', 'down', 'flat']).nullable(),
+    record_count: z.number().int().nonnegative(),
+});
+
+export const EmployeeAssessmentInsightsSchema = z.object({
+    gap_level: z.enum(['low', 'medium', 'high']).nullable(),
+    last_assessed_at: z.string().nullable(),
+    history_count: z.number().int().nonnegative(),
+});
+
+export const EmployeeLmsInsightsSchema = z.object({
+    enrolled_count: z.number().int().nonnegative(),
+    completed_count: z.number().int().nonnegative(),
+    completion_pct: z.number().min(0).max(100),
+});
+
+export const EmployeeInsightsSchema = z.object({
+    success: z.boolean(),
+    source: z.enum(['supabase', 'legacy']).optional(),
+    insights: z.object({
+        kpi: EmployeeKpiInsightsSchema,
+        assessment: EmployeeAssessmentInsightsSchema,
+        lms: EmployeeLmsInsightsSchema,
+    }),
+});
+
+export type EmployeeKpiInsights = z.infer<typeof EmployeeKpiInsightsSchema>;
+export type EmployeeAssessmentInsights = z.infer<typeof EmployeeAssessmentInsightsSchema>;
+export type EmployeeLmsInsights = z.infer<typeof EmployeeLmsInsightsSchema>;
+export type EmployeeInsights = z.infer<typeof EmployeeInsightsSchema>;
