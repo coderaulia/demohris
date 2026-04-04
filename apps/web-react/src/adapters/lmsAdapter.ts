@@ -1,4 +1,6 @@
 import {
+    LmsCourseGetResponseSchema,
+    LmsCourseListResponseSchema,
     LmsEnrollmentGetResponseSchema,
     LmsEnrollmentListResponseSchema,
     LmsEnrollmentMutationResponseSchema,
@@ -43,7 +45,37 @@ export interface LmsProgressCompleteLessonInput {
     lesson_id: string;
 }
 
+export interface LmsListCoursesInput {
+    status?: string;
+    category?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface LmsGetCourseInput {
+    course_id: string;
+}
+
 export const lmsAdapter = {
+    listCourses(input: LmsListCoursesInput = {}) {
+        return transport.execute({
+            domain: 'lms',
+            action: 'lms/courses/list',
+            payload: input,
+            schema: LmsCourseListResponseSchema,
+        });
+    },
+
+    getCourse(input: LmsGetCourseInput) {
+        return transport.execute({
+            domain: 'lms',
+            action: 'lms/courses/get',
+            payload: input,
+            schema: LmsCourseGetResponseSchema,
+        });
+    },
+
     listEnrollments(input: LmsListEnrollmentsInput = {}) {
         return transport.execute({
             domain: 'lms',

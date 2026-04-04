@@ -1,14 +1,26 @@
-import { env } from '@/lib/env';
+import { ExternalLink } from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { env } from '@/lib/env'
 
 export function TnaPlaceholderPage() {
-    return (
-        <article className="card">
-            <h3>TNA Module Placeholder</h3>
-            <p>
-                TNA remains served by legacy UI during this shell phase. This route exists to keep navigation and
-                guard behavior stable while module cutovers are planned.
-            </p>
-            <a href={env.legacyAppUrl}>Open Legacy TNA Flow</a>
-        </article>
-    );
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>TNA Module (Feature-Flagged)</CardTitle>
+        <CardDescription>
+          TNA React route remains protected until mutation and workflow parity is validated against Supabase-backed
+          paths.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button variant="outline" onClick={() => window.open(env.legacyAppUrl, '_self')}>
+          <ExternalLink className="size-4" />
+          Open Legacy TNA Flow
+        </Button>
+      </CardContent>
+    </Card>
+  )
 }
+

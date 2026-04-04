@@ -1,9 +1,15 @@
 import {
     TnaCalculateGapsRequestSchema,
     TnaCalculateGapsResponseSchema,
+    TnaGapsReportRequestSchema,
+    TnaGapsReportResponseSchema,
+    TnaLmsReportRequestSchema,
+    TnaLmsReportResponseSchema,
     TnaSummaryRequestSchema,
     TnaSummaryResponseSchema,
     type TnaCalculateGapsRequest,
+    type TnaGapsReportRequest,
+    type TnaLmsReportRequest,
     type TnaSummaryRequest,
 } from '@demo-kpi/contracts';
 
@@ -27,6 +33,26 @@ export const tnaAdapter = {
             action: 'tna/summary',
             payload,
             schema: TnaSummaryResponseSchema,
+        });
+    },
+
+    gapsReport(input: TnaGapsReportRequest = {}) {
+        const payload = TnaGapsReportRequestSchema.parse(input);
+        return transport.execute({
+            domain: 'tna',
+            action: 'tna/gaps-report',
+            payload,
+            schema: TnaGapsReportResponseSchema,
+        });
+    },
+
+    lmsReport(input: TnaLmsReportRequest = {}) {
+        const payload = TnaLmsReportRequestSchema.parse(input);
+        return transport.execute({
+            domain: 'tna',
+            action: 'tna/lms-report',
+            payload,
+            schema: TnaLmsReportResponseSchema,
         });
     },
 };

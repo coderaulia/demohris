@@ -3,7 +3,7 @@ import type { ZodTypeAny } from 'zod';
 import { env, type BackendTarget } from '@/lib/env';
 import { HttpError, requestJson } from '@/lib/httpClient';
 
-type Domain = 'auth' | 'lms' | 'tna';
+type Domain = 'auth' | 'lms' | 'tna' | 'modules';
 type RequestMethod = 'GET' | 'POST';
 type TransportSource = 'legacy' | 'supabase';
 
@@ -17,11 +17,30 @@ export interface AdapterRequest {
 }
 
 const SUPABASE_ACTIONS = new Set<string>([
-    // Intentionally empty in this slice.
-    // Supabase live auth is handled directly in authAdapter.
+    // Modules read cutover.
+    'list',
+    'get',
+    'by-category',
+    'active',
+    // LMS read cutovers.
+    'lms/enrollments/list',
+    'lms/enrollments/get',
+    'lms/enrollments/my-courses',
+    'lms/progress/get',
+    'lms/courses/list',
+    'lms/courses/get',
+    // TNA read cutovers.
+    'tna/summary',
+    'tna/gaps-report',
+    'tna/lms-report',
 ]);
 
-function buildLegacyActionUrl(action: string): string {
+function buildActionUrl(action: string, domain: Domain): string {
+    if (domain === 'modules') {
+        const base = env.apiBaseUrl.endsWith('/api') ? `${env.apiBaseUrl}/modules` : '/api/modules';
+        const separator = base.includes('?') ? '&' : '?';
+        return `${base}${separator}action=${encodeURIComponent(action)}`;
+    }
     const base = env.apiBaseUrl;
     const separator = base.includes('?') ? '&' : '?';
     return `${base}${separator}action=${encodeURIComponent(action)}`;
@@ -44,6 +63,7 @@ function resolveSource(action: string, target: BackendTarget): TransportSource {
 }
 
 async function requestLegacy<TSchema>(
+    domain: Domain,
     action: string,
     payload: unknown,
     method: RequestMethod,
@@ -55,7 +75,7 @@ async function requestLegacy<TSchema>(
         headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    const parsed = await requestJson<unknown>(buildLegacyActionUrl(action), {
+    const parsed = await requestJson<unknown>(buildActionUrl(action, domain), {
         method,
         headers,
         body: method === 'GET' ? undefined : JSON.stringify(payload || {}),
@@ -63,19 +83,16 @@ async function requestLegacy<TSchema>(
     return schema.parse(parsed) as TSchema;
 }
 
-// Supabase mode must not silently call legacy endpoints.
+// Supabase mode is still served through the backend API layer for migrated endpoints.
 async function requestSupabase<TSchema>(
+    domain: Domain,
     action: string,
-    _payload: unknown,
-    _method: RequestMethod,
-    _schema: ZodTypeAny,
-    _accessToken?: string
+    payload: unknown,
+    method: RequestMethod,
+    schema: ZodTypeAny,
+    accessToken?: string
 ): Promise<TSchema> {
-    throw new HttpError(
-        `Action "${action}" is not implemented in the Supabase transport adapter.`,
-        501,
-        'SUPABASE_ADAPTER_MISSING'
-    );
+    return requestLegacy(domain, action, payload, method, schema, accessToken);
 }
 
 export const transport = {
@@ -83,8 +100,8 @@ export const transport = {
         const source = resolveSource(request.action, env.backendTarget);
         const method = request.method || 'POST';
         if (source === 'supabase') {
-            return requestSupabase(request.action, request.payload, method, request.schema, request.accessToken);
+            return requestSupabase(request.domain, request.action, request.payload, method, request.schema, request.accessToken);
         }
-        return requestLegacy(request.action, request.payload, method, request.schema, request.accessToken);
+        return requestLegacy(request.domain, request.action, request.payload, method, request.schema, request.accessToken);
     },
 };

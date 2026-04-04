@@ -1,14 +1,24 @@
-import { env } from '@/lib/env';
+import { ExternalLink } from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { env } from '@/lib/env'
 
 export function LmsPlaceholderPage() {
-    return (
-        <article className="card">
-            <h3>LMS Module Placeholder</h3>
-            <p>
-                LMS React migration is intentionally deferred. Existing LMS flows stay on the legacy app until domain
-                cutover phases.
-            </p>
-            <a href={env.legacyAppUrl}>Open Legacy LMS Flow</a>
-        </article>
-    );
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>LMS Module (Feature-Flagged)</CardTitle>
+        <CardDescription>
+          LMS React route remains intentionally limited while mutation-heavy workflows are still validating parity.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button variant="outline" onClick={() => window.open(env.legacyAppUrl, '_self')}>
+          <ExternalLink className="size-4" />
+          Open Legacy LMS Flow
+        </Button>
+      </CardContent>
+    </Card>
+  )
 }

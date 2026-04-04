@@ -28,6 +28,46 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - React Dashboard Workflow Parity Rebuild (Tailwind + shadcn)
+- Commit/PR: pending
+- Type: feat(dashboard) | refactor(frontend) | docs
+- Scope: rebuild dashboard in React shell to preserve legacy HR workflow parity without cloning legacy visuals
+- Completed:
+  - Rebuilt `apps/web-react/src/pages/DashboardPage.tsx` from shell placeholder into real management dashboard:
+    - filter-first controls: `department`, `manager`, `period`, apply/clear
+    - summary mode tabs: `KPI Summary` and `Assessment Summary`
+    - department overview cards with management-oriented metrics
+    - drill-down-ready interaction
+  - Added drill-down boundary route/page:
+    - `/dashboard/drilldown/:mode/:department`
+    - `apps/web-react/src/pages/DashboardDrilldownPage.tsx`
+  - Added dashboard data adapter:
+    - `apps/web-react/src/adapters/dashboardAdapter.ts`
+  - Expanded adapters/contracts for dashboard-safe read endpoints:
+    - `modulesAdapter` (`apps/web-react/src/adapters/modulesAdapter.ts`)
+    - LMS adapter additions: `lms/courses/list|get`
+    - TNA adapter additions: `tna/gaps-report`, `tna/lms-report`
+    - contract updates in `packages/contracts/src/lms.ts` and `packages/contracts/src/tna.ts`
+  - Updated transport allow-list to keep Supabase target strict while enabling only verified read slices.
+  - Migrated React shell UI to Tailwind + shadcn-style primitives:
+    - added Tailwind setup (`tailwind.config.js`, `postcss.config.js`, `src/styles.css`)
+    - added reusable UI primitives under `src/components/ui/*`
+    - refreshed `AppLayout`, `LoginPage`, route guard/error boundary, and placeholders to consistent modern styling
+  - Validation:
+    - `npm run typecheck` (apps/web-react) -> pass
+    - `npm run build` (apps/web-react) -> pass
+- Gap Found:
+  - Manager filter still relies on available read rows (inferred manager candidates) because dedicated manager mapping endpoint is not yet cut over.
+  - Weighted KPI scoring summary remains deferred until KPI score endpoints are migrated/verified.
+  - LMS/TNA full module routes remain feature-flagged off due mutation parity constraints.
+- Next Follow-up:
+  - [ ] Add dedicated manager mapping source endpoint for filter parity.
+  - [ ] Add KPI weighted-score summary endpoint integration once API slice is verified.
+  - [ ] Run live/staging smoke for dashboard role scenarios (superadmin/hr/manager) after deploy.
+- Notes:
+  - Dashboard uses adapter-only reads; no direct fetch in components.
+  - Deferred metrics are explicitly surfaced in UI/docs to avoid fake business stats.
+
 ## 2026-04-04 - Continue Supabase Read/Report Cutover (LMS Catalog + TNA Reports)
 - Commit/PR: pending
 - Type: refactor(api) | test | docs

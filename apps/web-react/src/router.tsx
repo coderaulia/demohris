@@ -3,6 +3,7 @@ import { Navigate, createBrowserRouter, type RouteObject } from 'react-router-do
 import { AppLayout } from '@/components/AppLayout';
 import { env } from '@/lib/env';
 import { RouteGuard } from '@/components/RouteGuard';
+import { DashboardDrilldownPage } from '@/pages/DashboardDrilldownPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LmsPlaceholderPage } from '@/pages/LmsPlaceholderPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -45,6 +46,10 @@ export const router = createBrowserRouter([
             {
                 path: 'dashboard',
                 element: <DashboardPage />,
+            },
+            {
+                path: 'dashboard/drilldown/:mode/:department',
+                element: <DashboardDrilldownPage />,
             },
             ...moduleRoutes,
         ],

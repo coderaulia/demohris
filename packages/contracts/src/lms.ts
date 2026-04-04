@@ -16,6 +16,11 @@ export const LmsProgressActionSchema = z.enum([
     'lms/progress/complete-lesson',
 ]);
 
+export const LmsCourseActionSchema = z.enum([
+    'lms/courses/list',
+    'lms/courses/get',
+]);
+
 export const LmsEnrollmentListResponseSchema = z
     .object({
         success: z.boolean(),
@@ -56,11 +61,31 @@ export const LmsProgressCompleteLessonResponseSchema = z
     })
     .passthrough();
 
+export const LmsCourseListResponseSchema = z
+    .object({
+        success: z.boolean(),
+        courses: z.array(z.unknown()),
+        total: z.number(),
+        page: z.number(),
+        limit: z.number(),
+    })
+    .passthrough();
+
+export const LmsCourseGetResponseSchema = z
+    .object({
+        success: z.boolean(),
+        course: z.unknown(),
+    })
+    .passthrough();
+
 export type LmsEnrollmentAction = z.infer<typeof LmsEnrollmentActionSchema>;
 export type LmsProgressAction = z.infer<typeof LmsProgressActionSchema>;
+export type LmsCourseAction = z.infer<typeof LmsCourseActionSchema>;
 export type LmsEnrollmentListResponse = z.infer<typeof LmsEnrollmentListResponseSchema>;
 export type LmsEnrollmentGetResponse = z.infer<typeof LmsEnrollmentGetResponseSchema>;
 export type LmsEnrollmentMutationResponse = z.infer<typeof LmsEnrollmentMutationResponseSchema>;
 export type LmsProgressGetResponse = z.infer<typeof LmsProgressGetResponseSchema>;
 export type LmsProgressUpdateResponse = z.infer<typeof LmsProgressUpdateResponseSchema>;
 export type LmsProgressCompleteLessonResponse = z.infer<typeof LmsProgressCompleteLessonResponseSchema>;
+export type LmsCourseListResponse = z.infer<typeof LmsCourseListResponseSchema>;
+export type LmsCourseGetResponse = z.infer<typeof LmsCourseGetResponseSchema>;

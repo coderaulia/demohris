@@ -1,13 +1,13 @@
 # Frontend Architecture (React Strangler Shell)
 
-Last updated: 2026-04-03
+Last updated: 2026-04-04
 
 ## Scope of This Slice
 - Added isolated React + TypeScript app at `apps/web-react`.
 - Added shared contract layer at `packages/contracts` (Zod + inferred types).
-- Added adapter-based data boundary for auth/LMS/TNA calls.
-- Kept legacy frontend untouched.
-- Migrated only the dashboard shell route, not LMS/TNA feature screens.
+- Added adapter-based data boundary for auth/LMS/TNA/modules calls.
+- Rebuilt dashboard from shell placeholder into workflow-oriented HR management dashboard.
+- Kept legacy frontend untouched for LMS/TNA mutation-heavy screens.
 
 ## Folder Layout
 
@@ -16,19 +16,30 @@ apps/web-react
   src/
     adapters/
       authAdapter.ts
+      dashboardAdapter.ts
       lmsAdapter.ts
+      modulesAdapter.ts
       tnaAdapter.ts
       transport.ts
     components/
       AppErrorBoundary.tsx
       AppLayout.tsx
       RouteGuard.tsx
+      ui/
+        badge.tsx
+        button.tsx
+        card.tsx
+        input.tsx
+        select.tsx
+        tabs.tsx
     lib/
       env.ts
       httpClient.ts
       supabaseClient.ts
+      utils.ts
     pages/
       DashboardPage.tsx
+      DashboardDrilldownPage.tsx
       LoginPage.tsx
       LmsPlaceholderPage.tsx
       TnaPlaceholderPage.tsx
@@ -49,9 +60,11 @@ packages/contracts
 - Schemas are aligned to current golden fixtures:
   - `auth/login`
   - `auth/session`
+  - `lms/courses/list|get`
   - `lms/enrollments/*`
   - `lms/progress/*`
   - `tna/calculate-gaps`
+  - `tna/summary|gaps-report|lms-report`
   - `modules/*`
 - Adapters parse responses with Zod before returning data to React components.
 
@@ -62,8 +75,14 @@ packages/contracts
   - `legacy`
   - `supabase`
   - `auto`
-- In `supabase` target mode, non-cutover actions are blocked (no silent fallback to legacy).
+- In `supabase` target mode, only allow-listed cutover actions are callable.
+- `modules` domain is routed through `/api/modules?action=*` from adapter transport.
 - No direct `fetch` is used in React pages/components.
+
+Current allow-listed Supabase-safe adapter actions:
+- modules read: `list|get|by-category|active`
+- LMS read: `courses/list|get`, `enrollments/list|get|my-courses`, `progress/get`
+- TNA read: `summary`, `gaps-report`, `lms-report`
 
 ## Auth Model in React Shell
 - `AuthProvider` flow:
@@ -81,6 +100,7 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
 ## Routing and Guards
 - Routes:
   - `/dashboard`
+  - `/dashboard/drilldown/:mode/:department` (safe placeholder boundary for future detail views)
   - `/login`
 - Feature-flagged routes:
   - `/lms/*` via `VITE_ENABLE_LMS_ROUTE`
@@ -93,6 +113,46 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
 - TanStack Query is used for async state.
 - Session and dashboard snapshot are query-backed.
 - Adapters own request shape, transport selection, and schema parsing.
+
+## Dashboard IA (Workflow Parity, Modern UI)
+
+Dashboard now preserves legacy management workflow patterns without visual cloning:
+
+- Filter-first top bar:
+  - `department`
+  - `manager`
+  - `period`
+  - apply/clear controls
+- Summary tabs:
+  - KPI Summary
+  - Assessment Summary
+- Department overview cards:
+  - employee count
+  - record count
+  - met/target metric when available
+  - secondary metric per mode
+- Drill-down-ready interaction:
+  - each card links to `/dashboard/drilldown/:mode/:department`
+
+Data sources (adapter-only, no direct component fetches):
+- `modulesAdapter.active()`
+- `tnaAdapter.summary()`
+- `tnaAdapter.gapsReport()`
+- `tnaAdapter.lmsReport()`
+- `lmsAdapter.listCourses()`
+
+Deferred dashboard metrics (explicit boundary, no fake data):
+- manager mapping source requires dedicated endpoint parity (currently inferred from available gap rows only)
+- weighted KPI score summary remains deferred until KPI score endpoints are safely cut over
+
+## UI System (Tailwind + shadcn)
+
+- Tailwind configured for React shell (`tailwind.config.js`, `postcss.config.js`, `src/styles.css`).
+- shadcn-style primitives added under `src/components/ui`.
+- Design direction:
+  - modern, neutral management interface
+  - semantic token-based theming
+  - responsive cards/tabs/filter layout with mobile-safe behavior
 
 ## Hostinger Deployment Notes
 - Build command for React shell:

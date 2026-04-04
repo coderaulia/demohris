@@ -32,7 +32,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | Supabase Schema + Seed Baseline | Completed (dev/staging baseline) | Supabase is the active development/staging data foundation | Backend runtime still has legacy MySQL query coupling for domain handlers | High | Team | Start backend domain query cutover from MySQL to Supabase by module |
 | Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Backend target in `BACKEND_BASE_URL` fails health check due MySQL connectivity (`ECONNREFUSED 127.0.0.1:3306`) | High | Team | Run backend with reachable DB (or point to staging backend) and rerun `qa:auth:staging` |
 | Backend Endpoint Cutover (Phase C) | In progress | Migrate low-risk endpoint groups to Supabase-backed reads first | Verified Supabase read slices now include modules read, LMS read (`enrollments list/get/my-courses`, `progress/get`, `courses list/get`) and TNA read/report (`summary`, `gaps-report`, `lms-report`); first LMS mutation slice (`lms/enrollments/start`) is cut over and parity-verified, while broader mutation-heavy flows remain legacy-backed | High | Team | Keep LMS/TNA routes flagged off; execute `qa:tna:workflow` in staging, then continue one-mutation-at-a-time cutover |
-| React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Shell exists, but LMS/TNA screens are still legacy placeholders | High | Team | Migrate next safe view through adapters after auth parity unblocks |
+| React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Dashboard workflow parity has been rebuilt in React (filter-first, KPI/Assessment tabs, department cards, drill-down-ready route); LMS/TNA module screens remain placeholder-gated pending mutation parity | High | Team | Validate dashboard behavior in staging/live-safe mode, then expand LMS/TNA routes incrementally |
 | Production Deploy Cutover (Hostinger + Supabase) | In progress | Live frontend uses Supabase-backed auth/data path for shipped routes | LMS/TNA routes still feature-flagged off; read slices are smoke-verified, but mutation parity and route-level rollout checks are still pending | High | Team | Keep shell/login/dashboard scope live and expand route-by-route only after read + mutation parity passes |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
 
@@ -88,6 +88,11 @@ Data foundation note:
 Production deployment note:
 - Current release scope for public deployment is intentionally limited to React shell + Supabase-backed auth/dashboard.
 - LMS/TNA React routes are feature-flagged and not marked live until their backend paths are Supabase-ready.
+- React dashboard now preserves management workflow patterns (without visual cloning):
+  - filter bar (`department`, `manager`, `period`, clear/apply)
+  - KPI Summary vs Assessment Summary tabs
+  - department grouped overview cards
+  - drill-down-ready route boundary (`/dashboard/drilldown/:mode/:department`)
 
 Cutover note:
 - First Supabase backend domain slice is complete for `modules/*` read endpoints (`list`, `get`, `by-category`, `active`) using `MODULES_READ_SOURCE` switch.
