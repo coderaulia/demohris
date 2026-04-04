@@ -86,6 +86,7 @@ Security rule:
 
 Frontend:
 - [ ] Hostinger build command set to `npm run hostinger:build`
+- [ ] Hostinger start command set to `npm run hostinger:start`
 - [ ] Hostinger output directory set to `apps/web-react/dist`
 - [ ] Build succeeds from `apps/web-react`
 - [ ] `/dashboard` page refresh resolves to SPA fallback (no 404)

@@ -1,11 +1,12 @@
 {
   "framework": "express",
-  "buildCommand": "npm run build",
-  "startCommand": "npm run start",
+  "buildCommand": "npm run hostinger:build",
+  "startCommand": "npm run hostinger:start",
   "nodeVersion": "20",
-  "distDirectory": "dist",
+  "distDirectory": "apps/web-react/dist",
   "env": {
     "NODE_ENV": "production",
-    "PORT": "3000"
+    "PORT": "3000",
+    "FRONTEND_DIST_DIR": "apps/web-react/dist"
   }
 }

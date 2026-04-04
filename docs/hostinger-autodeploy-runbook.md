@@ -24,6 +24,8 @@ Use these exact values in Hostinger Git deployment:
   - `npm install`
 - Build command (recommended for this monorepo):
   - `npm run hostinger:build`
+- Start command:
+  - `npm run hostinger:start`
 - Publish directory:
   - `apps/web-react/dist`
 
@@ -36,6 +38,7 @@ If Hostinger defaults to `Express` preset in the review screen:
 2. Click `Change` under Build and output settings
 3. Override the defaults with the values above
 4. Ensure the publish/output directory is exactly `apps/web-react/dist`
+5. Ensure start command is `npm run hostinger:start` (not `npm run start`)
 
 ## Hostinger Environment Variables (Frontend)
 
@@ -45,6 +48,7 @@ Required:
 - `VITE_API_TARGET=supabase`
 - `VITE_ENABLE_LMS_ROUTE=false`
 - `VITE_ENABLE_TNA_ROUTE=false`
+- `FRONTEND_DIST_DIR=apps/web-react/dist`
 
 Optional:
 - `VITE_API_BASE_URL=/api`
@@ -100,6 +104,7 @@ From the "Review build settings" page shown:
 - Node version: `20.x`
 - Root directory: `./`
 - Build/output: must be overridden to build `apps/web-react` and publish `apps/web-react/dist`
+- Start command: must be `npm run hostinger:start` to avoid booting legacy MySQL backend
 
 ## Rollback
 

@@ -28,6 +28,27 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Hostinger Frontend-Only Runtime Fix
+- Commit/PR: pending
+- Type: fix(deploy) | chore
+- Scope: Hostinger CI/CD build/start alignment for frontend-only deployment
+- Completed:
+  - Switched default root build script to React shell build path.
+  - Added Hostinger static SPA runtime script:
+    - `scripts/hostinger-frontend-server.mjs`
+  - Updated Hostinger config to frontend-only deploy:
+    - `hostinger.json` now uses `npm run hostinger:build` and `npm run hostinger:start`
+    - dist directory set to `apps/web-react/dist`
+  - Updated deployment docs with required start-command override.
+- Gap Found:
+  - Legacy root Vite build warnings are unrelated to the new React shell but can still appear if Hostinger uses old build command.
+- Next Follow-up:
+  - [ ] Confirm Hostinger project settings match `hostinger.json` overrides.
+  - [ ] Redeploy and verify `/dashboard` refresh + Supabase login on live domain.
+- Notes:
+  - Build warnings about large chunks are warnings, not build failures.
+  - Previous deployment failures were likely caused by wrong build/start target selection.
+
 ## 2026-04-03 - Production Deploy Cutover Preparation (Hostinger + Supabase)
 - Commit/PR: pending
 - Type: chore(deploy) | refactor(frontend) | docs
