@@ -62,8 +62,8 @@ Files verified:
 | `lms/courses/*` | blocked | MySQL | contract only | feature-flagged off | defer to read-first LMS slice |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |
-| `lms/enrollments/*` | blocked | MySQL | contract only | feature-flagged off | defer |
-| `lms/progress/*` | blocked | MySQL | contract only | feature-flagged off | defer |
+| `lms/enrollments/*` | in progress (read actions cut over) | mixed: Supabase for `list/get/my-courses` via source switch, MySQL for mutations | contract + adapter integration + smoke script | feature-flagged off | second cutover slice completed for read actions |
+| `lms/progress/*` | in progress (read action cut over) | mixed: Supabase for `get` via source switch, MySQL for mutations | contract + adapter integration + smoke script | feature-flagged off | second cutover slice completed for `get` |
 | `lms/quizzes/*` | blocked | MySQL | not tested | feature-flagged off | high-risk; defer |
 | `lms/dashboard/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/assignments/*` | blocked | MySQL | not tested | feature-flagged off | defer |
@@ -81,6 +81,29 @@ Why lowest risk:
 - no scoring/progress side effects
 - isolated table (`module_settings`)
 - no LMS/TNA mutation coupling
+
+## STEP 3 - Second Safe Cutover Slice
+
+Selected slice:
+- LMS read actions:
+  - `lms/enrollments/list`
+  - `lms/enrollments/get`
+  - `lms/enrollments/my-courses`
+  - `lms/progress/get`
+
+Implementation:
+- Added `server/compat/supabaseLmsRead.js` for Supabase-backed enrollment/progress reads.
+- Added source switch:
+  - `LMS_READ_SOURCE=legacy|supabase|auto`
+  - `auto` uses Supabase when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` exist.
+- Kept LMS mutation actions (`enroll`, `unenroll`, `start`, `complete`, `progress/update`, `progress/complete-lesson`, quizzes, certificates) on legacy path.
+
+Validation:
+- Contract + adapter tests:
+  - `tests/contracts/lms-read-cutover.test.mjs`
+- Authenticated smoke harness:
+  - `scripts/qa/lms-read-cutover-smoke.mjs`
+  - `npm run qa:lms:cutover`
 
 ## STEP 6 - Repeatable Cutover Pattern
 
@@ -107,5 +130,4 @@ Use this checklist for every next slice:
 - LMS/TNA frontend routes stay disabled.
 - No new frontend route exposure in this cutover commit.
 - Next recommended slice:
-  - LMS read-only list/overview endpoints after module-read cutover stabilization.
-
+  - TNA read-only summary/reporting endpoints after LMS read-slice stabilization.

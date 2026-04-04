@@ -34,7 +34,8 @@
     "qa:supabase:provision": "node scripts/qa/supabase-provision.mjs",
     "qa:supabase:auth-users": "node scripts/qa/supabase-provision-auth-users.mjs",
     "qa:auth:staging": "node scripts/qa/supabase-auth-staging-check.mjs",
-    "qa:modules:cutover": "node scripts/qa/modules-cutover-smoke.mjs"
+    "qa:modules:cutover": "node scripts/qa/modules-cutover-smoke.mjs",
+    "qa:lms:cutover": "node scripts/qa/lms-read-cutover-smoke.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

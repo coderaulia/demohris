@@ -28,6 +28,33 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Second Backend Domain Cutover Milestone (LMS Read Endpoints)
+- Commit/PR: pending
+- Type: refactor(api) | test | docs
+- Scope: LMS read endpoint cutover (`enrollments/list|get|my-courses`, `progress/get`) from MySQL to Supabase
+- Completed:
+  - Added Supabase LMS-read adapter:
+    - `server/compat/supabaseLmsRead.js`
+  - Cut over LMS read actions to source-selectable Supabase path with stable response contracts.
+  - Kept LMS mutation-heavy actions on legacy path in this slice.
+  - Added contract/integration tests:
+    - `tests/contracts/lms-read-cutover.test.mjs`
+  - Added authenticated smoke harness:
+    - `scripts/qa/lms-read-cutover-smoke.mjs`
+    - `npm run qa:lms:cutover`
+  - Added env/runbook updates for source switch:
+    - `LMS_READ_SOURCE=legacy|supabase|auto`
+- Gap Found:
+  - LMS mutations, quizzes, assignments, certificates are still legacy-backed.
+  - TNA endpoint groups remain legacy/MySQL-backed.
+- Next Follow-up:
+  - [ ] Run `qa:lms:cutover` in staging/live-safe environment with seeded Supabase user credentials.
+  - [ ] Migrate next safe slice: TNA read-only summary/reporting endpoints.
+  - [ ] Keep LMS/TNA frontend routes disabled until parity and smoke checks pass.
+- Notes:
+  - Response keys were preserved to avoid contract drift.
+  - Rollback remains env-driven by switching `LMS_READ_SOURCE`.
+
 ## 2026-04-04 - First Backend Domain Cutover Milestone (Modules Read)
 - Commit/PR: pending
 - Type: refactor(api) | test | docs

@@ -1,4 +1,10 @@
 import { pool } from '../app.js';
+import {
+    fetchLmsEnrollmentByIdFromSupabase,
+    fetchLmsEnrollmentsFromSupabase,
+    fetchLmsProgressFromSupabase,
+    resolveLmsReadSource,
+} from '../compat/supabaseLmsRead.js';
 
 function generateId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -729,6 +735,22 @@ async function listEnrollments(req, res, currentUser) {
     if (!isAdmin(currentUser) && !course_id) {
         return res.status(400).json({ error: 'course_id is required for non-admin users' });
     }
+
+    const sourceState = resolveLmsReadSource();
+    if (sourceState.source === 'supabase') {
+        const supabaseResponse = await fetchLmsEnrollmentsFromSupabase({
+            courseId: course_id || '',
+            status: status || '',
+            page,
+            limit,
+        });
+        return res.json({
+            success: true,
+            enrollments: supabaseResponse.enrollments,
+            page: supabaseResponse.page,
+            limit: supabaseResponse.limit,
+        });
+    }
     
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const conditions = [];
@@ -763,6 +785,18 @@ async function getEnrollment(req, res, currentUser) {
     const { enrollment_id } = req.body;
     if (!enrollment_id) {
         return res.status(400).json({ error: 'enrollment_id is required' });
+    }
+
+    const sourceState = resolveLmsReadSource();
+    if (sourceState.source === 'supabase') {
+        const enrollment = await fetchLmsEnrollmentByIdFromSupabase(enrollment_id);
+        if (!enrollment) {
+            return res.status(404).json({ error: 'Enrollment not found' });
+        }
+        if (!isAdmin(currentUser) && enrollment.employee_id !== currentUser.employee_id) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        return res.json({ success: true, enrollment: normalizeRow(enrollment) });
     }
 
     const [rows] = await pool.query(
@@ -849,6 +883,22 @@ async function unenrollFromCourse(req, res, currentUser) {
 
 async function getMyEnrollments(req, res, currentUser) {
     const { status, page = 1, limit = 20 } = req.body;
+
+    const sourceState = resolveLmsReadSource();
+    if (sourceState.source === 'supabase') {
+        const supabaseResponse = await fetchLmsEnrollmentsFromSupabase({
+            status: status || '',
+            employeeId: currentUser.employee_id,
+            page,
+            limit,
+        });
+        return res.json({
+            success: true,
+            enrollments: supabaseResponse.enrollments,
+            page: supabaseResponse.page,
+            limit: supabaseResponse.limit,
+        });
+    }
     
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const conditions = ['e.employee_id = ?'];
@@ -935,6 +985,32 @@ async function getLessonProgress(req, res, currentUser) {
 
     if (!enrollment_id) {
         return res.status(400).json({ error: 'enrollment_id is required' });
+    }
+
+    const sourceState = resolveLmsReadSource();
+    if (sourceState.source === 'supabase') {
+        const enrollment = await fetchLmsEnrollmentByIdFromSupabase(enrollment_id);
+        if (!enrollment) {
+            return res.status(404).json({ error: 'Enrollment not found' });
+        }
+        if (!isAdmin(currentUser) && enrollment.employee_id !== currentUser.employee_id) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const lessons = await fetchLmsProgressFromSupabase({
+            enrollmentId: enrollment_id,
+            lessonId: lesson_id || '',
+        });
+        const payload = {
+            enrollment_id,
+            progress_percent: Number(enrollment.progress_percent || 0),
+            status: enrollment.status || 'enrolled',
+            lessons: lessons.map(normalizeRow),
+        };
+        if (lesson_id) {
+            payload.lesson = payload.lessons[0] || null;
+        }
+        return res.json({ success: true, progress: payload });
     }
 
     const [enrollments] = await pool.query('SELECT * FROM course_enrollments WHERE id = ?', [enrollment_id]);

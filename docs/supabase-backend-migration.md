@@ -270,6 +270,30 @@ Route exposure decision:
 - No frontend route exposure change in this slice.
 - LMS/TNA routes remain feature-flagged off.
 
+## Step 14 - Second Backend Cutover Slice: LMS Read Endpoints (2026-04-04)
+
+Cutover slice completed:
+- `lms/enrollments/list`
+- `lms/enrollments/get`
+- `lms/enrollments/my-courses`
+- `lms/progress/get`
+
+Implementation:
+- Added `server/compat/supabaseLmsRead.js` for Supabase REST reads and enrollment/progress response decoration.
+- Added source switch:
+  - `LMS_READ_SOURCE=legacy|supabase|auto`
+  - `auto` => Supabase when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are present, else legacy.
+- Updated `server/modules/lms.js` to route only these read actions through the source-selectable path.
+- Kept LMS mutation-heavy actions on legacy path by design.
+
+Test coverage added:
+- `tests/contracts/lms-read-cutover.test.mjs`
+- `scripts/qa/lms-read-cutover-smoke.mjs` (`npm run qa:lms:cutover`)
+
+Route exposure decision:
+- No immediate frontend route enablement change.
+- LMS React route remains feature-flagged until end-to-end parity is validated in staging/live smoke.
+
 ## Reversibility
 
 This slice is reversible:

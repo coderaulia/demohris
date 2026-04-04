@@ -1,6 +1,6 @@
 # Production Deploy Plan (Hostinger + Supabase)
 
-Last updated: 2026-04-03
+Last updated: 2026-04-04
 
 ## Objective
 Launch a safe public slice of `demo-kpi` where:
@@ -11,7 +11,10 @@ Launch a safe public slice of `demo-kpi` where:
 ## Execution Status
 - Code/config/docs preparation: complete in repository.
 - Production apply/deploy action: pending (requires Hostinger dashboard access and production Supabase credentials).
-- Backend cutover status: first read-only API slice (`modules/*` read actions) is implemented with Supabase source switch; LMS/TNA routes remain disabled.
+- Backend cutover status:
+  - `modules/*` read actions are Supabase-capable via source switch.
+  - LMS read actions (`enrollments/list|get|my-courses`, `progress/get`) are Supabase-capable via source switch.
+  - LMS mutations and all TNA routes remain disabled from live frontend scope.
 
 ## Step 0 - Reality Check (Code + Docs Verified)
 
@@ -22,7 +25,12 @@ Launch a safe public slice of `demo-kpi` where:
 - `/tna/*` -> not live by default (feature-flagged)
 
 ### 2) Backend calls already fully Supabase-backed
-- No LMS/TNA legacy domain handler is fully Supabase-native yet.
+- `modules/*` read endpoints can run Supabase-backed (`MODULES_READ_SOURCE`).
+- LMS read endpoints can run Supabase-backed (`LMS_READ_SOURCE`):
+  - `lms/enrollments/list`
+  - `lms/enrollments/get`
+  - `lms/enrollments/my-courses`
+  - `lms/progress/get`
 - Live slice avoids those handlers by design.
 - Dual-auth bridge remains available on backend for migration mode, not required for live shell-only release.
 

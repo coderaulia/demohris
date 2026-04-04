@@ -3,7 +3,7 @@
 Purpose: keep API docs consistent with implementation and frontend usage.
 
 ## Sync Metadata
-- Last sync date: 2026-04-03
+- Last sync date: 2026-04-04
 - Scope:
   - backend handlers in `server/app.js`, `server/modules/lms.js`, `server/modules/tna.js`
   - frontend API callers in `src/modules/data/*.js`
@@ -111,7 +111,7 @@ Purpose: keep API docs consistent with implementation and frontend usage.
 ## Open Follow-up Checklist
 - [ ] Add request/response examples per high-traffic action (`lms/courses/list`, `lms/progress/get`, `tna/calculate-gaps`, `auth/login`)
 - [ ] Add explicit permission matrix per action (employee/manager/hr/superadmin)
-- [ ] Add automated API tests for `lms/enrollments/get` and `lms/progress/get`
+- [x] Add automated API tests for LMS read cutover (`lms/enrollments/get`, `lms/progress/get`) via `tests/contracts/lms-read-cutover.test.mjs`
 - [ ] Add regression tests ensuring TNA accepts POST payload filters
 
 ## 2026-04-04 Cutover Update - First Supabase Endpoint Slice
@@ -137,3 +137,27 @@ Contract impact:
 Out of scope in this slice:
 - `modules/*` write actions (`update`, `toggle`, `activity`) remain legacy/MySQL-backed
 - LMS/TNA endpoint groups remain legacy/MySQL-backed and frontend-flagged off
+
+## 2026-04-04 Cutover Update - Second Supabase Endpoint Slice (LMS Reads)
+
+Cutover scope in this milestone:
+- `lms/enrollments/list`
+- `lms/enrollments/get`
+- `lms/enrollments/my-courses`
+- `lms/progress/get`
+
+Data-source behavior:
+- `LMS_READ_SOURCE=supabase` -> force Supabase reads (requires `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`)
+- `LMS_READ_SOURCE=auto` -> Supabase when configured, else legacy MySQL
+- `LMS_READ_SOURCE=legacy` -> force legacy MySQL reads
+
+Contract impact:
+- no required key changes
+- existing response keys remain:
+  - enrollments list/my-courses: `success`, `enrollments`, `page`, `limit`
+  - enrollment get: `success`, `enrollment`
+  - progress get: `success`, `progress`
+
+Out of scope in this slice:
+- LMS mutation and assessment/certificate actions stay on legacy/MySQL path.
+- TNA endpoint groups remain legacy/MySQL-backed and frontend-flagged off.
