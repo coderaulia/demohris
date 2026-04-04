@@ -65,7 +65,7 @@ Files verified:
 | `lms/courses/*` | in progress (read list/get verified) | mixed: Supabase for `list|get` via `LMS_READ_SOURCE`, MySQL for create/update/delete/publish | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | read-only course catalog parity now verified |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |
-| `lms/enrollments/*` | in progress (read actions verified; `start` mutation cut over) | mixed: Supabase for `list/get/my-courses` + `start` via source switch, MySQL for remaining mutations | contract + integration + smoke verified (`qa:lms:cutover`, `qa:lms:workflow`) | feature-flagged off | `start` parity verified with follow-up `enrollments/get` + `progress/get` |
+| `lms/enrollments/*` | in progress (read actions verified; `start`, `enroll`, `unenroll` mutation slices cut over) | mixed: Supabase for `list/get/my-courses` + `start|enroll|unenroll` via source switch, MySQL for remaining mutations | contract verified (`qa:contracts`), workflow smoke partially blocked locally (`qa:lms:workflow` auth mapping) | feature-flagged off | `start` + `enroll|unenroll` use mutation source switch with legacy rollback |
 | `lms/progress/*` | in progress (read action verified; mutations legacy) | mixed: Supabase for `get` via source switch, MySQL for mutations | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | `progress/get` parity verified |
 | `lms/quizzes/*` | blocked | MySQL | not tested | feature-flagged off | high-risk; defer |
 | `lms/dashboard/*` | blocked | MySQL | not tested | feature-flagged off | defer |
@@ -205,7 +205,7 @@ Use this checklist for every next slice:
 - LMS/TNA frontend routes stay disabled.
 - No new frontend route exposure in this cutover commit.
 - Next recommended slice:
-  - one bounded mutation slice (`tna/needs/update-status` or `lms/enrollments/enroll`) after workflow parity gates are met.
+  - one bounded mutation slice (`tna/needs/update-status` or `lms/enrollments/complete`) after workflow parity gates are met.
 
 ## Mutation Parity Readiness (Pre-Cutover Gate)
 
@@ -227,7 +227,7 @@ Current smoke status:
 - `qa:tna:workflow` blocked in current environment (missing workflow seed IDs)
 
 First mutation cutover candidate:
-- `lms/enrollments/start` (completed in this slice)
+- `lms/enrollments/start` (completed in prior slice)
 
 Why this slice first:
 - bounded side effects
@@ -235,7 +235,7 @@ Why this slice first:
 - lower blast radius than quiz/certificate/bulk mutations
 
 Next mutation candidate:
-- `tna/needs/update-status` or `lms/enrollments/enroll` (single-slice rule remains)
+- `tna/needs/update-status` or `lms/enrollments/complete` (single-slice rule remains)
 
 Route expansion rule remains unchanged:
 - keep LMS/TNA frontend routes feature-flagged off until related read + mutation workflows pass parity checks.
@@ -289,3 +289,40 @@ Seeded workflow inputs used:
 Rollback:
 - set `LMS_MUTATION_SOURCE=legacy`
 - keep LMS frontend route feature-flagged off
+
+## Second Mutation Slice Verification Run (2026-04-04)
+
+Slice:
+- `lms/enrollments/enroll`
+- `lms/enrollments/unenroll`
+
+Source switch:
+- `LMS_MUTATION_SOURCE=supabase` -> force Supabase path
+- `LMS_MUTATION_SOURCE=auto` -> Supabase when configured, else legacy MySQL
+- `LMS_MUTATION_SOURCE=legacy` -> immediate rollback to legacy handlers
+
+Supabase mutation behavior:
+- `enroll`:
+  - validates published course
+  - duplicate enrollment guard returns conflict semantics (`409` in Supabase path)
+  - returns parity enrollment object under `success/enrollment`
+- `unenroll`:
+  - supports `enrollment_id` (and `course_id` fallback for self)
+  - deletes `lesson_progress` rows for the enrollment, then removes `course_enrollments` row
+  - returns legacy parity shape `{ success: true }`
+
+Follow-up read verification rules:
+- after enroll:
+  - `lms/enrollments/get`
+  - `lms/progress/get`
+- after unenroll:
+  - `lms/enrollments/get` -> expected not found
+  - `lms/progress/get` -> expected not found
+
+Validation status:
+- `npm run qa:contracts` -> pass (51/51)
+- `npm run qa:lms:workflow` -> blocked in local env due runtime auth mapping (`401` on enroll call)
+
+Rollback plan:
+- set `LMS_MUTATION_SOURCE=legacy`
+- keep LMS React route feature-flagged off

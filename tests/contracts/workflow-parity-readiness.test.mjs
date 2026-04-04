@@ -19,8 +19,8 @@ test('mutation workflow fixtures are present and ordered for cutover planning', 
 
     assert.equal(lmsWorkflow.id, 'workflow:lms-core-mutation');
     assert.equal(Array.isArray(lmsWorkflow.sequence), true);
-    assert.equal(lmsWorkflow.sequence.length >= 4, true);
-    assert.equal(lmsWorkflow.firstMutationSliceCandidate, 'lms/enrollments/start');
+    assert.equal(lmsWorkflow.sequence.length >= 5, true);
+    assert.equal(lmsWorkflow.firstMutationSliceCandidate, 'lms/enrollments/enroll');
 
     assert.equal(tnaWorkflow.id, 'workflow:tna-basic-mutation');
     assert.equal(Array.isArray(tnaWorkflow.sequence), true);
@@ -30,13 +30,18 @@ test('mutation workflow fixtures are present and ordered for cutover planning', 
 
 test('LMS mutation workflow parity intent exists in current implementation', () => {
     assert.match(lmsSource, /case 'lms\/enrollments\/enroll'/);
+    assert.match(lmsSource, /case 'lms\/enrollments\/unenroll'/);
     assert.match(lmsSource, /case 'lms\/enrollments\/start'/);
     assert.match(lmsSource, /case 'lms\/progress\/complete-lesson'/);
     assert.match(lmsSource, /case 'lms\/quizzes\/submit'/);
 
     assert.match(
         lmsSource,
-        /async function enrollInCourse[\s\S]*INSERT INTO course_enrollments[\s\S]*status\)\s*VALUES \(\?, \?, \?, \?, \?, 'enrolled'\)/
+        /async function enrollInCourse[\s\S]*resolveLmsMutationSource\(\)[\s\S]*(enrollCourseInSupabase|INSERT INTO course_enrollments)/
+    );
+    assert.match(
+        lmsSource,
+        /async function unenrollFromCourse[\s\S]*resolveLmsMutationSource\(\)[\s\S]*(unenrollCourseInSupabase|DELETE FROM course_enrollments)/
     );
     assert.match(
         lmsSource,

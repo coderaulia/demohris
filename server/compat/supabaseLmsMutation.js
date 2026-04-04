@@ -92,7 +92,7 @@ async function callSupabase({
         throw new Error(`Supabase ${table} ${method} failed (${response.status}): ${details}`);
     }
 
-    if (method === 'PATCH' || method === 'POST') {
+    if (method === 'PATCH' || method === 'POST' || method === 'DELETE') {
         const text = await response.text().catch(() => '');
         if (!text) return [];
         try {
@@ -245,4 +245,182 @@ export async function startCourseEnrollmentInSupabase({
     });
 
     return { enrollment: updatedRows[0] || enrollment };
+}
+
+function mapSupabaseEnrollError(error) {
+    const message = String(error?.message || error || '');
+    if (message.includes('23505') || message.toLowerCase().includes('duplicate key')) {
+        return { status: 409, message: 'Already enrolled in this course' };
+    }
+    return { status: 500, message };
+}
+
+async function findEnrollmentByCourseAndEmployee({ supabaseUrl, serviceRoleKey, courseId, employeeId }) {
+    const rows = await callSupabase({
+        supabaseUrl,
+        serviceRoleKey,
+        table: 'course_enrollments',
+        method: 'GET',
+        select: '*',
+        filters: {
+            course_id: { type: 'eq', value: courseId },
+            employee_id: { type: 'eq', value: employeeId },
+        },
+        limit: 1,
+    });
+    return rows[0] || null;
+}
+
+async function findEnrollmentById({ supabaseUrl, serviceRoleKey, enrollmentId }) {
+    const rows = await callSupabase({
+        supabaseUrl,
+        serviceRoleKey,
+        table: 'course_enrollments',
+        method: 'GET',
+        select: '*',
+        filters: {
+            id: { type: 'eq', value: enrollmentId },
+        },
+        limit: 1,
+    });
+    return rows[0] || null;
+}
+
+export async function enrollCourseInSupabase({
+    courseId,
+    employeeId,
+    enrolledBy,
+    enrollmentType = 'self',
+    idFactory,
+}) {
+    const { source, supabaseUrl, serviceRoleKey } = resolveLmsMutationSource();
+    if (source !== 'supabase') {
+        throw new Error('enrollCourseInSupabase called when LMS mutation source is not supabase.');
+    }
+
+    const courseRows = await callSupabase({
+        supabaseUrl,
+        serviceRoleKey,
+        table: 'courses',
+        method: 'GET',
+        select: 'id,status',
+        filters: {
+            id: { type: 'eq', value: courseId },
+            status: { type: 'eq', value: 'published' },
+        },
+        limit: 1,
+    });
+    if (!courseRows[0]) {
+        return { error: { status: 404, message: 'Course not found or not published' } };
+    }
+
+    const existing = await findEnrollmentByCourseAndEmployee({
+        supabaseUrl,
+        serviceRoleKey,
+        courseId,
+        employeeId,
+    });
+    if (existing) {
+        return { error: { status: 409, message: 'Already enrolled in this course' } };
+    }
+
+    const payload = {
+        id: typeof idFactory === 'function' ? idFactory() : crypto.randomUUID(),
+        course_id: courseId,
+        employee_id: employeeId,
+        enrolled_by: enrolledBy || null,
+        enrollment_type: enrollmentType || 'self',
+        status: 'enrolled',
+    };
+
+    let inserted = null;
+    try {
+        const rows = await callSupabase({
+            supabaseUrl,
+            serviceRoleKey,
+            table: 'course_enrollments',
+            method: 'POST',
+            body: payload,
+            prefer: 'return=representation',
+        });
+        inserted = rows[0] || null;
+    } catch (error) {
+        return { error: mapSupabaseEnrollError(error) };
+    }
+
+    if (!inserted) {
+        const fetched = await findEnrollmentByCourseAndEmployee({
+            supabaseUrl,
+            serviceRoleKey,
+            courseId,
+            employeeId,
+        });
+        inserted = fetched;
+    }
+
+    if (!inserted) {
+        return { error: { status: 500, message: 'Enrollment created but could not be read back' } };
+    }
+
+    return { enrollment: inserted };
+}
+
+export async function unenrollCourseInSupabase({
+    enrollmentId = '',
+    courseId = '',
+    employeeId,
+    isAdmin = false,
+}) {
+    const { source, supabaseUrl, serviceRoleKey } = resolveLmsMutationSource();
+    if (source !== 'supabase') {
+        throw new Error('unenrollCourseInSupabase called when LMS mutation source is not supabase.');
+    }
+
+    let enrollment = null;
+    if (enrollmentId) {
+        enrollment = await findEnrollmentById({
+            supabaseUrl,
+            serviceRoleKey,
+            enrollmentId,
+        });
+    } else if (courseId && employeeId) {
+        enrollment = await findEnrollmentByCourseAndEmployee({
+            supabaseUrl,
+            serviceRoleKey,
+            courseId,
+            employeeId,
+        });
+    }
+
+    if (!enrollment) {
+        return { error: { status: 404, message: 'Enrollment not found' } };
+    }
+    if (!isAdmin && String(enrollment.employee_id || '') !== String(employeeId || '')) {
+        return { error: { status: 403, message: 'Not authorized to unenroll' } };
+    }
+
+    // Explicit cleanup before enrollment removal to preserve legacy-visible side effects.
+    await callSupabase({
+        supabaseUrl,
+        serviceRoleKey,
+        table: 'lesson_progress',
+        method: 'DELETE',
+        filters: {
+            enrollment_id: { type: 'eq', value: enrollment.id },
+        },
+        prefer: 'return=minimal',
+    });
+
+    await callSupabase({
+        supabaseUrl,
+        serviceRoleKey,
+        table: 'course_enrollments',
+        method: 'DELETE',
+        filters: {
+            id: { type: 'eq', value: enrollment.id },
+        },
+        prefer: 'return=minimal',
+    });
+
+    return { enrollment };
 }

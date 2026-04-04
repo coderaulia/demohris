@@ -11,8 +11,10 @@ import {
     toMyCoursesParityRow,
 } from '../compat/supabaseLmsRead.js';
 import {
+    enrollCourseInSupabase,
     resolveLmsMutationSource,
     startCourseEnrollmentInSupabase,
+    unenrollCourseInSupabase,
 } from '../compat/supabaseLmsMutation.js';
 
 function generateId() {
@@ -871,6 +873,21 @@ async function enrollInCourse(req, res, currentUser) {
         return res.status(400).json({ error: 'course_id is required' });
     }
     
+    const mutationSource = resolveLmsMutationSource();
+    if (mutationSource.source === 'supabase') {
+        const result = await enrollCourseInSupabase({
+            courseId: course_id,
+            employeeId: targetEmployeeId,
+            enrolledBy: currentUser.employee_id || null,
+            enrollmentType: enrollType,
+            idFactory: generateId,
+        });
+        if (result?.error) {
+            return res.status(result.error.status).json({ error: result.error.message });
+        }
+        return res.json({ success: true, enrollment: normalizeRow(result.enrollment) });
+    }
+
     const [courses] = await pool.query('SELECT * FROM courses WHERE id = ? AND status = ?', [course_id, 'published']);
     if (courses.length === 0) {
         return res.status(404).json({ error: 'Course not found or not published' });
@@ -899,13 +916,35 @@ async function enrollInCourse(req, res, currentUser) {
 }
 
 async function unenrollFromCourse(req, res, currentUser) {
-    const { enrollment_id } = req.body;
+    const { enrollment_id, course_id } = req.body;
     
-    if (!enrollment_id) {
-        return res.status(400).json({ error: 'enrollment_id is required' });
+    if (!enrollment_id && !course_id) {
+        return res.status(400).json({ error: 'enrollment_id or course_id is required' });
+    }
+
+    const mutationSource = resolveLmsMutationSource();
+    if (mutationSource.source === 'supabase') {
+        const result = await unenrollCourseInSupabase({
+            enrollmentId: enrollment_id || '',
+            courseId: course_id || '',
+            employeeId: currentUser.employee_id || '',
+            isAdmin: isAdmin(currentUser),
+        });
+        if (result?.error) {
+            return res.status(result.error.status).json({ error: result.error.message });
+        }
+        return res.json({ success: true });
     }
     
-    const [enrollments] = await pool.query('SELECT * FROM course_enrollments WHERE id = ?', [enrollment_id]);
+    let enrollments;
+    if (enrollment_id) {
+        [enrollments] = await pool.query('SELECT * FROM course_enrollments WHERE id = ?', [enrollment_id]);
+    } else {
+        [enrollments] = await pool.query(
+            'SELECT * FROM course_enrollments WHERE course_id = ? AND employee_id = ? LIMIT 1',
+            [course_id, currentUser.employee_id]
+        );
+    }
     
     if (enrollments.length === 0) {
         return res.status(404).json({ error: 'Enrollment not found' });
@@ -917,7 +956,7 @@ async function unenrollFromCourse(req, res, currentUser) {
         return res.status(403).json({ error: 'Not authorized to unenroll' });
     }
     
-    await pool.query('DELETE FROM course_enrollments WHERE id = ?', [enrollment_id]);
+    await pool.query('DELETE FROM course_enrollments WHERE id = ?', [enrollment.id]);
     
     res.json({ success: true });
 }

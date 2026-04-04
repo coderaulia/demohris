@@ -171,7 +171,7 @@ Supabase-backed LMS read endpoints (via `LMS_READ_SOURCE`):
 - `lms/progress/get`
 
 Remaining legacy LMS endpoints:
-- `lms/enrollments/enroll|unenroll|complete`
+- `lms/enrollments/complete`
 - `lms/progress/update|complete-lesson`
 - `lms/quizzes/*`
 - `lms/assignments/*`
@@ -386,6 +386,53 @@ Validation status:
 Route enablement decision:
 - LMS route remains feature-flagged off.
 - one mutation slice is not sufficient to expose full LMS screens.
+
+## 2026-04-04 Cutover Update - Second LMS Mutation Slice (`lms/enrollments/enroll|unenroll`)
+
+Cutover scope:
+- `lms/enrollments/enroll`
+- `lms/enrollments/unenroll`
+
+Source behavior:
+- `LMS_MUTATION_SOURCE=supabase` -> force Supabase mutation path
+- `LMS_MUTATION_SOURCE=auto` -> Supabase when configured, else legacy MySQL
+- `LMS_MUTATION_SOURCE=legacy` -> force legacy MySQL mutation path
+
+Contract parity notes:
+- `lms/enrollments/enroll` keeps legacy top-level shape:
+  - success response: `{ success: true, enrollment }`
+  - missing/invalid course guard: `404` (`Course not found or not published`)
+  - duplicate guard:
+    - legacy path: `400` (`Already enrolled in this course`)
+    - Supabase path: `409` (`Already enrolled in this course`)
+- `lms/enrollments/unenroll` keeps:
+  - success response: `{ success: true }`
+  - `404` when enrollment does not exist
+  - `403` for ownership/role violations
+  - now also supports `course_id` fallback for self-unenroll when `enrollment_id` is not provided
+
+Supabase side effects:
+- enroll:
+  - inserts into `course_enrollments` with `status='enrolled'`
+- unenroll:
+  - explicitly deletes `lesson_progress` rows for target enrollment
+  - deletes target `course_enrollments` row
+
+Follow-up read verification:
+- after enroll:
+  - `lms/enrollments/get`
+  - `lms/progress/get`
+- after unenroll:
+  - `lms/enrollments/get` -> not found
+  - `lms/progress/get` -> not found
+
+Validation status:
+- `npm run qa:contracts` -> pass (51/51)
+- `npm run qa:lms:workflow` -> blocked in local run due auth mapping (`401` on enroll call for configured workflow account)
+
+Rollback:
+- set `LMS_MUTATION_SOURCE=legacy`
+- keep LMS React route feature-flagged off
 
 ## 2026-04-04 Cutover Update - Additional LMS/TNA Read-Only Slices
 
