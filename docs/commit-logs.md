@@ -28,6 +28,22 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Fix Hostinger Rollup `zod` Resolution
+- Commit/PR: pending
+- Type: fix(deploy)
+- Scope: monorepo package resolution in Hostinger CI build
+- Completed:
+  - Added `zod` to root runtime dependencies so linked contracts path resolves in CI.
+  - Enabled `preserveSymlinks` in `apps/web-react/vite.config.ts` to avoid realpath resolution drift for local `file:` package linkage.
+  - Verified `npm run build` passes with frontend-only pipeline.
+- Gap Found:
+  - Hostinger may still use cached previous build settings.
+- Next Follow-up:
+  - [ ] Trigger manual redeploy after confirming build command is `npm run build`.
+  - [ ] Confirm logs no longer show `Rollup failed to resolve import "zod"`.
+- Notes:
+  - This specifically addresses failure from `packages/contracts/src/api.ts` during Vite/Rollup build.
+
 ## 2026-04-04 - Hard Fix For Hostinger Build Toolchain
 - Commit/PR: pending
 - Type: fix(deploy)
