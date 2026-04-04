@@ -180,8 +180,22 @@ function applyListFilters(rows: EmployeeRecord[], filters: EmployeeListFilters):
 }
 
 function enforceClientScope(rows: EmployeeRecord[], context: { role: EmployeeRole | null; employeeId: string }): EmployeeRecord[] {
-    if (context.role !== 'employee') return rows;
-    return rows.filter(row => String(row.employee_id) === context.employeeId);
+    const currentId = String(context.employeeId || '').trim();
+    if (!currentId) return rows;
+
+    if (context.role === 'employee') {
+        return rows.filter(row => String(row.employee_id) === currentId);
+    }
+
+    if (context.role === 'manager') {
+        return rows.filter(row => {
+            const employeeId = String(row.employee_id || '');
+            const managerId = String(row.manager_id || '');
+            return employeeId === currentId || managerId === currentId;
+        });
+    }
+
+    return rows;
 }
 
 async function fetchLmsSummary(
@@ -199,10 +213,11 @@ async function fetchLmsSummary(
             const rows = data || [];
             const completed = rows.filter(row => String(row.status || '').toLowerCase() === 'completed').length;
             const inProgress = rows.filter(row => String(row.status || '').toLowerCase() === 'in_progress').length;
+            const completionPct = rows.length > 0 ? Math.round((completed / rows.length) * 100) : 0;
             return [
                 { label: 'Total Enrollments', value: String(rows.length), hint: 'All LMS enrollments for employee' },
                 { label: 'Completed', value: String(completed), hint: 'Completion status in LMS' },
-                { label: 'In Progress', value: String(inProgress), hint: 'Active learner progress' },
+                { label: 'Completion %', value: rows.length > 0 ? `${completionPct}%` : 'No data', hint: rows.length > 0 ? `In Progress: ${inProgress}` : 'No LMS enrollments yet' },
             ];
         }
     }
@@ -213,10 +228,11 @@ async function fetchLmsSummary(
             const rows = Array.isArray(response.enrollments) ? response.enrollments : [];
             const completed = rows.filter((row: unknown) => String((row as Record<string, unknown>).status || '').toLowerCase() === 'completed').length;
             const inProgress = rows.filter((row: unknown) => String((row as Record<string, unknown>).status || '').toLowerCase() === 'in_progress').length;
+            const completionPct = rows.length > 0 ? Math.round((completed / rows.length) * 100) : 0;
             return [
                 { label: 'Total Enrollments', value: String(rows.length), hint: 'Current user LMS enrollments' },
                 { label: 'Completed', value: String(completed), hint: 'Completion status in LMS' },
-                { label: 'In Progress', value: String(inProgress), hint: 'Active learner progress' },
+                { label: 'Completion %', value: rows.length > 0 ? `${completionPct}%` : 'No data', hint: rows.length > 0 ? `In Progress: ${inProgress}` : 'No LMS enrollments yet' },
             ];
         } catch {
             // Fall through to deferred cards.
@@ -226,7 +242,7 @@ async function fetchLmsSummary(
     return [
         { label: 'Total Enrollments', value: 'Deferred', hint: 'Requires employee-scoped LMS endpoint', deferred: true },
         { label: 'Completed', value: 'Deferred', hint: 'Not exposed for cross-employee read in legacy path', deferred: true },
-        { label: 'In Progress', value: 'Deferred', hint: 'Not exposed for cross-employee read in legacy path', deferred: true },
+        { label: 'Completion %', value: 'Deferred', hint: 'Not exposed for cross-employee read in legacy path', deferred: true },
     ];
 }
 
@@ -244,17 +260,25 @@ async function fetchTnaSummary(
             const rows = data || [];
             const completed = rows.filter(row => ['completed', 'closed'].includes(String(row.status || '').toLowerCase())).length;
             const critical = rows.filter(row => String(row.priority || '').toLowerCase() === 'critical').length;
+            const avgGap = (() => {
+                const values = rows
+                    .map(row => Number((row as Record<string, unknown>).gap_level))
+                    .filter(value => Number.isFinite(value));
+                if (values.length === 0) return null;
+                return values.reduce((sum, value) => sum + value, 0) / values.length;
+            })();
+            const gapLevel = avgGap === null ? 'No data' : avgGap >= 3 ? 'High' : avgGap >= 1.5 ? 'Medium' : 'Low';
             return [
+                { label: 'Gap Level', value: gapLevel, hint: avgGap === null ? 'No TNA records yet' : `Avg gap: ${avgGap.toFixed(2)}` },
                 { label: 'Need Records', value: String(rows.length), hint: 'Total identified TNA needs' },
-                { label: 'Completed Needs', value: String(completed), hint: 'Completed or closed needs' },
-                { label: 'Critical Gaps', value: String(critical), hint: 'Critical-priority needs' },
+                { label: 'Critical Gaps', value: String(critical), hint: `Completed needs: ${completed}` },
             ];
         }
     }
 
     return [
+        { label: 'Gap Level', value: 'Deferred', hint: 'Employee-scoped TNA read pending', deferred: true },
         { label: 'Need Records', value: 'Deferred', hint: 'Employee-scoped TNA read pending', deferred: true },
-        { label: 'Completed Needs', value: 'Deferred', hint: 'Employee-scoped TNA read pending', deferred: true },
         { label: 'Critical Gaps', value: 'Deferred', hint: 'Employee-scoped TNA read pending', deferred: true },
     ];
 }
@@ -276,6 +300,97 @@ async function fetchKpiRecordCount(source: EmployeeReadSource, employeeId: strin
         return rows.length;
     } catch {
         return null;
+    }
+}
+
+function parsePeriodKey(value: unknown): number {
+    const raw = String(value || '').trim();
+    const match = /^(\d{4})-(\d{2})$/.exec(raw);
+    if (!match) return 0;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return 0;
+    return year * 100 + month;
+}
+
+async function fetchKpiTrendSummary(
+    source: EmployeeReadSource,
+    employeeId: string
+): Promise<Array<{ label: string; value: string; hint: string; deferred?: boolean }>> {
+    try {
+        let rows: Array<Record<string, unknown>> = [];
+
+        if (source === 'supabase' && supabase) {
+            const { data, error } = await supabase
+                .from('kpi_records')
+                .select('period,value,target_value,created_at')
+                .eq('employee_id', employeeId);
+            if (!error) {
+                rows = (data || []) as Array<Record<string, unknown>>;
+            }
+        } else {
+            rows = (await queryLegacyTable('kpi_records', {
+                filters: [{ op: 'eq', column: 'employee_id', value: employeeId }],
+            })) as Array<Record<string, unknown>>;
+        }
+
+        const ranked = rows
+            .slice()
+            .sort((a, b) => {
+                const periodDiff = parsePeriodKey(b.period) - parsePeriodKey(a.period);
+                if (periodDiff !== 0) return periodDiff;
+                return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+            });
+
+        if (ranked.length === 0) {
+            return [
+                { label: 'Latest KPI', value: 'No data', hint: 'No KPI records available for this employee' },
+                { label: 'KPI Trend', value: 'No trend', hint: 'Need at least two KPI periods' },
+                { label: 'KPI Records', value: '0', hint: 'Stored KPI records' },
+            ];
+        }
+
+        const latest = ranked[0];
+        const latestValue = Number(latest.value);
+        const latestTarget = Number(latest.target_value);
+        const latestKpi = Number.isFinite(latestTarget) && latestTarget > 0 && Number.isFinite(latestValue)
+            ? `${((latestValue / latestTarget) * 100).toFixed(1)}%`
+            : Number.isFinite(latestValue)
+                ? latestValue.toFixed(1)
+                : 'No data';
+
+        const scored = ranked
+            .map(row => {
+                const value = Number(row.value);
+                const target = Number(row.target_value);
+                if (!Number.isFinite(value) || !Number.isFinite(target) || target <= 0) return null;
+                return (value / target) * 100;
+            })
+            .filter((value): value is number => value !== null);
+
+        const trendValue = (() => {
+            if (scored.length < 2) return 'No trend';
+            const recent = scored.slice(0, Math.min(3, scored.length));
+            const prior = scored.slice(Math.min(3, scored.length), Math.min(6, scored.length));
+            if (prior.length === 0) return 'No trend';
+            const recentAvg = recent.reduce((sum, value) => sum + value, 0) / recent.length;
+            const priorAvg = prior.reduce((sum, value) => sum + value, 0) / prior.length;
+            const diff = recentAvg - priorAvg;
+            if (Math.abs(diff) < 0.5) return 'Stable';
+            return diff > 0 ? 'Up' : 'Down';
+        })();
+
+        return [
+            { label: 'Latest KPI', value: latestKpi, hint: `Period ${String(latest.period || '-')}` },
+            { label: 'KPI Trend', value: trendValue, hint: 'Recent periods versus prior periods' },
+            { label: 'KPI Records', value: String(ranked.length), hint: 'Stored KPI records' },
+        ];
+    } catch {
+        return [
+            { label: 'Latest KPI', value: 'Deferred', hint: 'KPI summary read is pending', deferred: true },
+            { label: 'KPI Trend', value: 'Deferred', hint: 'KPI summary read is pending', deferred: true },
+            { label: 'KPI Records', value: 'Deferred', hint: 'KPI summary read is pending', deferred: true },
+        ];
     }
 }
 
@@ -328,9 +443,14 @@ export const employeesAdapter = {
         const directReports = directory.employees.filter(row => String(row.manager_id || '') === String(employee.employee_id)).length;
 
         const historyEntries = toArray((employee as Record<string, unknown>).history).length;
-        const trainingEntries = toArray((employee as Record<string, unknown>).training_history).length;
         const kpiTargetCount = Object.keys(toObject((employee as Record<string, unknown>).kpi_targets)).length;
         const kpiRecordCount = await fetchKpiRecordCount(directory.source, String(employee.employee_id));
+        const kpiTrendCards = await fetchKpiTrendSummary(directory.source, String(employee.employee_id));
+        const lastAssessmentDate = (() => {
+            const direct = String((employee as Record<string, unknown>).assessment_updated_at || '').trim();
+            if (direct) return direct;
+            return null;
+        })();
 
         const [lmsCards, tnaCards] = await Promise.all([
             fetchLmsSummary(directory.source, String(employee.employee_id), context.employeeId),
@@ -343,22 +463,22 @@ export const employeesAdapter = {
             direct_reports: directReports,
             summary: {
                 assessment: [
-                    { label: 'Manager Score', value: String(toNumber(employee.percentage)), hint: 'Latest manager assessment' },
-                    { label: 'Self Score', value: String(toNumber(employee.self_percentage)), hint: 'Latest self assessment' },
-                    { label: 'History Entries', value: String(historyEntries), hint: 'Historical assessment snapshots' },
+                    ...tnaCards,
+                    {
+                        label: 'Last Assessment',
+                        value: lastAssessmentDate ? new Date(lastAssessmentDate).toLocaleDateString() : 'No data',
+                        hint: lastAssessmentDate ? 'Latest manager assessment timestamp' : 'No assessment timestamp recorded',
+                    },
+                    { label: 'History Entries', value: String(historyEntries), hint: 'Assessment history snapshots' },
                 ],
                 kpi: [
+                    ...kpiTrendCards,
                     { label: 'KPI Targets', value: String(kpiTargetCount), hint: 'Configured KPI targets' },
                     {
-                        label: 'KPI Records',
+                        label: 'KPI Record Count',
                         value: kpiRecordCount === null ? 'Deferred' : String(kpiRecordCount),
                         hint: kpiRecordCount === null ? 'KPI records endpoint still being cut over' : 'Stored KPI records',
                         deferred: kpiRecordCount === null,
-                    },
-                    {
-                        label: 'Training Entries',
-                        value: String(trainingEntries),
-                        hint: 'Employee training history entries',
                     },
                 ],
                 lms: lmsCards,

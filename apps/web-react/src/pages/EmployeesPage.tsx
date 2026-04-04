@@ -123,7 +123,7 @@ export function EmployeesPage() {
                 <CardHeader className="space-y-3">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
-                            <CardTitle className="text-2xl">Employees</CardTitle>
+                            <CardTitle className="text-2xl">Workforce Directory</CardTitle>
                             <CardDescription>
                                 Read-first employee management workflow with role-aware visibility, filters, and drill-down detail.
                             </CardDescription>
@@ -158,6 +158,9 @@ export function EmployeesPage() {
                     <div className="flex flex-wrap gap-2 text-xs">
                         <Badge variant="outline">Source: {listQuery.data?.source || 'loading'}</Badge>
                         <Badge variant="outline">Role: {auth.role || '-'}</Badge>
+                        <Badge variant="outline">
+                            Scope: {auth.role === 'manager' ? 'My Team' : auth.role === 'employee' ? 'Self' : 'Full Workforce'}
+                        </Badge>
                         {listQuery.data?.deferred.map(item => (
                             <Badge key={item} variant="secondary">{item}</Badge>
                         ))}

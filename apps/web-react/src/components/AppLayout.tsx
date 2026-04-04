@@ -44,9 +44,9 @@ const navSections: NavSection[] = [
     },
     {
         label: 'Workforce',
-        roles: ['superadmin', 'hr'],
+        roles: ['superadmin', 'hr', 'manager'],
         items: [
-            { to: '/workforce/directory', label: 'Employee Directory', icon: <Users className="size-4" />, roles: ['superadmin', 'hr'] },
+            { to: '/workforce/directory', label: 'Employee Directory', icon: <Users className="size-4" />, roles: ['superadmin', 'hr', 'manager'] },
             { to: '/workforce/manpower-planning', label: 'Manpower Planning', icon: <BriefcaseBusiness className="size-4" />, roles: ['superadmin', 'hr'] },
         ],
     },

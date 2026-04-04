@@ -112,8 +112,9 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
   - `/dashboard/drilldown/:mode/:department` (safe placeholder boundary for future detail views)
   - `/kpi`
   - `/kpi/drilldown/:mode/:group`
-  - `/employees`
-  - `/employees/:employeeId`
+  - `/workforce/directory`
+  - `/workforce/directory/:employeeId`
+  - `/employees/:employeeId` (legacy compatibility alias to workforce detail)
   - `/login`
 - Feature-flagged routes:
   - `/kpi` via `VITE_ENABLE_KPI_ROUTE`
@@ -125,6 +126,11 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
 - `AppLayout` can optionally show legacy app link via `VITE_SHOW_LEGACY_APP_LINK`.
 - Employees route is controlled by `VITE_ENABLE_EMPLOYEES_ROUTE` (default: enabled).
 - KPI route is controlled by `VITE_ENABLE_KPI_ROUTE` (default: enabled).
+
+Employees/Workforce role scope:
+- `superadmin`, `hr`: full workforce visibility
+- `manager`: own profile + direct reports only
+- `employee`: self-only view (kept for compatibility)
 
 ## Data Fetching Rules
 - TanStack Query is used for async state.
@@ -198,3 +204,8 @@ Deferred dashboard metrics (explicit boundary, no fake data):
 - Legacy frontend remains fully operational.
 - Contract fixtures remain the compatibility guardrail.
 - Adapter switching keeps migration reversible.
+- Workforce insights in React shell are read-first only:
+  - KPI summary uses latest KPI/trend/record count where readable
+  - Assessment summary uses gap level + last assessment visibility
+  - LMS summary uses enrollment and completion percentages
+  - employee CRUD mutations remain on legacy path

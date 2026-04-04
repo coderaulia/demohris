@@ -47,7 +47,7 @@ export const router = createBrowserRouter([
             {
                 path: 'workforce/directory',
                 element: (
-                    <RoleGate allow={[...ADMIN_HR]}>
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
                         <EmployeesPage />
                     </RoleGate>
                 ),
@@ -55,7 +55,7 @@ export const router = createBrowserRouter([
             {
                 path: 'workforce/directory/:employeeId',
                 element: (
-                    <RoleGate allow={[...ADMIN_HR]}>
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
                         <EmployeeDetailPage />
                     </RoleGate>
                 ),
@@ -312,7 +312,7 @@ export const router = createBrowserRouter([
             {
                 path: 'employees/:employeeId',
                 element: (
-                    <RoleGate allow={[...ADMIN_HR]}>
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
                         <EmployeeDetailPage />
                     </RoleGate>
                 ),

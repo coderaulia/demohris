@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, BriefcaseBusiness, ClipboardList, GraduationCap, Target } from 'lucide-react';
+import { ArrowLeft, ClipboardList, GraduationCap, Target } from 'lucide-react';
 
 import { employeesAdapter } from '@/adapters';
 import { Badge } from '@/components/ui/badge';
@@ -162,14 +162,14 @@ export function EmployeeDetailPage() {
                     <SummarySection
                         icon={<ClipboardList className="size-4 text-primary" />}
                         title="Assessment Summary"
-                        description="Manager and self-assessment visibility aligned with current readable records."
+                        description="Gap level and last-assessment visibility aligned with current readable records."
                         cards={detailQuery.data.summary.assessment}
                     />
 
                     <SummarySection
                         icon={<Target className="size-4 text-primary" />}
                         title="KPI Summary"
-                        description="Read-first KPI snapshot from available profile and records."
+                        description="Latest KPI, trend, and record visibility from read-first sources."
                         cards={detailQuery.data.summary.kpi}
                     />
 
@@ -178,13 +178,6 @@ export function EmployeeDetailPage() {
                         title="LMS Summary"
                         description="Enrollment counts shown when employee-scoped LMS reads are available."
                         cards={detailQuery.data.summary.lms}
-                    />
-
-                    <SummarySection
-                        icon={<BriefcaseBusiness className="size-4 text-primary" />}
-                        title="TNA Summary"
-                        description="TNA employee-level snapshot shown when current read paths support it."
-                        cards={detailQuery.data.summary.tna}
                     />
 
                     <Card>

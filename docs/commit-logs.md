@@ -28,6 +28,35 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Workforce Directory Scope Hardening + Employee Insights Upgrade
+- Commit/PR: pending
+- Type: feat(employees) | docs
+- Scope: improve workforce module with manager team scope and richer read-first employee insight summaries
+- Completed:
+  - Enforced manager scope in employee adapter:
+    - manager can only see own profile + direct reports
+    - HR/superadmin remain full visibility
+  - Opened Workforce Directory routes for manager role while preserving route guards and non-mutation boundary.
+  - Upgraded employee detail insights:
+    - KPI: latest KPI + trend + record count
+    - Assessment: gap level + last assessment + history entries
+    - LMS: enrolled courses + completion percentage
+  - Strengthened empty/no-data behavior:
+    - explicit `No data` and `Deferred` states for unavailable KPI/assessment/LMS slices
+  - Validation:
+    - `npm run typecheck --prefix apps/web-react` -> pass
+    - `npm run build --prefix apps/web-react` -> pass
+- Gap Found:
+  - Some KPI trend data still depends on mixed field availability (`target_value`) across sources.
+  - Assessment/TNA and LMS summaries still need dedicated canonical per-employee backend endpoints for perfect parity.
+- Next Follow-up:
+  - [ ] Add canonical employee-insight backend endpoint bundle (KPI + assessment + LMS aggregates).
+  - [ ] Add role-scope integration smoke tests (`hr full`, `manager team-only`).
+  - [ ] Keep employee CRUD mutations on legacy path until mutation parity is verified.
+- Notes:
+  - No mutation tools were enabled in this slice.
+  - Legacy role scope safety was preserved while enabling manager operational visibility.
+
 ## 2026-04-04 - Role-Aware IA Rollout + LMS Read-Only Enablement
 - Commit/PR: pending
 - Type: feat(shell) | feat(lms) | docs
