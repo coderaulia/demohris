@@ -109,10 +109,916 @@ Purpose: keep API docs consistent with implementation and frontend usage.
 | `tna/migrate-training-history`, `tna/training-history-stats` | Implemented | Migration/admin utilities |
 
 ## Open Follow-up Checklist
-- [ ] Add request/response examples per high-traffic action (`lms/courses/list`, `lms/progress/get`, `tna/calculate-gaps`, `auth/login`)
-- [ ] Add explicit permission matrix per action (employee/manager/hr/superadmin)
+- [x] Add request/response examples per high-traffic action — completed 2026-04-04 (see §Phase 4)
+- [x] Add explicit permission matrix per action — completed 2026-04-04 (see §Phase 4)
 - [x] Add automated API tests for LMS read cutover (`lms/enrollments/get`, `lms/progress/get`) via `tests/contracts/lms-read-cutover.test.mjs`
 - [x] Add regression tests ensuring TNA accepts POST payload filters (`tests/contracts/tna-read-cutover.test.mjs`, `scripts/qa/tna-read-cutover-smoke.mjs`)
+
+---
+
+## PHASE 4 — Examples, Permission Matrix, and Stale Audit (2026-04-04)
+
+### STEP 0 — Audit Findings
+
+#### Actions with no request/response example (before this update)
+`auth/login`, `auth/session`, `lms/courses/list`, `lms/progress/get`, `tna/calculate-gaps`, `tna/summary`, `employees/insights`, `kpi/reporting-summary`
+
+#### Actions with no role documented (before this update)
+All actions — permission matrix did not exist.
+
+#### Stale / undocumented entries found in code
+| Finding | Detail |
+|---|---|
+| `tna/calculate-gaps` — no `requireRole` guard | Any authenticated role can call with their own `employee_id`. Employee can only resolve their own gaps (no server-side scope enforcement beyond auth). This matches the original design intent but was not documented. |
+| `tna/enrollments-with-details` | Exists in `tna.js` (auth-only, no role guard) but was not listed in docs. Added to inventory below with `[legacy-only]` note. |
+| `tna/migrate-training-history` | Requires `superadmin` only — was listed but role not documented. Added to matrix. |
+| `lms/enrollments/complete` | Listed in inventory but backed only by legacy MySQL path; Supabase cutover not yet done. Marked `[legacy-only]`. |
+| `lms/sections/*`, `lms/lessons/*`, `lms/questions/*` | Listed as group entries. These are admin-only write paths (manager/hr/superadmin), read available to all authenticated. Marked `[legacy-only]` on write paths. |
+| `lms/quizzes/*`, `lms/reviews/*` | Exist and are functional via legacy MySQL; route is feature-flagged off until full LMS mutation cutover. Marked `[legacy-only]`. |
+| `lms/dashboard/*` | Functional. `stats` now includes admin filter support (Sprint 4). |
+| `tna/enrollments-with-details` | Auth-only, no role guard. Added as `[legacy-only]`. |
+| `auth/password-reset-request` | No rate limiting or email sending — records a DB timestamp only. Noted below. |
+
+---
+
+### STEP 1 — Request/Response Examples
+
+All examples use `POST /api?action=<action>` unless noted.  
+Auth header for JWT: `Authorization: Bearer <supabase_access_token>`  
+Session-based auth: cookie `demo_kpi_session` set after `auth/login`.
+
+---
+
+#### `auth/login`
+
+**Request**
+```http
+POST /api?action=auth/login
+Content-Type: application/json
+
+{ "email": "farhan@xenos.local", "password": "secret123" }
+```
+
+**Response (success)**
+```json
+{
+  "profile": {
+    "employee_id": "EMP001",
+    "name": "Farhan Akbar",
+    "role": "employee",
+    "department": "Sales",
+    "auth_email": "farhan@xenos.local"
+  }
+}
+```
+Sets `demo_kpi_session` cookie. `profile.password_hash` is never returned.
+
+**Response (invalid credentials)**
+```json
+{ "error": "Invalid credentials.", "code": "AUTH_INVALID" }
+```
+HTTP 401.
+
+**Response (missing fields)**
+```json
+{ "error": "Email and password are required.", "code": "AUTH_INVALID" }
+```
+HTTP 400.
+
+---
+
+#### `auth/session`
+
+**Request**
+```http
+POST /api?action=auth/session
+Authorization: Bearer <access_token>
+```
+No body required. Works with session cookie OR JWT Bearer token.
+
+**Response (authenticated)**
+```json
+{
+  "authenticated": true,
+  "employee_id": "EMP001",
+  "name": "Farhan Akbar",
+  "role": "employee",
+  "department": "Sales",
+  "email": "farhan@xenos.local"
+}
+```
+
+**Response (unauthenticated)**
+```json
+{ "authenticated": false }
+```
+HTTP 200 (not 401 — callers must check `authenticated` flag).
+
+---
+
+#### `auth/logout`
+
+**Request**
+```http
+POST /api?action=auth/logout
+```
+
+**Response**
+```json
+{ "ok": true }
+```
+
+---
+
+#### `auth/create-user`
+
+Superadmin only. Creates auth credentials for an existing employee record.
+
+**Request**
+```http
+POST /api?action=auth/create-user
+Authorization: Bearer <superadmin_token>
+Content-Type: application/json
+
+{
+  "employee_id": "EMP042",
+  "email": "new.user@xenos.local",
+  "password": "TempPass123!"
+}
+```
+
+**Response (success)**
+```json
+{
+  "user": { "id": "uuid-auth-id" },
+  "profile": { "employee_id": "EMP042", "name": "Budi Santoso", ... }
+}
+```
+
+**Response (email conflict)**
+```json
+{ "error": "This email is already registered to another employee.", "code": "EMAIL_EXISTS" }
+```
+HTTP 409.
+
+---
+
+#### `auth/update-password`
+
+**Request**
+```http
+POST /api?action=auth/update-password
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "password": "NewSecure456!" }
+```
+
+**Response**
+```json
+{ "ok": true }
+```
+Password must be ≥ 8 characters. Updates own password only (regardless of role).
+
+---
+
+#### `auth/password-reset-request`
+
+No auth required. Records a reset timestamp in the DB. No email is sent (manual admin flow).
+
+**Request**
+```http
+POST /api?action=auth/password-reset-request
+Content-Type: application/json
+
+{ "email": "user@xenos.local" }
+```
+
+**Response**
+```json
+{
+  "message": "If that account exists, a reset request has been recorded. ..."
+}
+```
+Always returns 200 regardless of whether the email exists (prevents enumeration).
+
+---
+
+#### `lms/courses/list`
+
+**Request**
+```http
+POST /api?action=lms/courses/list
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "status": "published",
+  "category": "Leadership",
+  "search": "management",
+  "page": 1,
+  "limit": 20
+}
+```
+All fields optional. `status` values: `draft`, `published`. `page`/`limit` default to `1`/`20`.
+
+**Response (success)**
+```json
+{
+  "success": true,
+  "courses": [
+    {
+      "id": "uuid-course",
+      "title": "Management Fundamentals",
+      "category": "Leadership",
+      "status": "published",
+      "difficulty_level": "intermediate",
+      "estimated_duration_minutes": 120,
+      "enrollment_count": 14,
+      "avg_rating": 4.3,
+      "tags": ["leadership", "management"],
+      "is_mandatory": false
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "limit": 20
+}
+```
+
+**Response (not authenticated)**
+```json
+{ "error": "Unauthorized" }
+```
+HTTP 401.
+
+---
+
+#### `lms/enrollments/enroll`
+
+**Request**
+```http
+POST /api?action=lms/enrollments/enroll
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "course_id": "uuid-course" }
+```
+To enroll another employee (hr/superadmin only via mutation source): add `"employee_id": "EMP042"`.
+
+**Response (success)**
+```json
+{
+  "success": true,
+  "enrollment": {
+    "id": "uuid-enrollment",
+    "course_id": "uuid-course",
+    "employee_id": "EMP001",
+    "status": "enrolled",
+    "enrollment_type": "self",
+    "enrolled_by": "EMP001",
+    "created_at": "2026-04-04T14:00:00Z"
+  }
+}
+```
+
+**Response (already enrolled — legacy path)**
+```json
+{ "error": "Already enrolled in this course" }
+```
+HTTP 400.
+
+**Response (already enrolled — Supabase path)**
+```json
+{ "error": "Already enrolled in this course" }
+```
+HTTP 409.
+
+---
+
+#### `lms/enrollments/start`
+
+**Request**
+```http
+POST /api?action=lms/enrollments/start
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "course_id": "uuid-course" }
+```
+
+**Response (success)**
+```json
+{
+  "success": true,
+  "enrollment": {
+    "id": "uuid-enrollment",
+    "status": "in_progress",
+    "started_at": "2026-04-04T14:00:00Z",
+    "last_accessed_at": "2026-04-04T14:00:00Z"
+  }
+}
+```
+
+**Response (not enrolled)**
+```json
+{ "error": "Not enrolled in this course" }
+```
+HTTP 404.
+
+---
+
+#### `lms/progress/get`
+
+**Request**
+```http
+POST /api?action=lms/progress/get
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "enrollment_id": "uuid-enrollment" }
+```
+Optional: add `"lesson_id": "uuid-lesson"` to filter to a single lesson.
+
+**Response (success)**
+```json
+{
+  "success": true,
+  "progress": {
+    "enrollment_id": "uuid-enrollment",
+    "progress_percent": 45.0,
+    "status": "in_progress",
+    "lessons": [
+      {
+        "id": "uuid-progress-row",
+        "lesson_id": "uuid-lesson",
+        "status": "completed",
+        "progress_percent": 100,
+        "time_spent_seconds": 320,
+        "completed_at": "2026-04-04T12:00:00Z",
+        "last_accessed_at": "2026-04-04T12:00:00Z"
+      }
+    ]
+  }
+}
+```
+When `lesson_id` is supplied, `progress.lesson` is also set to the first matching row.
+
+**Response (enrollment not found)**
+```json
+{ "error": "Enrollment not found" }
+```
+HTTP 404.
+
+**Response (not authorized)**
+```json
+{ "error": "Not authorized" }
+```
+HTTP 403 — returned when a non-admin requests another employee's progress.
+
+---
+
+#### `lms/certificates/generate`
+
+**Request**
+```http
+POST /api?action=lms/certificates/generate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "enrollment_id": "uuid-enrollment" }
+```
+To force reissue (superadmin only): add `"reissue": true`.
+
+**Response (success — new issuance)**
+```json
+{
+  "success": true,
+  "certificate": {
+    "id": "uuid-cert",
+    "certificate_number": "CERT-1743775200000-AB12CD3",
+    "employee_id": "EMP001",
+    "course_id": "uuid-course",
+    "issued_at": "2026-04-04T14:00:00Z",
+    "employee_name": "Farhan Akbar",
+    "title": "Management Fundamentals"
+  },
+  "already_issued": false,
+  "reissued": false
+}
+```
+
+**Response (already issued, no reissue flag)**
+```json
+{
+  "success": true,
+  "certificate": { ... },
+  "already_issued": true,
+  "reissued": false
+}
+```
+
+**Response (enrollment not completed)**
+```json
+{ "error": "Certificate can only be issued for completed enrollment" }
+```
+HTTP 400.
+
+---
+
+#### `lms/assignments/create`
+
+**Request**
+```http
+POST /api?action=lms/assignments/create
+Authorization: Bearer <hr_or_superadmin_token>
+Content-Type: application/json
+
+{
+  "course_id": "uuid-course",
+  "target_type": "department",
+  "target_value": "Sales",
+  "due_date": "2026-05-01",
+  "priority": "high",
+  "notes": "Mandatory Q2 training"
+}
+```
+`target_type` options: `department`, `manager`, `role`, `employee_ids`.  
+Use `employee_ids: ["EMP001", "EMP002"]` for explicit targeting.  
+Use `course_ids: [...]` to assign multiple courses at once.
+
+**Response (success)**
+```json
+{
+  "success": true,
+  "assignments": [
+    { "assignment_id": "uuid-a", "enrollment_id": "uuid-e", "employee_id": "EMP001", "course_id": "uuid-course" }
+  ],
+  "results": [
+    { "course_id": "uuid-course", "employee_id": "EMP001", "status": "created", ... },
+    { "course_id": "uuid-course", "employee_id": "EMP002", "status": "already_enrolled", ... }
+  ],
+  "summary": { "total_targets": 5, "total_created": 4, "total_skipped": 1, "total_failed": 0 },
+  "target": { "target_type": "department", "target_value": "Sales", "employee_count": 5, "course_count": 1 }
+}
+```
+
+---
+
+#### `tna/calculate-gaps`
+
+**Request**
+```http
+POST /api?action=tna/calculate-gaps
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "employee_id": "EMP001" }
+```
+Optional: `"threshold": 7` (default 7, score below this is always flagged).  
+Requires TNA module enabled.
+
+**Response (success)**
+```json
+{
+  "data": {
+    "employee_id": "EMP001",
+    "employee_name": "Farhan Akbar",
+    "position": "Sales Executive",
+    "assessment_id": "uuid-assessment",
+    "assessment_date": "2026-03-15T00:00:00Z",
+    "gaps": [
+      {
+        "competency_name": "Negotiation",
+        "description": "Ability to reach mutually beneficial agreements",
+        "current_score": 5,
+        "current_level_normalized": 2.5,
+        "required_level": 4,
+        "gap": 1.5,
+        "recommended_training": "Advanced Sales Negotiation",
+        "priority": "high",
+        "score_below_threshold": true,
+        "has_training_need_config": true
+      }
+    ],
+    "competency_config": [...],
+    "training_needs_config": { "Negotiation": { "required_level": 4, ... } }
+  }
+}
+```
+
+**Response (no competency config found)**
+```json
+{
+  "data": {
+    "gaps": [],
+    "competency_config": null,
+    "message": "No competency config found for position"
+  }
+}
+```
+
+**Response (employee not found)**
+```json
+{ "message": "Employee not found", "code": "NOT_FOUND" }
+```
+HTTP 404.
+
+**Response (TNA module disabled)**
+```json
+{ "message": "TNA module is not enabled", "code": "MODULE_DISABLED" }
+```
+HTTP 404.
+
+---
+
+#### `tna/summary`
+
+**Request**
+```http
+POST /api?action=tna/summary
+Authorization: Bearer <manager_or_above_token>
+Content-Type: application/json
+
+{ "period": "2026-04" }
+```
+Optional period filter (currently informational; Supabase path does not apply a period filter on counts).
+
+**Response (success)**
+```json
+{
+  "data": {
+    "total_needs_identified": 47,
+    "needs_completed": 12,
+    "active_plans": 8,
+    "total_enrollments": 93,
+    "enrollments_completed": 34,
+    "critical_gaps": 5,
+    "high_gaps": 18
+  }
+}
+```
+
+**Response (employee role — forbidden)**
+```json
+{ "message": "Access denied", "code": "FORBIDDEN" }
+```
+HTTP 403.
+
+---
+
+#### `tna/gaps-report`
+
+**Request**
+```http
+POST /api?action=tna/gaps-report
+Authorization: Bearer <manager_or_above_token>
+Content-Type: application/json
+
+{ "department": "Sales" }
+```
+`department` is optional.
+
+**Response (success)**
+```json
+{
+  "data": [
+    {
+      "employee_id": "EMP001",
+      "employee_name": "Farhan Akbar",
+      "position": "Sales Executive",
+      "department": "Sales",
+      "competency_name": "Negotiation",
+      "required_level": 4,
+      "current_level": 2,
+      "gap_level": 2,
+      "priority": "high",
+      "status": "identified",
+      "identified_at": "2026-03-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### `tna/lms-report`
+
+**Request**
+```http
+POST /api?action=tna/lms-report
+Authorization: Bearer <manager_or_above_token>
+Content-Type: application/json
+
+{ "department": "Sales" }
+```
+
+**Response (success)**
+```json
+{
+  "data": {
+    "summary": {
+      "total_enrollments": 93,
+      "completed": 34,
+      "in_progress": 21,
+      "enrolled": 38,
+      "avg_score": 78.5
+    },
+    "by_course": [
+      {
+        "department": "Sales",
+        "course_name": "Sales Fundamentals",
+        "provider": "Internal",
+        "total_enrolled": 12,
+        "completed": 8,
+        "in_progress": 3,
+        "avg_score": 82.1
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### `employees/insights`
+
+**Request**
+```http
+POST /api?action=employees/insights
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "employee_id": "EMP001" }
+```
+
+**Response (success)**
+```json
+{
+  "success": true,
+  "source": "supabase",
+  "insights": {
+    "kpi": {
+      "latest_score": 87.5,
+      "trend": "up",
+      "record_count": 12
+    },
+    "assessment": {
+      "gap_level": "medium",
+      "last_assessed_at": "2026-03-01T00:00:00Z",
+      "history_count": 4
+    },
+    "lms": {
+      "enrolled_count": 5,
+      "completed_count": 3,
+      "completion_pct": 60
+    }
+  }
+}
+```
+
+**Response (no data — valid but empty)**
+```json
+{
+  "success": true,
+  "source": "supabase",
+  "insights": {
+    "kpi": { "latest_score": null, "trend": null, "record_count": 0 },
+    "assessment": { "gap_level": null, "last_assessed_at": null, "history_count": 0 },
+    "lms": { "enrolled_count": 0, "completed_count": 0, "completion_pct": 0 }
+  }
+}
+```
+
+**Response (employee accesses another employee)**
+```json
+{ "error": "Access denied", "code": "FORBIDDEN" }
+```
+HTTP 403.
+
+---
+
+#### `kpi/reporting-summary`
+
+**Request**
+```http
+POST /api?action=kpi/reporting-summary
+Authorization: Bearer <manager_or_above_token>
+Content-Type: application/json
+
+{ "period": "2026-04", "department": "Sales" }
+```
+Both fields optional. `period`: `YYYY-MM` (exact) or `YYYY` (year LIKE). Managers are automatically scoped to their own department.
+
+**Response (success)**
+```json
+{
+  "success": true,
+  "source": "supabase",
+  "period": "2026-04",
+  "department": "Sales",
+  "rows": [
+    {
+      "department": "Sales",
+      "manager": "Budi Santoso",
+      "employee_count": 8,
+      "record_count": 24,
+      "met_count": 16,
+      "not_met_count": 8,
+      "avg_score": 87.5,
+      "missing_count": 2
+    }
+  ]
+}
+```
+
+**Response (employee role)**
+```json
+{ "error": "KPI reporting summary is not available for the employee role.", "code": "FORBIDDEN" }
+```
+HTTP 403.
+
+---
+
+### STEP 2 — Full Permission Matrix
+
+> **Legend:**  
+> `✓` = allowed (all targets)  `self` = own record only  `dept` = own department only  `team` = direct reports  `any` = any employee  `—` = not permitted  `[sa]` = superadmin only
+
+#### Auth
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `auth/login` | ✓ | ✓ | ✓ | ✓ |
+| `auth/logout` | ✓ | ✓ | ✓ | ✓ |
+| `auth/session` | ✓ | ✓ | ✓ | ✓ |
+| `auth/password-reset-request` | ✓ (open) | ✓ (open) | ✓ (open) | ✓ (open) |
+| `auth/update-password` | self | self | self | self |
+| `auth/verify-password` | self | self | self | self |
+| `auth/create-user` | — | — | — | ✓ [sa] |
+
+#### Core / System
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `GET /api/health` | ✓ (open) | ✓ (open) | ✓ (open) | ✓ (open) |
+| `db/query` (select) | scoped | scoped | scoped | ✓ |
+| `db/query` (insert/update/delete) | self-scoped rows | dept-scoped | dept-scoped | ✓ |
+
+#### Modules (`/api/modules?action=`)
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `list` | — | — | ✓ | ✓ |
+| `get` | — | — | ✓ | ✓ |
+| `by-category` | — | — | ✓ | ✓ |
+| `active` | — | — | ✓ | ✓ |
+| `update` | — | — | ✓ | ✓ |
+| `toggle` | — | — | ✓ | ✓ |
+| `activity` | — | — | ✓ | ✓ |
+
+#### LMS — Courses
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `lms/courses/list` | ✓ | ✓ | ✓ | ✓ |
+| `lms/courses/get` | ✓ | ✓ | ✓ | ✓ |
+| `lms/courses/create` [legacy-only] | — | ✓ | ✓ | ✓ |
+| `lms/courses/update` [legacy-only] | — | ✓ | ✓ | ✓ |
+| `lms/courses/delete` [legacy-only] | — | — | — | ✓ [sa] |
+| `lms/courses/publish` [legacy-only] | — | ✓ | ✓ | ✓ |
+
+#### LMS — Sections / Lessons / Questions (all `[legacy-only]`)
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `lms/sections/list` | ✓ | ✓ | ✓ | ✓ |
+| `lms/sections/create` | — | ✓ | ✓ | ✓ |
+| `lms/sections/update` | — | ✓ | ✓ | ✓ |
+| `lms/sections/delete` | — | ✓ | ✓ | ✓ |
+| `lms/sections/reorder` | — | ✓ | ✓ | ✓ |
+| `lms/lessons/list` | ✓ | ✓ | ✓ | ✓ |
+| `lms/lessons/get` | ✓ | ✓ | ✓ | ✓ |
+| `lms/lessons/create` | — | ✓ | ✓ | ✓ |
+| `lms/lessons/update` | — | ✓ | ✓ | ✓ |
+| `lms/lessons/delete` | — | ✓ | ✓ | ✓ |
+| `lms/lessons/reorder` | — | ✓ | ✓ | ✓ |
+| `lms/questions/list` | ✓ | ✓ | ✓ | ✓ |
+| `lms/questions/create` | — | ✓ | ✓ | ✓ |
+| `lms/questions/update` | — | ✓ | ✓ | ✓ |
+| `lms/questions/delete` | — | ✓ | ✓ | ✓ |
+
+#### LMS — Enrollments
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `lms/enrollments/list` | ✓ (requires `course_id`) | ✓ | ✓ | ✓ |
+| `lms/enrollments/get` | self | self+admin | any | any |
+| `lms/enrollments/my-courses` | self | self | self | self |
+| `lms/enrollments/enroll` | self | self | any | any |
+| `lms/enrollments/unenroll` | self | self | any | any |
+| `lms/enrollments/start` | self | self | self | self |
+| `lms/enrollments/complete` [legacy-only] | self | self | any | any |
+
+#### LMS — Progress, Quizzes, Reviews
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `lms/progress/get` | self | self+admin | any | any |
+| `lms/progress/update` [legacy-only] | self | — | — | — |
+| `lms/progress/complete-lesson` [legacy-only] | self | — | — | — |
+| `lms/quizzes/submit` [legacy-only] | self | — | — | — |
+| `lms/quizzes/get-attempt` [legacy-only] | self | — | — | — |
+| `lms/reviews/list` | ✓ | ✓ | ✓ | ✓ |
+| `lms/reviews/create` [legacy-only] | self | self | self | self |
+| `lms/reviews/update` [legacy-only] | self | — | — | — |
+| `lms/reviews/delete` [legacy-only] | self | ✓ | ✓ | ✓ |
+
+#### LMS — Dashboard, Assignments, Certificates
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `lms/dashboard/stats` | self-view | admin-view | admin-view | admin-view |
+| `lms/dashboard/recommendations` | competency-based | admin course perf | admin course perf | admin course perf |
+| `lms/assignments/list` | self | ✓ | ✓ | ✓ |
+| `lms/assignments/create` | — | — | ✓ | ✓ |
+| `lms/assignments/complete` | self | ✓ | ✓ | ✓ |
+| `lms/certificates/list` | self | any | any | any |
+| `lms/certificates/generate` | self (completed) | — | any (completed) | any + reissue |
+
+> Note: `manager` in `isAdmin()` check = `true` for LMS read/guard purposes (same as hr/superadmin for most read gates). For `lms/assignments/create` the code explicitly checks `['superadmin','hr']` only.
+
+> Note: `lms/certificates/generate` — employee can request their own certificate when enrollment is `completed`. Reissue (`reissue: true`) is `superadmin` only.
+
+#### TNA (all require TNA feature flag enabled)
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `tna/calculate-gaps` | self (no server scope) | any | any | any |
+| `tna/needs` | self (filter by `employee_id`) | dept | all | all |
+| `tna/needs/create` | — | ✓ | ✓ | ✓ |
+| `tna/needs/update-status` | — | ✓ | ✓ | ✓ |
+| `tna/plans` | self (filter param) | dept | all | all |
+| `tna/plan/create` | — | ✓ | ✓ | ✓ |
+| `tna/plan/get` | self | ✓ | ✓ | ✓ |
+| `tna/plan/add-item` | — | ✓ | ✓ | ✓ |
+| `tna/plan/update-item` | — | ✓ | ✓ | ✓ |
+| `tna/plan/approve` | — | ✓ | ✓ | ✓ |
+| `tna/plan/delete` | — | ✓ | ✓ | ✓ |
+| `tna/needs-config` | ✓ (read) | ✓ | ✓ | ✓ |
+| `tna/needs-config/create` | — | ✓ | ✓ | ✓ |
+| `tna/courses` | ✓ (read) | ✓ | ✓ | ✓ |
+| `tna/course-create` | — | ✓ | ✓ | ✓ |
+| `tna/course-update` | — | ✓ | ✓ | ✓ |
+| `tna/enrollments` | self (param) | dept | all | all |
+| `tna/enrollments-with-details` [legacy-only] | self (param) | dept | all | all |
+| `tna/enroll` | — | ✓ | ✓ | ✓ |
+| `tna/enrollment-update-status` | — | ✓ | ✓ | ✓ |
+| `tna/summary` | — | dept | all | all |
+| `tna/gaps-report` | — | dept | all | all |
+| `tna/lms-report` | — | dept | all | all |
+| `tna/import-competencies` | — | ✓ | ✓ | ✓ |
+| `tna/bulk-create-need-records` | — | ✓ | ✓ | ✓ |
+| `tna/training-history-stats` | — | ✓ | ✓ | ✓ |
+| `tna/migrate-training-history` | — | — | — | ✓ [sa] |
+
+#### Employees
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `employees/insights` | self | team (`manager_id` match) | any | any |
+
+#### KPI
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `kpi/reporting-summary` | — | dept (forced) | all | all |
+
+---
+
+### STEP 3 — Stale / Blocked Entry Notes
+
+| Action | Tag | Notes |
+|---|---|---|
+| `lms/enrollments/complete` | `[legacy-only]` | MySQL-backed only; `LMS_MUTATION_SOURCE=supabase` path not yet implemented. Do not enable LMS route until this slice is cut over. |
+| `lms/progress/update` | `[legacy-only]` | MySQL-backed only. Enforces `employee_id === currentUser.employee_id` strictly. |
+| `lms/progress/complete-lesson` | `[legacy-only]` | MySQL-backed only. |
+| `lms/quizzes/submit` | `[legacy-only]` | MySQL-backed only. No Supabase cutover planned yet. |
+| `lms/quizzes/get-attempt` | `[legacy-only]` | MySQL-backed only. |
+| `lms/reviews/create` | `[legacy-only]` | MySQL-backed only. |
+| `lms/reviews/update` | `[legacy-only]` | MySQL-backed only. |
+| `lms/reviews/delete` | `[legacy-only]` | MySQL-backed only. |
+| `lms/courses/create` | `[legacy-only]` | MySQL-backed only. |
+| `lms/courses/update` | `[legacy-only]` | MySQL-backed only. |
+| `lms/courses/delete` | `[legacy-only]` | MySQL-backed only. |
+| `lms/courses/publish` | `[legacy-only]` | MySQL-backed only. |
+| `lms/sections/*` (write) | `[legacy-only]` | MySQL-backed only. |
+| `lms/lessons/*` (write) | `[legacy-only]` | MySQL-backed only. |
+| `lms/questions/*` (write) | `[legacy-only]` | MySQL-backed only. |
+| `tna/enrollments-with-details` | `[legacy-only]` `[undocumented]` | Exists in code (`tna.js`); auth-only, no role guard. Not in prior docs — added to inventory here. |
+| `tna/migrate-training-history` | `[legacy-only]` `[admin-util]` | One-shot migration utility. `superadmin` only. Not for regular use. |
+| `auth/password-reset-request` | `[no-email]` | Records a DB timestamp only. No email delivery. Admin must manually issue a temp password or use `auth/create-user`. |
+
 
 ## 2026-04-04 Cutover Update - First Supabase Endpoint Slice
 
@@ -555,6 +1461,11 @@ Contract/QA additions:
 |---|---|---|
 | `employees/insights` | Implemented | Per-employee KPI + Assessment + LMS aggregates |
 
+### KPI Actions
+| Action | Status | Notes |
+|---|---|---|
+| `kpi/reporting-summary` | Implemented | Department-grouped KPI achievement summary; Supabase-backed read with legacy fallback |
+
 ## 2026-04-04 New Endpoint - `employees/insights`
 
 Action: `employees/insights`  
@@ -629,3 +1540,85 @@ Source switch: `EMPLOYEES_INSIGHTS_SOURCE=legacy|supabase|auto` (default: `auto`
 - Separate `useQuery` in `EmployeeDetailPage` with `enabled` gated on `detailQuery` resolving
 - Skeleton loading state during fetch; no `Deferred` badges when insights load successfully
 - Graceful amber error banner if insights endpoint fails (detail page still works)
+
+## 2026-04-04 Cutover Update - KPI Read Slice (`kpi/reporting-summary`)
+
+Cutover scope:
+- `kpi/reporting-summary`
+
+Data-source behavior:
+- `KPI_READ_SOURCE=supabase` → force Supabase reads (requires `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`)
+- `KPI_READ_SOURCE=auto` → Supabase when configured, else legacy MySQL
+- `KPI_READ_SOURCE=legacy` → force legacy MySQL reads
+
+Supabase tables required:
+- `kpi_records` (`employee_id`, `period`, `value`, `target_snapshot`)
+- `employees` (`employee_id`, `department`, `manager_id`, `role`, `name`)
+
+### Request
+```json
+{ "department": "Sales", "period": "2026-04" }
+```
+All fields optional. Period accepts `YYYY-MM` (exact) or `YYYY` (year-range LIKE filter).
+
+### Response
+```json
+{
+  "success": true,
+  "source": "supabase",
+  "period": "2026-04",
+  "department": null,
+  "rows": [
+    {
+      "department": "Sales",
+      "manager": "Budi Santoso",
+      "employee_count": 5,
+      "record_count": 12,
+      "met_count": 8,
+      "not_met_count": 4,
+      "avg_score": 87.5,
+      "missing_count": 2
+    }
+  ]
+}
+```
+
+### Field notes
+- `met_count`: KPI records where `value >= target_snapshot`.
+- `not_met_count`: KPI records where `value < target_snapshot`.
+- `avg_score`: average `(value/target) * 100` across scored records (non-null, target > 0). `null` when no scoreable records.
+- `missing_count`: employee count minus employees who have at least one KPI record in scope.
+- `manager`: display name of the manager for the department derived from `employees.manager_id`. `null` when not resolvable.
+
+### Access guard
+| Role | Allowed scope |
+|---|---|
+| `superadmin` | All departments |
+| `hr` | All departments |
+| `director` | All departments |
+| `manager` | Own department only (forced via `user.department`) |
+| `employee` | `403` — not permitted |
+
+### Error responses
+| Status | Code | Condition |
+|---|---|---|
+| 401 | `AUTH_REQUIRED` | No session or JWT |
+| 403 | `FORBIDDEN` | Employee role attempted access |
+
+### Contract
+- Zod schema: `KpiReportingSummaryResponseSchema`, `KpiReportingSummaryRowSchema` in `packages/contracts/src/kpi.ts`
+- Contract test: `tests/contracts/kpi-read-cutover.test.mjs` (18 tests)
+- Smoke test: `scripts/qa/kpi-read-cutover-smoke.mjs` (`npm run qa:kpi:cutover`)
+
+### Environment variables
+- `SUPABASE_KPI_ADMIN_TEST_EMAIL` / `SUPABASE_KPI_ADMIN_TEST_PASSWORD` — admin/manager account for smoke test
+- `SUPABASE_KPI_EMPLOYEE_TEST_EMAIL` / `SUPABASE_KPI_EMPLOYEE_TEST_PASSWORD` — optional, for 403 guard check
+
+### Validation status
+- `npm run qa:contracts` → pass (72/72 after this addition)
+- `npm run qa:kpi:cutover` → run after backend server is up with `KPI_READ_SOURCE=supabase`
+
+### Route enablement decision
+- KPI React route already has read-first workflow active (`/kpi`, `/kpi/drilldown/:mode/:group`).
+- `kpi/reporting-summary` is now Supabase-safe and can back the grouped department breakdown in the React KPI shell.
+- Deeper drill-down record pages (`/kpi/drilldown/:mode/:group`) remain deferred until per-employee KPI detail endpoint is added.
