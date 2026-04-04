@@ -171,7 +171,7 @@ Supabase-backed LMS read endpoints (via `LMS_READ_SOURCE`):
 - `lms/progress/get`
 
 Remaining legacy LMS endpoints:
-- `lms/enrollments/enroll|unenroll|start|complete`
+- `lms/enrollments/enroll|unenroll|complete`
 - `lms/progress/update|complete-lesson`
 - `lms/quizzes/*`
 - `lms/assignments/*`
@@ -275,8 +275,8 @@ Mutation workflow route rule:
 - route exposure requires passing both read parity and relevant mutation workflow parity checks.
 
 Current workflow smoke status:
-- `npm run qa:lms:workflow` -> blocked in current environment (missing `SUPABASE_LMS_WORKFLOW_TEST_EMAIL`)
-- `npm run qa:tna:workflow` -> blocked in current environment (missing `SUPABASE_TNA_WORKFLOW_TEST_EMAIL`)
+- `npm run qa:lms:workflow` -> pass in Supabase mode for first mutation slice (`lms/enrollments/start`)
+- `npm run qa:tna:workflow` -> blocked in current environment (missing workflow seed credentials/IDs)
 
 ## 2026-04-04 Supabase Read Slice Verification (Seeded Data)
 
@@ -306,3 +306,38 @@ Execution result:
 Rollout implication:
 - read slices are verified against seeded Supabase data
 - LMS/TNA routes remain feature-flagged off until mutation workflow parity (`qa:lms:workflow`, `qa:tna:workflow`) is verified
+
+## 2026-04-04 Cutover Update - First LMS Mutation Slice (`lms/enrollments/start`)
+
+Cutover scope:
+- `lms/enrollments/start` only
+
+Data-source behavior:
+- `LMS_MUTATION_SOURCE=supabase` -> force Supabase mutation path
+- `LMS_MUTATION_SOURCE=auto` -> Supabase when configured, else legacy MySQL
+- `LMS_MUTATION_SOURCE=legacy` -> force legacy MySQL mutation path
+
+Legacy-visible contract preserved:
+- request: `{ course_id }`
+- success response: `{ success: true, enrollment }`
+- guarded errors:
+  - `404` -> `Not enrolled in this course`
+  - `400` -> `Course already completed`
+
+Side-effects preserved:
+- enrollment status transition to `in_progress`
+- `started_at` initialized if null
+- `last_accessed_at` refreshed
+- first lesson `lesson_progress` row initialized as `not_started` when missing
+
+Mandatory follow-up reads verified:
+- `lms/enrollments/get`
+- `lms/progress/get`
+
+Validation status:
+- `npm run qa:contracts` -> pass
+- `npm run qa:lms:workflow` -> pass (start-slice focused workflow)
+
+Route enablement decision:
+- LMS route remains feature-flagged off.
+- one mutation slice is not sufficient to expose full LMS screens.

@@ -8,6 +8,10 @@ import {
     toEnrollmentListParityRow,
     toMyCoursesParityRow,
 } from '../compat/supabaseLmsRead.js';
+import {
+    resolveLmsMutationSource,
+    startCourseEnrollmentInSupabase,
+} from '../compat/supabaseLmsMutation.js';
 
 function generateId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -932,6 +936,19 @@ async function startCourse(req, res, currentUser) {
     
     if (!course_id) {
         return res.status(400).json({ error: 'course_id is required' });
+    }
+
+    const mutationSource = resolveLmsMutationSource();
+    if (mutationSource.source === 'supabase') {
+        const result = await startCourseEnrollmentInSupabase({
+            courseId: course_id,
+            employeeId: currentUser.employee_id,
+            idFactory: generateId,
+        });
+        if (result?.error) {
+            return res.status(result.error.status).json({ error: result.error.message });
+        }
+        return res.json({ success: true, enrollment: normalizeRow(result.enrollment) });
     }
     
     const [enrollments] = await pool.query(

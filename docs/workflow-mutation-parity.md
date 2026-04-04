@@ -87,6 +87,41 @@ Reason:
 - Easy verification through follow-up reads (`lms/progress/get`, `lms/enrollments/get`).
 - Reversible by env switch and route feature flag without broad data migration.
 
+## 2026-04-04 Cutover Execution - `lms/enrollments/start`
+
+Legacy behavior confirmed before cutover:
+1. requires `course_id`
+2. resolves enrollment by `(course_id, currentUser.employee_id)`
+3. returns `404` with `Not enrolled in this course` when missing
+4. returns `400` with `Course already completed` when enrollment status is `completed`
+5. updates enrollment status to `in_progress`, sets `started_at` if null, and bumps `last_accessed_at`
+6. initializes first-lesson `lesson_progress` row (`not_started`) when missing
+7. returns `{ success: true, enrollment }`
+
+Cutover implementation:
+- new Supabase mutation adapter:
+  - `server/compat/supabaseLmsMutation.js`
+- new source switch:
+  - `LMS_MUTATION_SOURCE=legacy|supabase|auto`
+- scoped cutover:
+  - only `lms/enrollments/start` routes through Supabase path
+  - all other LMS mutations remain on legacy path
+
+Parity verification for this slice:
+- follow-up reads required and verified after `start`:
+  - `lms/enrollments/get`
+  - `lms/progress/get`
+- workflow smoke command (start-slice focused):
+  - `npm run qa:lms:workflow`
+- observed result in Supabase mode: pass
+
+Rollback:
+- set `LMS_MUTATION_SOURCE=legacy` to force immediate fallback
+- keep LMS route feature-flagged off until additional mutation slices are parity-verified
+
+Next mutation candidate after this slice:
+- `tna/needs/update-status` or `lms/enrollments/enroll` (choose one bounded mutation only)
+
 ## Current Route Exposure Rule
 
 - LMS/TNA routes remain feature-flagged off until both:

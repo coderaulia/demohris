@@ -62,7 +62,7 @@ Files verified:
 | `lms/courses/*` | blocked | MySQL | contract only | feature-flagged off | defer to read-first LMS slice |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |
-| `lms/enrollments/*` | in progress (read actions verified; mutations legacy) | mixed: Supabase for `list/get/my-courses` via source switch, MySQL for mutations | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | read parity verified with seeded learner/admin roles |
+| `lms/enrollments/*` | in progress (read actions verified; `start` mutation cut over) | mixed: Supabase for `list/get/my-courses` + `start` via source switch, MySQL for remaining mutations | contract + integration + smoke verified (`qa:lms:cutover`, `qa:lms:workflow`) | feature-flagged off | `start` parity verified with follow-up `enrollments/get` + `progress/get` |
 | `lms/progress/*` | in progress (read action verified; mutations legacy) | mixed: Supabase for `get` via source switch, MySQL for mutations | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | `progress/get` parity verified |
 | `lms/quizzes/*` | blocked | MySQL | not tested | feature-flagged off | high-risk; defer |
 | `lms/dashboard/*` | blocked | MySQL | not tested | feature-flagged off | defer |
@@ -163,7 +163,7 @@ Use this checklist for every next slice:
 - LMS/TNA frontend routes stay disabled.
 - No new frontend route exposure in this cutover commit.
 - Next recommended slice:
-  - TNA read reporting expansion (`tna/gaps-report` or `tna/lms-report`) after `tna/summary` smoke parity passes with real credentials.
+  - one bounded mutation slice (`tna/needs/update-status` or `lms/enrollments/enroll`) after workflow parity gates are met.
 
 ## Mutation Parity Readiness (Pre-Cutover Gate)
 
@@ -181,16 +181,19 @@ Current mutation parity test assets:
   - `scripts/qa/tna-mutation-workflow-smoke.mjs` (`npm run qa:tna:workflow`)
 
 Current smoke status:
-- `qa:lms:workflow` blocked in current environment (missing workflow seed IDs)
+- `qa:lms:workflow` pass in Supabase mode (`LMS_MUTATION_SOURCE=supabase`, seeded learner account)
 - `qa:tna:workflow` blocked in current environment (missing workflow seed IDs)
 
-First mutation cutover candidate (not yet migrated):
-- `lms/enrollments/start`
+First mutation cutover candidate:
+- `lms/enrollments/start` (completed in this slice)
 
 Why this slice first:
 - bounded side effects
 - strong follow-up read verification path
 - lower blast radius than quiz/certificate/bulk mutations
+
+Next mutation candidate:
+- `tna/needs/update-status` or `lms/enrollments/enroll` (single-slice rule remains)
 
 Route expansion rule remains unchanged:
 - keep LMS/TNA frontend routes feature-flagged off until related read + mutation workflows pass parity checks.
@@ -221,3 +224,26 @@ Credential mapping used (seeded accounts):
 
 Verification caveat:
 - backend process must be started with `.env` loaded so Supabase auth/read-source env values are available at runtime.
+
+## First Mutation Slice Verification Run (2026-04-04)
+
+Slice:
+- `lms/enrollments/start`
+
+Source switch:
+- `LMS_MUTATION_SOURCE=legacy|supabase|auto`
+- verification run used `LMS_MUTATION_SOURCE=supabase`
+
+Workflow checks:
+- `npm run qa:lms:workflow` -> pass
+- mandatory follow-up reads after start:
+  - `lms/enrollments/get` -> pass
+  - `lms/progress/get` -> pass
+
+Seeded workflow inputs used:
+- `SUPABASE_LMS_WORKFLOW_TEST_EMAIL=farhan.demo@xenos.local`
+- `SUPABASE_LMS_WORKFLOW_TEST_COURSE_ID=a1000000-0000-4000-8000-000000000001`
+
+Rollback:
+- set `LMS_MUTATION_SOURCE=legacy`
+- keep LMS frontend route feature-flagged off

@@ -54,6 +54,10 @@ test('LMS mutation workflow parity intent exists in current implementation', () 
         lmsSource,
         /async function submitQuiz[\s\S]*INSERT INTO quiz_attempts[\s\S]*if \(passed\)[\s\S]*INSERT INTO lesson_progress[\s\S]*updateEnrollmentProgress\(enrollment_id\)/
     );
+    assert.match(
+        lmsSource,
+        /async function startCourse[\s\S]*resolveLmsMutationSource\(\)[\s\S]*startCourseEnrollmentInSupabase\(/,
+    );
 });
 
 test('TNA mutation workflow parity intent exists in current implementation', () => {

@@ -433,3 +433,48 @@ This slice is reversible:
 - JWT path can be disabled by removing `SUPABASE_URL`.
 - No LMS/TNA logic has been migrated.
 - No legacy endpoint has been removed.
+
+## Step 18 - First LMS Mutation Cutover (`lms/enrollments/start`) (2026-04-04)
+
+Scope:
+- migrate only `lms/enrollments/start` to Supabase-backed mutation path
+- keep all other LMS mutations on legacy/MySQL path
+
+Implementation:
+- added `server/compat/supabaseLmsMutation.js`
+  - `resolveLmsMutationSource()`
+  - `startCourseEnrollmentInSupabase(...)`
+- source switch:
+  - `LMS_MUTATION_SOURCE=legacy|supabase|auto`
+- `server/modules/lms.js`:
+  - `startCourse` now routes to Supabase path only when mutation source resolves to `supabase`
+  - legacy SQL behavior remains intact as fallback
+
+Legacy parity preserved:
+- request: `{ course_id }`
+- guarded errors:
+  - `404` when not enrolled
+  - `400` when already completed
+- side effects:
+  - set enrollment `status='in_progress'`
+  - initialize `started_at` if null
+  - update `last_accessed_at`
+  - initialize first lesson `lesson_progress` (`not_started`) when missing
+- success shape:
+  - `{ success: true, enrollment }`
+
+Verification:
+- contract suite:
+  - `npm run qa:contracts` -> pass (42/42)
+- workflow smoke (start slice focused):
+  - `npm run qa:lms:workflow` -> pass (Supabase mutation mode)
+- follow-up reads verified as part of workflow:
+  - `lms/enrollments/get`
+  - `lms/progress/get`
+
+Route exposure decision:
+- keep LMS route feature-flagged off.
+- one mutation slice is not enough to mark LMS screens live-safe.
+
+Rollback:
+- set `LMS_MUTATION_SOURCE=legacy` for immediate fallback.

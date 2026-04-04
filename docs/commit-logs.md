@@ -28,6 +28,43 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - First LMS Mutation Cutover (`enrollments/start`) to Supabase
+- Commit/PR: pending
+- Type: refactor(lms) | test | docs
+- Scope: cut over `lms/enrollments/start` with reversible source switch and workflow parity proof
+- Completed:
+  - Added Supabase mutation adapter:
+    - `server/compat/supabaseLmsMutation.js`
+  - Added mutation source switch:
+    - `LMS_MUTATION_SOURCE=legacy|supabase|auto`
+  - Cut over only `lms/enrollments/start` in `server/modules/lms.js` while preserving legacy fallback and leaving all other mutations unchanged.
+  - Preserved legacy-visible contract and guarded errors:
+    - `404` for non-enrolled course
+    - `400` for already completed course
+    - success response shape `{ success, enrollment }`
+  - Preserved side effects in Supabase path:
+    - enrollment status to `in_progress`
+    - `started_at` initialization when null
+    - first-lesson `lesson_progress` initialization when missing
+  - Added mutation cutover contract tests:
+    - `tests/contracts/lms-start-mutation-cutover.test.mjs`
+  - Updated workflow smoke to verify start-slice parity with mandatory follow-up reads:
+    - `scripts/qa/lms-mutation-workflow-smoke.mjs`
+    - checks `lms/enrollments/get` + `lms/progress/get` after `start`
+  - Validation:
+    - `npm run qa:contracts` -> pass (42/42)
+    - `npm run qa:lms:workflow` -> pass in Supabase mutation mode
+- Gap Found:
+  - LMS mutations besides `start` remain legacy-backed.
+  - TNA mutation workflow smoke is still blocked by missing workflow IDs/credentials.
+- Next Follow-up:
+  - [ ] Keep LMS route feature-flagged off until additional mutation-dependent screens are parity-verified.
+  - [ ] Choose next single mutation slice (`tna/needs/update-status` or `lms/enrollments/enroll`).
+  - [ ] Run `qa:tna:workflow` with seeded workflow IDs to unblock TNA mutation cutover.
+- Notes:
+  - Rollback remains immediate via `LMS_MUTATION_SOURCE=legacy`.
+  - This milestone intentionally avoids quiz/certificate/progress mutation cutovers.
+
 ## 2026-04-04 - Supabase Read Cutover Verification Stabilization
 - Commit/PR: pending
 - Type: test(api) | refactor(auth) | docs

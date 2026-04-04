@@ -41,6 +41,7 @@
         "insert first lesson_progress row when missing"
       ],
       "followUpReads": [
+        "lms/enrollments/get",
         "lms/progress/get"
       ]
     },
