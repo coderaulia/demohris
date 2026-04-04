@@ -15,9 +15,11 @@ import {
     loadCatalogWithFilters
 } from './lms/courseManager.js';
 import { openLessonViewer } from './lms/lessonViewer.js';
+import { showEnrollmentConfirmation } from './lms/enrollment.js';
 
 let currentLmsView = 'my-learning';
 const PAGE_SIZE = 20;
+let _adminReportSnapshot = null;
 
 // ==================================================
 // INITIALIZATION
@@ -84,6 +86,27 @@ function setupEventListeners() {
             await handleSaveCourse();
             return;
         }
+
+        if (e.target.closest('#lms-btn-bulk-enroll') || e.target.closest('#lms-btn-assign-courses')) {
+            await showBulkAssignmentDialog();
+            return;
+        }
+
+        if (e.target.closest('#lms-btn-apply-report-filters')) {
+            await loadAdminReports();
+            return;
+        }
+
+        if (e.target.closest('#lms-btn-clear-report-filters')) {
+            clearAdminReportFilters();
+            await loadAdminReports();
+            return;
+        }
+
+        if (e.target.closest('#lms-btn-export-report-csv')) {
+            exportAdminReportCsv();
+            return;
+        }
     });
 
     // Search and filters
@@ -134,6 +157,16 @@ function setupEventListeners() {
     const adminCategory = document.getElementById('lms-admin-category');
     if (adminCategory) {
         adminCategory.addEventListener('change', () => loadAdminCourses());
+    }
+
+    const reportDepartment = document.getElementById('lms-report-filter-department');
+    if (reportDepartment) {
+        reportDepartment.addEventListener('change', () => loadAdminReports());
+    }
+
+    const reportPeriod = document.getElementById('lms-report-filter-period');
+    if (reportPeriod) {
+        reportPeriod.addEventListener('change', () => loadAdminReports());
     }
 }
 
@@ -512,7 +545,9 @@ async function loadCertificates() {
     if (!container) return;
 
     try {
-        const result = await lmsData.listCertificates();
+        const role = String(state.currentUser?.role || '').toLowerCase();
+        const isAdminRole = ['superadmin', 'hr', 'manager'].includes(role);
+        const result = await lmsData.listCertificates({ limit: isAdminRole ? 200 : 100 });
         
         if (!result.certificates || result.certificates.length === 0) {
             container.innerHTML = `
@@ -529,14 +564,22 @@ async function loadCertificates() {
                 <div class="card shadow-sm">
                     <div class="card-body text-center">
                         <i class="bi bi-award text-warning fs-1 mb-3 d-block"></i>
-                        <h5 class="card-title">${escapeHTML(cert.course_title)}</h5>
+                        <h5 class="card-title">${escapeHTML(cert.title || cert.course_title || 'Course')}</h5>
                         <p class="card-text text-muted">
                             Issued: ${formatDate(cert.issued_at)}<br>
                             Certificate #: ${escapeHTML(cert.certificate_number)}
+                            ${isAdminRole ? `<br>Employee: ${escapeHTML(cert.employee_name || cert.employee_id || '-')}` : ''}
                         </p>
-                        <button class="btn btn-outline-primary btn-sm" onclick="window.__app.downloadCertificate('${cert.id}')">
-                            <i class="bi bi-download me-1"></i>Download
-                        </button>
+                        <div class="d-flex flex-wrap gap-2 justify-content-center">
+                            <button class="btn btn-outline-primary btn-sm" onclick="window.__app.downloadCertificate('${cert.id}')">
+                                <i class="bi bi-download me-1"></i>Download PDF
+                            </button>
+                            ${role === 'superadmin' ? `
+                                <button class="btn btn-outline-warning btn-sm" onclick="window.__app.reissueCertificate('${cert.enrollment_id}')">
+                                    <i class="bi bi-arrow-repeat me-1"></i>Re-issue
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -691,34 +734,241 @@ async function loadAdminEnrollments() {
 // ADMIN: REPORTS
 // ==================================================
 
+function getAdminReportFilters() {
+    const department = document.getElementById('lms-report-filter-department')?.value || '';
+    const period = document.getElementById('lms-report-filter-period')?.value || '';
+    return { department, period };
+}
+
+function clearAdminReportFilters() {
+    const department = document.getElementById('lms-report-filter-department');
+    const period = document.getElementById('lms-report-filter-period');
+    if (department) department.value = '';
+    if (period) period.value = '';
+}
+
+function getDepartmentOptions() {
+    const db = state.db || {};
+    const departments = Object.values(db)
+        .map(row => String(row?.department || '').trim())
+        .filter(Boolean);
+    return [...new Set(departments)].sort((a, b) => a.localeCompare(b));
+}
+
+function hydrateAdminReportFilters() {
+    const departmentSelect = document.getElementById('lms-report-filter-department');
+    if (!departmentSelect) return;
+    const selected = departmentSelect.value || '';
+    const departments = getDepartmentOptions();
+    departmentSelect.innerHTML = '<option value="">All Departments</option>';
+    departments.forEach(dept => {
+        departmentSelect.innerHTML += `<option value="${escapeHTML(dept)}">${escapeHTML(dept)}</option>`;
+    });
+    if (selected && departments.includes(selected)) {
+        departmentSelect.value = selected;
+    }
+}
+
+function renderCoursePerformanceTable(rows = []) {
+    const tbody = document.getElementById('lms-report-course-performance-body');
+    if (!tbody) return;
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No performance data for selected filters</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.slice(0, 20).map(row => `
+        <tr>
+            <td>${escapeHTML(row.title || '-')}</td>
+            <td>${escapeHTML(row.category || '-')}</td>
+            <td>${Number(row.total_enrollments || 0)}</td>
+            <td>${Number(row.in_progress || 0)}</td>
+            <td>${Number(row.completed || 0)}</td>
+            <td>${Number(row.completion_rate || 0).toFixed(1)}%</td>
+            <td>${row.avg_score === null || row.avg_score === undefined ? '-' : `${Math.round(Number(row.avg_score))}%`}</td>
+        </tr>
+    `).join('');
+}
+
+function renderDepartmentCompletionTable(rows = []) {
+    const tbody = document.getElementById('lms-report-dept-completion-body');
+    if (!tbody) return;
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No data</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(row => `
+        <tr>
+            <td>${escapeHTML(row.department || 'Unassigned')}</td>
+            <td>${Number(row.enrollments || 0)}</td>
+            <td>${Number(row.completed || 0)}</td>
+            <td>${Number(row.rate || 0).toFixed(1)}%</td>
+        </tr>
+    `).join('');
+}
+
+function renderScoreDistributionTable(rows = []) {
+    const tbody = document.getElementById('lms-report-score-distribution-body');
+    if (!tbody) return;
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No quiz attempts yet</td></tr>';
+        return;
+    }
+    const total = rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+    tbody.innerHTML = rows.map(row => {
+        const count = Number(row.count || 0);
+        const pct = total > 0 ? (count / total) * 100 : 0;
+        return `
+            <tr>
+                <td>${escapeHTML(row.range || '-')}</td>
+                <td>${count}</td>
+                <td>${pct.toFixed(1)}%</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderTimeOnCourseTable(rows = []) {
+    const tbody = document.getElementById('lms-report-time-course-body');
+    if (!tbody) return;
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">No time data</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.slice(0, 10).map(row => `
+        <tr>
+            <td>${escapeHTML(row.title || '-')}</td>
+            <td>${Number(row.avg_time_minutes || 0).toFixed(1)}</td>
+        </tr>
+    `).join('');
+}
+
+function exportAdminReportCsv() {
+    if (!_adminReportSnapshot) {
+        notify.warn('Load analytics first before exporting CSV.');
+        return;
+    }
+    const filters = _adminReportSnapshot.filters || {};
+    const header = [
+        ['Report', 'LMS Analytics'],
+        ['Department', filters.department || 'All'],
+        ['Period', filters.period || 'All'],
+        ['Generated At', new Date().toISOString()],
+        [],
+        ['Course', 'Category', 'Enrollments', 'In Progress', 'Completed', 'Completion %', 'Avg Quiz Score', 'Avg Time Minutes'],
+    ];
+
+    const rows = (_adminReportSnapshot.coursePerformance || []).map(row => ([
+        row.title || '',
+        row.category || '',
+        Number(row.total_enrollments || 0),
+        Number(row.in_progress || 0),
+        Number(row.completed || 0),
+        Number(row.completion_rate || 0).toFixed(2),
+        row.avg_score === null || row.avg_score === undefined ? '' : Number(row.avg_score).toFixed(2),
+        row.avg_time_minutes === null || row.avg_time_minutes === undefined ? '' : Number(row.avg_time_minutes).toFixed(2),
+    ]));
+
+    const csv = [...header, ...rows]
+        .map(cols => cols.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(','))
+        .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lms_analytics_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 async function loadAdminReports() {
     try {
-        const stats = await lmsData.getDashboardStats();
-        
+        hydrateAdminReportFilters();
+        const filters = getAdminReportFilters();
+        const [statsResult, recommendationsResult, enrollmentsResult] = await Promise.all([
+            lmsData.getDashboardStats(filters),
+            lmsData.getRecommendations(filters),
+            lmsData.listEnrollments({ page: 1, limit: 500, ...filters }),
+        ]);
+
+        const stats = statsResult?.stats || statsResult || {};
+        const coursePerformance = Array.isArray(recommendationsResult?.course_performance)
+            ? recommendationsResult.course_performance
+            : [];
+        const enrollments = Array.isArray(enrollmentsResult?.enrollments)
+            ? enrollmentsResult.enrollments
+            : [];
+
         document.getElementById('lms-report-total-enrollments').textContent = stats.total_enrollments || 0;
-        document.getElementById('lms-report-completions').textContent = stats.completed || 0;
-        document.getElementById('lms-report-in-progress').textContent = stats.in_progress || 0;
-        document.getElementById('lms-report-avg-score').textContent = stats.avg_score ? Math.round(stats.avg_score) + '%' : '-';
-        
-        // Load top courses
-        await loadTopCourses();
-        
-        // TODO: Load department chart when chart library is integrated
-        
+        document.getElementById('lms-report-completions').textContent = stats.courses_completed || stats.completed || 0;
+        document.getElementById('lms-report-in-progress').textContent = stats.courses_in_progress || stats.in_progress || 0;
+        document.getElementById('lms-report-avg-score').textContent = stats.avg_score ? `${Math.round(Number(stats.avg_score))}%` : '-';
+
+        renderCoursePerformanceTable(coursePerformance);
+        await loadTopCourses(coursePerformance);
+
+        const byDepartment = new Map();
+        for (const row of enrollments) {
+            const dept = String(row.department || 'Unassigned');
+            const item = byDepartment.get(dept) || { department: dept, enrollments: 0, completed: 0 };
+            item.enrollments += 1;
+            if (String(row.status) === 'completed') item.completed += 1;
+            byDepartment.set(dept, item);
+        }
+        const deptRows = [...byDepartment.values()]
+            .map(item => ({
+                ...item,
+                rate: item.enrollments > 0 ? (item.completed / item.enrollments) * 100 : 0,
+            }))
+            .sort((a, b) => b.enrollments - a.enrollments);
+        renderDepartmentCompletionTable(deptRows);
+
+        const scoreBins = [
+            { range: '0-49', count: 0, min: 0, max: 49 },
+            { range: '50-69', count: 0, min: 50, max: 69 },
+            { range: '70-84', count: 0, min: 70, max: 84 },
+            { range: '85-100', count: 0, min: 85, max: 100 },
+        ];
+        for (const row of coursePerformance) {
+            const score = Number(row.avg_score);
+            if (!Number.isFinite(score)) continue;
+            const bucket = scoreBins.find(bin => score >= bin.min && score <= bin.max);
+            if (bucket) bucket.count += 1;
+        }
+        renderScoreDistributionTable(scoreBins);
+
+        const timeRows = coursePerformance
+            .filter(row => row.avg_time_minutes !== null && row.avg_time_minutes !== undefined)
+            .map(row => ({ title: row.title, avg_time_minutes: Number(row.avg_time_minutes || 0) }))
+            .sort((a, b) => b.avg_time_minutes - a.avg_time_minutes);
+        renderTimeOnCourseTable(timeRows);
+
+        _adminReportSnapshot = {
+            filters,
+            stats,
+            coursePerformance,
+            departmentRows: deptRows,
+            scoreBins,
+            timeRows,
+        };
     } catch (error) {
         console.error('Failed to load admin reports:', error);
         notify.error('Failed to load analytics');
     }
 }
 
-async function loadTopCourses() {
+async function loadTopCourses(coursePerformance = null) {
     const tbody = document.getElementById('lms-top-courses-body');
     if (!tbody) return;
 
     try {
-        const result = await lmsData.listCourses({ status: 'published', limit: 10 });
+        const rows = Array.isArray(coursePerformance)
+            ? coursePerformance
+            : (await lmsData.getRecommendations(getAdminReportFilters()))?.course_performance || [];
         
-        if (!result.courses || result.courses.length === 0) {
+        if (!rows || rows.length === 0) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="5" class="text-center text-muted py-4">
@@ -729,13 +979,13 @@ async function loadTopCourses() {
             return;
         }
 
-        tbody.innerHTML = result.courses.slice(0, 5).map(course => `
+        tbody.innerHTML = rows.slice(0, 5).map(course => `
             <tr>
                 <td>${escapeHTML(course.title)}</td>
-                <td>${course.enrollment_count || 0}</td>
-                <td>${course.completion_count > 0 ? Math.round((course.completion_count / course.enrollment_count) * 100) + '%' : '0%'}</td>
+                <td>${course.total_enrollments || 0}</td>
+                <td>${Number(course.completion_rate || 0).toFixed(1)}%</td>
                 <td>${course.avg_score ? Math.round(course.avg_score) + '%' : '-'}</td>
-                <td>${course.avg_rating ? course.avg_rating.toFixed(1) + '/5' : '-'}</td>
+                <td>${course.avg_time_minutes ? `${Number(course.avg_time_minutes).toFixed(1)} min` : '-'}</td>
             </tr>
         `).join('');
     } catch (error) {
@@ -1018,6 +1268,228 @@ async function handleEnroll() {
     }
 }
 
+function getLmsAssignableEmployees() {
+    const db = state.db || {};
+    return Object.values(db)
+        .filter(row => row?.employee_id)
+        .map(row => ({
+            employee_id: String(row.employee_id),
+            name: String(row.name || row.employee_id),
+            department: String(row.department || ''),
+            role: String(row.role || ''),
+            manager_id: row.manager_id ? String(row.manager_id) : '',
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function showBulkAssignmentDialog() {
+    const role = String(state.currentUser?.role || '').toLowerCase();
+    if (!['superadmin', 'hr'].includes(role)) {
+        notify.warn('Only Superadmin or HR can run bulk assignment.');
+        return;
+    }
+
+    const [courseResp, assignmentResp] = await Promise.all([
+        lmsData.listCourses({ status: 'published', limit: 100 }),
+        lmsData.listAssignments({ page: 1, limit: 200 }),
+    ]);
+    const courses = Array.isArray(courseResp?.courses) ? courseResp.courses : [];
+    const employees = getLmsAssignableEmployees();
+    const departments = [...new Set(employees.map(row => row.department).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const managers = employees.filter(row => ['manager', 'superadmin', 'hr'].includes(String(row.role || '').toLowerCase()));
+    const recentAssignments = Array.isArray(assignmentResp?.assignments) ? assignmentResp.assignments : [];
+
+    if (!courses.length || !employees.length) {
+        notify.warn('Bulk assignment requires published courses and employee records.');
+        return;
+    }
+
+    const html = `
+        <div class="text-start">
+            <div class="mb-2"><strong>Bulk Assignment</strong></div>
+            <label class="form-label">Courses</label>
+            <select id="lms-bulk-courses" class="form-select form-select-sm mb-2" multiple size="6">
+                ${courses.map(course => `<option value="${escapeHTML(course.id)}">${escapeHTML(course.title)}</option>`).join('')}
+            </select>
+            <small class="text-muted d-block mb-3">Use Ctrl/Cmd + click to select multiple courses.</small>
+
+            <label class="form-label">Target Type</label>
+            <select id="lms-bulk-target-type" class="form-select form-select-sm mb-2">
+                <option value="department">Department</option>
+                <option value="manager">Manager Team</option>
+                <option value="employee_ids">Selected Employees</option>
+            </select>
+
+            <div id="lms-bulk-target-department-wrap" class="mb-2">
+                <select id="lms-bulk-target-department" class="form-select form-select-sm">
+                    <option value="">Select Department</option>
+                    ${departments.map(dept => `<option value="${escapeHTML(dept)}">${escapeHTML(dept)}</option>`).join('')}
+                </select>
+            </div>
+            <div id="lms-bulk-target-manager-wrap" class="mb-2">
+                <select id="lms-bulk-target-manager" class="form-select form-select-sm">
+                    <option value="">Select Manager</option>
+                    ${managers.map(manager => `<option value="${escapeHTML(manager.employee_id)}">${escapeHTML(manager.name)}</option>`).join('')}
+                </select>
+            </div>
+            <div id="lms-bulk-target-employees-wrap" class="mb-2">
+                <select id="lms-bulk-target-employees" class="form-select form-select-sm" multiple size="6">
+                    ${employees.map(employee => `<option value="${escapeHTML(employee.employee_id)}">${escapeHTML(employee.name)} (${escapeHTML(employee.department || '-')})</option>`).join('')}
+                </select>
+            </div>
+
+            <label class="form-label">Due Date</label>
+            <input type="date" id="lms-bulk-due-date" class="form-control form-control-sm mb-2">
+
+            <label class="form-label">Priority</label>
+            <select id="lms-bulk-priority" class="form-select form-select-sm mb-2">
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+            </select>
+
+            <label class="form-label">Notes</label>
+            <textarea id="lms-bulk-notes" class="form-control form-control-sm mb-2" rows="2" placeholder="Optional notes"></textarea>
+
+            <div class="small text-muted">Recent assignments in scope: ${recentAssignments.length}</div>
+        </div>
+    `;
+
+    const response = await notify.prompt({
+        title: 'Bulk Assign Courses',
+        html,
+        showLoaderOnConfirm: true,
+        confirmButtonText: 'Assign',
+        preConfirm: async () => {
+            const courseSelect = document.getElementById('lms-bulk-courses');
+            const targetType = document.getElementById('lms-bulk-target-type')?.value || 'department';
+            const selectedCourses = courseSelect
+                ? Array.from(courseSelect.selectedOptions).map(option => option.value).filter(Boolean)
+                : [];
+            if (selectedCourses.length === 0) {
+                notify.showValidationMessage('Select at least one course.');
+                return false;
+            }
+
+            const payload = {
+                course_ids: selectedCourses,
+                due_date: document.getElementById('lms-bulk-due-date')?.value || null,
+                priority: document.getElementById('lms-bulk-priority')?.value || 'medium',
+                notes: document.getElementById('lms-bulk-notes')?.value || null,
+                target_type: targetType,
+            };
+
+            if (targetType === 'department') {
+                const department = document.getElementById('lms-bulk-target-department')?.value || '';
+                if (!department) {
+                    notify.showValidationMessage('Select a department target.');
+                    return false;
+                }
+                payload.target_value = department;
+            } else if (targetType === 'manager') {
+                const manager = document.getElementById('lms-bulk-target-manager')?.value || '';
+                if (!manager) {
+                    notify.showValidationMessage('Select a manager target.');
+                    return false;
+                }
+                payload.target_value = manager;
+            } else {
+                const selectedEmployees = Array.from(document.getElementById('lms-bulk-target-employees')?.selectedOptions || [])
+                    .map(option => option.value)
+                    .filter(Boolean);
+                if (selectedEmployees.length === 0) {
+                    notify.showValidationMessage('Select at least one employee.');
+                    return false;
+                }
+                payload.employee_ids = selectedEmployees;
+            }
+
+            const response = await lmsData.createBulkAssignment(payload);
+            return response;
+        },
+    });
+
+    if (response?.summary) {
+        await notify.info(
+            `Created: ${response.summary.total_created}, Skipped: ${response.summary.total_skipped}, Failed: ${response.summary.total_failed}`,
+            'Bulk Assignment Result'
+        );
+    }
+
+    await loadAdminEnrollments();
+}
+
+async function generateCertificateForEnrollment(enrollmentId, reissue = false) {
+    if (!enrollmentId) {
+        notify.warn('Enrollment ID is required.');
+        return null;
+    }
+    try {
+        const response = await lmsData.generateCertificate(enrollmentId, { reissue });
+        if (!response?.certificate) {
+            notify.warn('Certificate was not generated.');
+            return null;
+        }
+        notify.success(reissue ? 'Certificate re-issued successfully.' : 'Certificate generated successfully.');
+        return response.certificate;
+    } catch (error) {
+        notify.error(error?.message || 'Failed to generate certificate');
+        return null;
+    }
+}
+
+function getPdfTableRunner(doc, autoTableMod) {
+    const autoTable = autoTableMod?.default || autoTableMod?.autoTable;
+    return opts => {
+        if (typeof autoTable === 'function') {
+            autoTable(doc, opts);
+            return;
+        }
+        if (typeof doc.autoTable === 'function') {
+            doc.autoTable(opts);
+            return;
+        }
+        throw new Error('jspdf-autotable failed to load.');
+    };
+}
+
+async function downloadCertificatePdf(certificateId) {
+    const certList = await lmsData.listCertificates({ limit: 500 });
+    const certificate = (certList?.certificates || []).find(row => String(row.id) === String(certificateId));
+    if (!certificate) {
+        notify.warn('Certificate not found.');
+        return;
+    }
+    const { jsPDF } = await import('jspdf');
+    const autoTableMod = await import('jspdf-autotable');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const runAutoTable = getPdfTableRunner(doc, autoTableMod);
+
+    doc.setFontSize(22);
+    doc.text('Certificate of Completion', 148, 35, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text('HR Performance Suite LMS', 148, 45, { align: 'center' });
+
+    runAutoTable({
+        startY: 60,
+        theme: 'grid',
+        head: [['Field', 'Value']],
+        body: [
+            ['Certificate Number', certificate.certificate_number || '-'],
+            ['Employee', certificate.employee_name || certificate.employee_id || '-'],
+            ['Course', certificate.title || certificate.course_title || '-'],
+            ['Issued At', certificate.issued_at ? formatDate(certificate.issued_at) : '-'],
+            ['Category', certificate.category || '-'],
+        ],
+        styles: { fontSize: 11 },
+        headStyles: { fillColor: [13, 110, 253] },
+    });
+
+    doc.setFontSize(10);
+    doc.text(`Generated ${new Date().toLocaleString()}`, 148, 190, { align: 'center' });
+    doc.save(`certificate_${String(certificate.certificate_number || certificate.id).replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`);
+}
+
 // ==================================================
 // EXPORTS
 // ==================================================
@@ -1047,8 +1519,8 @@ window.__app.editCourse = async (courseId) => {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('lms-course-form-modal')).show();
 };
 window.__app.deleteCourse = async (courseId) => {
-    const confirm = await notify.confirm('Are you sure you want to delete this course? This action cannot be undone.', 'Delete Course');
-    if (confirm.isConfirmed) {
+    const confirmed = await notify.confirm('Are you sure you want to delete this course? This action cannot be undone.', { title: 'Delete Course' });
+    if (confirmed) {
         try {
             await lmsData.deleteCourse(courseId);
             notify.success('Course deleted');
@@ -1061,10 +1533,39 @@ window.__app.deleteCourse = async (courseId) => {
 window.__app.continueCourse = (enrollmentId) => {
     openLessonViewer(enrollmentId);
 };
-window.__app.viewCertificate = (enrollmentId) => {
-    notify.info('Certificate download coming in Sprint 4');
-    // TODO: Implement certificate download
+window.__app.viewEnrollment = async (enrollmentId) => {
+    try {
+        const result = await lmsData.getEnrollmentDetails(enrollmentId);
+        await notify.info(
+            `${result.course_title || 'Course'} | ${result.status || '-'} | Progress ${Math.round(Number(result.progress_percent || 0))}%`,
+            'Enrollment Details'
+        );
+    } catch (error) {
+        notify.error(error?.message || 'Failed to load enrollment details');
+    }
 };
+window.__app.downloadCertificate = async (certificateId) => {
+    try {
+        await downloadCertificatePdf(certificateId);
+    } catch (error) {
+        notify.error(error?.message || 'Failed to download certificate PDF');
+    }
+};
+window.__app.viewCertificate = async (enrollmentId) => {
+    const cert = await generateCertificateForEnrollment(enrollmentId, false);
+    if (cert?.id) {
+        await downloadCertificatePdf(cert.id);
+    }
+};
+window.__app.reissueCertificate = async (enrollmentId) => {
+    const confirmed = await notify.confirm('Re-issue this certificate with a new issue timestamp?', { title: 'Re-issue Certificate' });
+    if (!confirmed) return;
+    const cert = await generateCertificateForEnrollment(enrollmentId, true);
+    if (cert?.id) {
+        await downloadCertificatePdf(cert.id);
+    }
+};
+window.__app.showBulkAssignmentDialog = showBulkAssignmentDialog;
 window.__app.clearCatalogFilters = () => {
     const searchInput = document.getElementById('lms-catalog-search');
     const categorySelect = document.getElementById('lms-catalog-category');

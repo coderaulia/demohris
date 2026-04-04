@@ -249,12 +249,12 @@ export async function deleteReview(reviewId) {
 // DASHBOARD
 // =====================================================
 
-export async function getDashboardStats() {
-    return await apiRequest('lms/dashboard/stats', {});
+export async function getDashboardStats(params = {}) {
+    return await apiRequest('lms/dashboard/stats', params);
 }
 
-export async function getRecommendations() {
-    return await apiRequest('lms/dashboard/recommendations', {});
+export async function getRecommendations(params = {}) {
+    return await apiRequest('lms/dashboard/recommendations', params);
 }
 
 // =====================================================
@@ -271,6 +271,10 @@ export async function createAssignment(courseId, employeeIds, dueDate = null, pr
     });
 }
 
+export async function createBulkAssignment(payload = {}) {
+    return await apiRequest('lms/assignments/create', payload);
+}
+
 export async function listAssignments(params = {}) {
     return await apiRequest('lms/assignments/list', params);
 }
@@ -283,10 +287,10 @@ export async function completeAssignment(assignmentId) {
 // CERTIFICATES
 // =====================================================
 
-export async function listCertificates() {
-    return await apiRequest('lms/certificates/list', {});
+export async function listCertificates(params = {}) {
+    return await apiRequest('lms/certificates/list', params);
 }
 
-export async function generateCertificate(enrollmentId) {
-    return await apiRequest('lms/certificates/generate', { enrollment_id: enrollmentId });
+export async function generateCertificate(enrollmentId, options = {}) {
+    return await apiRequest('lms/certificates/generate', { enrollment_id: enrollmentId, ...options });
 }

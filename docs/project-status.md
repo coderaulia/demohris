@@ -25,7 +25,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | LMS Sprint 1 (Course Management) | Completed | Stable and tested | E2E coverage missing | High | Team | Add E2E tests for course CRUD and filters |
 | LMS Sprint 2 (Student Experience) | Completed | Stable and tested | E2E coverage missing | High | Team | Add enrollment and lesson viewer E2E tests |
 | LMS Sprint 3 (Quiz and Assessment) | Completed | Stable and tested | E2E coverage missing | High | Team | Add quiz-taking and assessment E2E tests |
-| LMS Sprint 4 (Admin Features) | In progress | Completed feature set | Dashboard, bulk assignment, analytics, certificate hardening not finalized | High | Team | Implement Sprint 4 backlog in sequence |
+| LMS Sprint 4 (Admin Features) | Completed | Completed feature set | Residual QA remains (E2E and live-role validation) | High | Team | Run Sprint 4 admin smoke in staging and add end-to-end regression specs |
 | API Documentation | Partial | Fully documented and verified | Endpoint behavior/status matrix incomplete | Medium | Team | Keep `docs/api-endpoint.md` updated per feature delivery |
 | API/Code Consistency Sync | In progress | Fully aligned contract | Endpoint examples + regression tests still pending after route/action sync | High | Team | Add API tests and finalize per-action examples |
 | Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Provisioning complete; parity evidence still pending | High | Team | Keep legacy fallback active and finalize auth parity evidence |
@@ -42,10 +42,10 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 
 | Feature | Status | Why It Matters | Dependency | ETA | Notes |
 |---|---|---|---|---|---|
-| Admin dashboard | Planned | Needed for admin visibility and control | LMS analytics queries | TBD | Sprint 4 item |
-| Bulk course assignment | Planned | Speeds up enrollment at scale | Assignments module | TBD | Sprint 4 item |
-| Analytics and reports | Planned | Required for learning performance tracking | Course analytics data quality | TBD | Sprint 4 item |
-| Certificate generation finalization | Planned | Completion proof for learners | Enrollment/progress accuracy | TBD | Sprint 4 item |
+| Admin dashboard | Completed | Needed for admin visibility and control | LMS dashboard stats/recommendations | Delivered | Legacy LMS Sprint 4 |
+| Bulk course assignment | Completed | Speeds up enrollment at scale | Assignments module | Delivered | Department/team/employee targeting with per-employee summary |
+| Analytics and reports | Completed | Required for learning performance tracking | Dashboard/enrollment aggregation | Delivered | Completion/score/time views + CSV export |
+| Certificate generation finalization | Completed | Completion proof for learners | Enrollment/progress accuracy | Delivered | Generate/re-issue guard + PDF download |
 | Full LMS E2E test suite | Planned | Reduces regression risk | Stable UI flows | TBD | Track in QA board and `tests/e2e` specs |
 | Full API endpoint validation | Planned | Ensures backend/frontend contract reliability | Endpoint inventory | TBD | Track in `docs/api-endpoint.md` |
 

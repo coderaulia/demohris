@@ -433,3 +433,72 @@ Validation status:
 Route readiness decision:
 - LMS/TNA routes remain feature-flagged off.
 - Read coverage is now broader, but visible LMS/TNA screens still depend on mutation-heavy actions that remain legacy-backed.
+
+## 2026-04-04 Legacy LMS Sprint 4 Admin Completion
+
+Scope in this legacy-only update:
+- no React shell changes
+- no Supabase cutover-path changes
+- verified read cutover endpoints preserved (`lms/courses/list|get`, `lms/enrollments/*`)
+
+Updated endpoint behavior:
+
+### `lms/dashboard/stats`
+- Admin now supports filter payload:
+  - `department` (optional)
+  - `period` in `YYYY-MM` (optional)
+- Response keeps `success` + `stats`, and now includes stable admin metrics used by Sprint 4 UI:
+  - `total_enrollments`
+  - `courses_in_progress`
+  - `courses_completed`
+  - `completion_rate`
+  - `avg_score`
+  - `avg_time_on_course_minutes`
+
+### `lms/dashboard/recommendations`
+- For admin roles, response now returns operational course-performance aggregates:
+  - `course_performance[]`
+  - `recommendations[]`
+  - `attention_courses[]`
+  - `filters`
+- Non-admin recommendation behavior remains existing competency/recent recommendation flow.
+
+### `lms/assignments/create`
+- Bulk assignment now supports:
+  - `course_id` or `course_ids[]`
+  - `target_type`: `department|manager|employee_ids|role`
+  - `target_value` (for non-employee_ids modes)
+  - `employee_ids[]` (explicit mode)
+- Response now includes:
+  - `assignments[]` (created items)
+  - `results[]` (per-employee per-course statuses)
+  - `summary` (`total_created`, `total_skipped`, `total_failed`)
+  - `target` metadata
+- Guard tightened for bulk assignment:
+  - `superadmin` and `hr` only.
+
+### `lms/certificates/list`
+- Supports admin query scope:
+  - `employee_id` (optional)
+  - `enrollment_id` (optional)
+  - `limit` (optional)
+- Returns:
+  - `certificates[]` with `employee_name` and `enrollment_status`
+  - `meta` scope flags (`scope`, `can_reissue`)
+
+### `lms/certificates/generate`
+- Hardened issuance rule:
+  - certificate can only be issued for `completed` enrollments.
+- Supports optional reissue path:
+  - request payload `reissue=true`
+  - only `superadmin` can re-issue.
+- Response includes:
+  - `certificate`
+  - `already_issued`
+  - `reissued`
+
+Contract/QA additions:
+- `tests/contracts/fixtures/lms.sprint4-admin.group.json`
+- `tests/contracts/lms-sprint4-admin.test.mjs`
+- `scripts/qa/lms-sprint4-admin-smoke.mjs` (`npm run qa:lms:sprint4`)
+- `npm run qa:contracts` -> pass

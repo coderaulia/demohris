@@ -1301,29 +1301,120 @@ async function getQuizAttempt(req, res, currentUser) {
     res.json({ success: true, attempt: normalizeRow(attempts[0]) });
 }
 
+function parsePeriodRange(period) {
+    const raw = String(period || '').trim();
+    if (!raw) return null;
+    const match = /^(\d{4})-(\d{2})$/.exec(raw);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+        return null;
+    }
+    const start = `${match[1]}-${match[2]}-01 00:00:00`;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const end = `${String(nextYear).padStart(4, '0')}-${String(nextMonth).padStart(2, '0')}-01 00:00:00`;
+    return { start, end };
+}
+
+function buildEnrollmentScopeFilters({ department = '', period = '' } = {}, {
+    enrollmentAlias = 'e',
+    employeeAlias = 'emp',
+    createdAtColumn = 'created_at',
+} = {}) {
+    const filters = [];
+    const values = [];
+
+    if (department) {
+        filters.push(`${employeeAlias}.department = ?`);
+        values.push(department);
+    }
+
+    const periodRange = parsePeriodRange(period);
+    if (periodRange) {
+        filters.push(`${enrollmentAlias}.${createdAtColumn} >= ?`);
+        filters.push(`${enrollmentAlias}.${createdAtColumn} < ?`);
+        values.push(periodRange.start, periodRange.end);
+    }
+
+    return { whereClause: filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '', values };
+}
+
 async function getDashboardStats(req, res, currentUser) {
     const adminAccess = isAdmin(currentUser);
     const employeeId = currentUser.employee_id;
+    const { department = '', period = '' } = req.body || {};
     
     let stats = {
         courses_total: 0,
         courses_in_progress: 0,
         courses_completed: 0,
         total_time_spent: 0,
-        certificates_earned: 0
+        certificates_earned: 0,
+        total_enrollments: 0,
+        completion_rate: 0,
+        avg_score: null,
+        avg_time_on_course_minutes: null,
     };
     
     if (adminAccess) {
         const [courseCount] = await pool.query('SELECT COUNT(*) as count FROM courses WHERE status = "published"');
         stats.courses_total = courseCount[0]?.count || 0;
-        
-        const [enrollmentCount] = await pool.query('SELECT COUNT(*) as count FROM course_enrollments WHERE status = "in_progress"');
-        stats.courses_in_progress = enrollmentCount[0]?.count || 0;
-        
-        const [completionCount] = await pool.query('SELECT COUNT(*) as count FROM course_enrollments WHERE status = "completed"');
-        stats.courses_completed = completionCount[0]?.count || 0;
-        
-        const [certCount] = await pool.query('SELECT COUNT(*) as count FROM course_certificates');
+
+        const scoped = buildEnrollmentScopeFilters({ department, period }, {
+            enrollmentAlias: 'e',
+            employeeAlias: 'emp',
+            createdAtColumn: 'created_at',
+        });
+
+        const [enrollmentSummary] = await pool.query(
+            `SELECT
+                COUNT(*) as total_enrollments,
+                COUNT(CASE WHEN e.status = 'in_progress' THEN 1 END) as in_progress,
+                COUNT(CASE WHEN e.status = 'completed' THEN 1 END) as completed
+             FROM course_enrollments e
+             JOIN employees emp ON e.employee_id = emp.employee_id
+             ${scoped.whereClause}`,
+            scoped.values
+        );
+        const adminEnrollments = enrollmentSummary[0] || {};
+        stats.total_enrollments = Number(adminEnrollments.total_enrollments || 0);
+        stats.courses_in_progress = Number(adminEnrollments.in_progress || 0);
+        stats.courses_completed = Number(adminEnrollments.completed || 0);
+        stats.completion_rate = stats.total_enrollments > 0
+            ? Number(((stats.courses_completed / stats.total_enrollments) * 100).toFixed(2))
+            : 0;
+
+        const [scoreStats] = await pool.query(
+            `SELECT AVG(qa.score) as avg_score
+             FROM quiz_attempts qa
+             JOIN course_enrollments e ON qa.enrollment_id = e.id
+             JOIN employees emp ON e.employee_id = emp.employee_id
+             ${scoped.whereClause}`,
+            scoped.values
+        );
+        const avgScore = scoreStats[0]?.avg_score;
+        stats.avg_score = avgScore === null || avgScore === undefined ? null : Number(avgScore);
+
+        const [timeStats] = await pool.query(
+            `SELECT AVG(lp.time_spent_seconds) as avg_time_spent_seconds
+             FROM lesson_progress lp
+             JOIN course_enrollments e ON lp.enrollment_id = e.id
+             JOIN employees emp ON e.employee_id = emp.employee_id
+             ${scoped.whereClause}`,
+            scoped.values
+        );
+        const avgSeconds = Number(timeStats[0]?.avg_time_spent_seconds || 0);
+        stats.avg_time_on_course_minutes = avgSeconds > 0 ? Number((avgSeconds / 60).toFixed(2)) : null;
+
+        const [certCount] = await pool.query(
+            `SELECT COUNT(*) as count
+             FROM course_certificates cert
+             JOIN employees emp ON cert.employee_id = emp.employee_id
+             ${department ? 'WHERE emp.department = ?' : ''}`,
+            department ? [department] : []
+        );
         stats.certificates_earned = certCount[0]?.count || 0;
     } else {
         const [result] = await pool.query(
@@ -1341,6 +1432,10 @@ async function getDashboardStats(req, res, currentUser) {
         stats.courses_completed = result[0]?.completed || 0;
         stats.total_time_spent = result[0]?.total_time || 0;
         stats.certificates_earned = result[0]?.certificates || 0;
+        stats.total_enrollments = stats.courses_in_progress + stats.courses_completed;
+        stats.completion_rate = stats.total_enrollments > 0
+            ? Number(((stats.courses_completed / stats.total_enrollments) * 100).toFixed(2))
+            : 0;
         
         const [courseCount] = await pool.query('SELECT COUNT(*) as count FROM courses WHERE status = "published"');
         stats.courses_total = courseCount[0]?.count || 0;
@@ -1350,63 +1445,142 @@ async function getDashboardStats(req, res, currentUser) {
 }
 
 async function listCertificates(req, res, currentUser) {
-    const employeeId = currentUser.employee_id;
+    const { employee_id, enrollment_id, limit = 100 } = req.body || {};
+    const values = [];
+    const conditions = [];
+    const canAdminReadAll = isAdmin(currentUser);
+    const canReissue = isSuperAdmin(currentUser);
+
+    if (canAdminReadAll) {
+        if (employee_id) {
+            conditions.push('cert.employee_id = ?');
+            values.push(employee_id);
+        }
+        if (enrollment_id) {
+            conditions.push('cert.enrollment_id = ?');
+            values.push(enrollment_id);
+        }
+    } else {
+        conditions.push('cert.employee_id = ?');
+        values.push(currentUser.employee_id);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     
     const [certificates] = await pool.query(
-        `SELECT cert.*, c.title, c.category
+        `SELECT cert.*, c.title, c.category, emp.name as employee_name, e.status as enrollment_status
          FROM course_certificates cert
          JOIN courses c ON cert.course_id = c.id
-         WHERE cert.employee_id = ?
-         ORDER BY cert.issued_at DESC`,
-        [employeeId]
+         JOIN employees emp ON cert.employee_id = emp.employee_id
+         LEFT JOIN course_enrollments e ON cert.enrollment_id = e.id
+         ${whereClause}
+         ORDER BY cert.issued_at DESC
+         LIMIT ?`,
+        [...values, Number(limit) || 100]
     );
     
-    res.json({ success: true, certificates });
+    res.json({
+        success: true,
+        certificates,
+        meta: {
+            scope: canAdminReadAll ? 'admin' : 'self',
+            can_reissue: canReissue,
+        },
+    });
 }
 
 async function generateCertificate(req, res, currentUser) {
-    const { enrollment_id } = req.body;
+    const { enrollment_id, reissue = false } = req.body || {};
     
     if (!enrollment_id) {
         return res.status(400).json({ error: 'enrollment_id is required' });
     }
-    
+
+    const canReissue = isSuperAdmin(currentUser);
+
     const [enrollments] = await pool.query(
-        'SELECT * FROM course_enrollments WHERE id = ? AND employee_id = ? AND status = "completed"',
-        [enrollment_id, currentUser.employee_id]
+        `SELECT e.*, c.title as course_title, emp.name as employee_name
+         FROM course_enrollments e
+         JOIN courses c ON e.course_id = c.id
+         JOIN employees emp ON e.employee_id = emp.employee_id
+         WHERE e.id = ?`,
+        [enrollment_id]
     );
     
     if (enrollments.length === 0) {
-        return res.status(404).json({ error: 'Completed enrollment not found' });
+        return res.status(404).json({ error: 'Enrollment not found' });
     }
     
     const enrollment = enrollments[0];
+
+    if (enrollment.status !== 'completed') {
+        return res.status(400).json({ error: 'Certificate can only be issued for completed enrollment' });
+    }
+
+    if (!isAdmin(currentUser) && enrollment.employee_id !== currentUser.employee_id) {
+        return res.status(403).json({ error: 'Not authorized' });
+    }
     
-    if (enrollment.certificate_issued) {
+    if (enrollment.certificate_issued && !reissue) {
         const [existing] = await pool.query(
             'SELECT * FROM course_certificates WHERE enrollment_id = ?',
             [enrollment_id]
         );
-        return res.json({ success: true, certificate: existing[0] });
+        return res.json({
+            success: true,
+            certificate: existing[0],
+            already_issued: true,
+            reissued: false,
+        });
+    }
+
+    if (reissue && !canReissue) {
+        return res.status(403).json({ error: 'Superadmin access required for certificate re-issue' });
     }
     
-    const certNumber = `CERT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    const certId = generateId();
-    
-    await pool.query(
-        `INSERT INTO course_certificates (id, enrollment_id, employee_id, course_id, certificate_number)
-         VALUES (?, ?, ?, ?, ?)`,
-        [certId, enrollment_id, currentUser.employee_id, enrollment.course_id, certNumber]
+    const certNumber = `CERT-${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
+    const [existingCert] = await pool.query(
+        'SELECT * FROM course_certificates WHERE enrollment_id = ? LIMIT 1',
+        [enrollment_id]
     );
-    
+
+    let certificateId = existingCert[0]?.id;
+    if (existingCert.length > 0) {
+        await pool.query(
+            `UPDATE course_certificates
+             SET certificate_number = ?, issued_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [certNumber, existingCert[0].id]
+        );
+    } else {
+        certificateId = generateId();
+        await pool.query(
+            `INSERT INTO course_certificates (id, enrollment_id, employee_id, course_id, certificate_number)
+             VALUES (?, ?, ?, ?, ?)`,
+            [certificateId, enrollment_id, enrollment.employee_id, enrollment.course_id, certNumber]
+        );
+    }
+
     await pool.query(
         'UPDATE course_enrollments SET certificate_issued = 1 WHERE id = ?',
         [enrollment_id]
     );
+
+    const [certificates] = await pool.query(
+        `SELECT cert.*, c.title, c.category, emp.name as employee_name
+         FROM course_certificates cert
+         JOIN courses c ON cert.course_id = c.id
+         JOIN employees emp ON cert.employee_id = emp.employee_id
+         WHERE cert.id = ?`,
+        [certificateId]
+    );
     
-    const [certificates] = await pool.query('SELECT * FROM course_certificates WHERE id = ?', [certId]);
-    
-    res.json({ success: true, certificate: certificates[0] });
+    res.json({
+        success: true,
+        certificate: certificates[0],
+        already_issued: existingCert.length > 0,
+        reissued: Boolean(reissue),
+    });
 }
 
 async function listReviews(req, res, currentUser) {
@@ -1523,6 +1697,83 @@ async function deleteReview(req, res, currentUser) {
 }
 
 async function getRecommendations(req, res, currentUser) {
+    const adminAccess = isAdmin(currentUser);
+    const { department = '', period = '' } = req.body || {};
+    if (adminAccess) {
+        const scoped = buildEnrollmentScopeFilters({ department, period }, {
+            enrollmentAlias: 'e',
+            employeeAlias: 'emp',
+            createdAtColumn: 'created_at',
+        });
+
+        const [coursePerformance] = await pool.query(
+            `SELECT
+                c.id,
+                c.title,
+                c.category,
+                COALESCE(enroll.total_enrollments, 0) as total_enrollments,
+                COALESCE(enroll.in_progress, 0) as in_progress,
+                COALESCE(enroll.completed, 0) as completed,
+                CASE
+                    WHEN COALESCE(enroll.total_enrollments, 0) = 0 THEN 0
+                    ELSE ROUND((COALESCE(enroll.completed, 0) / enroll.total_enrollments) * 100, 2)
+                END as completion_rate,
+                score.avg_score as avg_score,
+                time.avg_time_minutes as avg_time_minutes
+             FROM courses c
+             LEFT JOIN (
+                 SELECT
+                    e.course_id,
+                    COUNT(*) as total_enrollments,
+                    COUNT(CASE WHEN e.status = 'in_progress' THEN 1 END) as in_progress,
+                    COUNT(CASE WHEN e.status = 'completed' THEN 1 END) as completed
+                 FROM course_enrollments e
+                 JOIN employees emp ON e.employee_id = emp.employee_id
+                 ${scoped.whereClause}
+                 GROUP BY e.course_id
+             ) enroll ON enroll.course_id = c.id
+             LEFT JOIN (
+                 SELECT
+                    e.course_id,
+                    ROUND(AVG(qa.score), 2) as avg_score
+                 FROM quiz_attempts qa
+                 JOIN course_enrollments e ON qa.enrollment_id = e.id
+                 JOIN employees emp ON e.employee_id = emp.employee_id
+                 ${scoped.whereClause}
+                 GROUP BY e.course_id
+             ) score ON score.course_id = c.id
+             LEFT JOIN (
+                 SELECT
+                    e.course_id,
+                    ROUND(AVG(lp.time_spent_seconds) / 60, 2) as avg_time_minutes
+                 FROM lesson_progress lp
+                 JOIN course_enrollments e ON lp.enrollment_id = e.id
+                 JOIN employees emp ON e.employee_id = emp.employee_id
+                 ${scoped.whereClause}
+                 GROUP BY e.course_id
+             ) time ON time.course_id = c.id
+             WHERE c.status = 'published'
+             ORDER BY total_enrollments DESC, completion_rate DESC, c.title ASC
+             LIMIT 50`,
+            [...scoped.values, ...scoped.values, ...scoped.values]
+        );
+
+        const topCourses = coursePerformance.slice(0, 10);
+        const attentionCourses = coursePerformance
+            .filter(row => Number(row.total_enrollments || 0) > 0)
+            .sort((a, b) => Number(a.completion_rate || 0) - Number(b.completion_rate || 0))
+            .slice(0, 10);
+
+        return res.json({
+            success: true,
+            recommendations: topCourses,
+            course_performance: coursePerformance,
+            attention_courses: attentionCourses,
+            type: 'admin_course_performance',
+            filters: { department: department || null, period: period || null },
+        });
+    }
+
     const employeeId = currentUser.employee_id;
     
     const [competencyGaps] = await pool.query(
@@ -1566,47 +1817,157 @@ async function getRecommendations(req, res, currentUser) {
 }
 
 async function createAssignment(req, res, currentUser) {
-    if (!isAdmin(currentUser)) {
-        return res.status(403).json({ error: 'Admin access required' });
+    const role = String(currentUser?.role || '').toLowerCase();
+    if (!['superadmin', 'hr'].includes(role)) {
+        return res.status(403).json({ error: 'Superadmin or HR access required' });
     }
     
-    const { course_id, employee_ids, due_date, priority, notes } = req.body;
-    
-    if (!course_id || !Array.isArray(employee_ids) || employee_ids.length === 0) {
-        return res.status(400).json({ error: 'course_id and employee_ids array are required' });
+    const {
+        course_id,
+        course_ids = [],
+        employee_ids = [],
+        target_type,
+        target_value,
+        due_date,
+        priority,
+        notes,
+    } = req.body || {};
+
+    const selectedCourses = [
+        ...(course_id ? [course_id] : []),
+        ...(Array.isArray(course_ids) ? course_ids : []),
+    ].filter(Boolean);
+
+    if (selectedCourses.length === 0) {
+        return res.status(400).json({ error: 'course_id or course_ids is required' });
     }
-    
+
+    const resolvedEmployees = new Set(
+        Array.isArray(employee_ids)
+            ? employee_ids.map(value => String(value || '').trim()).filter(Boolean)
+            : []
+    );
+
+    if (resolvedEmployees.size === 0 && target_type && target_value) {
+        if (target_type === 'department') {
+            const [rows] = await pool.query(
+                'SELECT employee_id FROM employees WHERE department = ?',
+                [target_value]
+            );
+            rows.forEach(row => resolvedEmployees.add(String(row.employee_id)));
+        } else if (target_type === 'manager') {
+            const [rows] = await pool.query(
+                'SELECT employee_id FROM employees WHERE manager_id = ? OR employee_id = ?',
+                [target_value, target_value]
+            );
+            rows.forEach(row => resolvedEmployees.add(String(row.employee_id)));
+        } else if (target_type === 'role') {
+            const [rows] = await pool.query(
+                'SELECT employee_id FROM employees WHERE role = ?',
+                [target_value]
+            );
+            rows.forEach(row => resolvedEmployees.add(String(row.employee_id)));
+        }
+    }
+
+    if (resolvedEmployees.size === 0) {
+        return res.status(400).json({ error: 'No target employees resolved for assignment' });
+    }
+
     const assignments = [];
-    
-    for (const employeeId of employee_ids) {
-        const [existing] = await pool.query(
-            'SELECT * FROM course_enrollments WHERE course_id = ? AND employee_id = ?',
-            [course_id, employeeId]
+    const results = [];
+
+    for (const selectedCourseId of selectedCourses) {
+        const [courseRows] = await pool.query(
+            'SELECT id, status FROM courses WHERE id = ?',
+            [selectedCourseId]
         );
-        
-        if (existing.length > 0) {
+        if (courseRows.length === 0 || courseRows[0].status !== 'published') {
+            for (const employeeId of resolvedEmployees) {
+                results.push({
+                    course_id: selectedCourseId,
+                    employee_id: employeeId,
+                    status: 'failed',
+                    error: 'Course not found or not published',
+                });
+            }
             continue;
         }
-        
-        const id = generateId();
-        
-        await pool.query(
-            `INSERT INTO course_assignments (id, course_id, employee_id, assigned_by, due_date, priority, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [id, course_id, employeeId, currentUser.employee_id, due_date || null, priority || 'medium', notes || null]
-        );
-        
-        const enrollmentId = generateId();
-        await pool.query(
-            `INSERT INTO course_enrollments (id, course_id, employee_id, enrolled_by, enrollment_type, due_date, status)
-             VALUES (?, ?, ?, ?, 'required', ?, 'enrolled')`,
-            [enrollmentId, course_id, employeeId, currentUser.employee_id, due_date || null]
-        );
-        
-        assignments.push({ assignment_id: id, enrollment_id: enrollmentId, employee_id: employeeId });
+
+        for (const employeeId of resolvedEmployees) {
+            try {
+                const [existing] = await pool.query(
+                    'SELECT id FROM course_enrollments WHERE course_id = ? AND employee_id = ? LIMIT 1',
+                    [selectedCourseId, employeeId]
+                );
+
+                if (existing.length > 0) {
+                    results.push({
+                        course_id: selectedCourseId,
+                        employee_id: employeeId,
+                        status: 'already_enrolled',
+                        enrollment_id: existing[0].id,
+                    });
+                    continue;
+                }
+
+                const assignmentId = generateId();
+                await pool.query(
+                    `INSERT INTO course_assignments (id, course_id, employee_id, assigned_by, due_date, priority, notes)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [assignmentId, selectedCourseId, employeeId, currentUser.employee_id, due_date || null, priority || 'medium', notes || null]
+                );
+
+                const enrollmentId = generateId();
+                await pool.query(
+                    `INSERT INTO course_enrollments (id, course_id, employee_id, enrolled_by, enrollment_type, due_date, status)
+                     VALUES (?, ?, ?, ?, 'required', ?, 'enrolled')`,
+                    [enrollmentId, selectedCourseId, employeeId, currentUser.employee_id, due_date || null]
+                );
+
+                assignments.push({
+                    assignment_id: assignmentId,
+                    enrollment_id: enrollmentId,
+                    employee_id: employeeId,
+                    course_id: selectedCourseId,
+                });
+                results.push({
+                    course_id: selectedCourseId,
+                    employee_id: employeeId,
+                    status: 'created',
+                    assignment_id: assignmentId,
+                    enrollment_id: enrollmentId,
+                });
+            } catch (error) {
+                results.push({
+                    course_id: selectedCourseId,
+                    employee_id: employeeId,
+                    status: 'failed',
+                    error: error.message || 'Failed to create assignment',
+                });
+            }
+        }
     }
-    
-    res.json({ success: true, assignments });
+
+    const summary = {
+        total_targets: selectedCourses.length * resolvedEmployees.size,
+        total_created: results.filter(row => row.status === 'created').length,
+        total_skipped: results.filter(row => row.status === 'already_enrolled').length,
+        total_failed: results.filter(row => row.status === 'failed').length,
+    };
+
+    res.json({
+        success: true,
+        assignments,
+        results,
+        summary,
+        target: {
+            target_type: target_type || 'employee_ids',
+            target_value: target_value || null,
+            employee_count: resolvedEmployees.size,
+            course_count: selectedCourses.length,
+        },
+    });
 }
 
 async function listAssignments(req, res, currentUser) {

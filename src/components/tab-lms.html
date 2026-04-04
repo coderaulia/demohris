@@ -380,9 +380,34 @@
                         <i class="bi bi-bar-chart text-primary me-2"></i>Learning Analytics
                     </h4>
                     <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-secondary" id="lms-btn-export-report">
-                            <i class="bi bi-download me-1"></i>Export
+                        <button class="btn btn-outline-secondary" id="lms-btn-export-report-csv">
+                            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Export CSV
                         </button>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body py-2">
+                        <div class="row align-items-end g-2">
+                            <div class="col-md-4">
+                                <label class="form-label form-label-sm mb-1">Department</label>
+                                <select class="form-select form-select-sm" id="lms-report-filter-department">
+                                    <option value="">All Departments</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label form-label-sm mb-1">Period</label>
+                                <input type="month" class="form-control form-control-sm" id="lms-report-filter-period">
+                            </div>
+                            <div class="col-md-5 d-flex gap-2">
+                                <button class="btn btn-primary btn-sm" id="lms-btn-apply-report-filters">
+                                    <i class="bi bi-funnel me-1"></i>Apply
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" id="lms-btn-clear-report-filters">
+                                    <i class="bi bi-x-circle me-1"></i>Clear
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -422,32 +447,111 @@
                     </div>
                 </div>
 
-                <!-- Department Chart Placeholder -->
+                <!-- Course Performance -->
                 <div class="card shadow-sm mb-4">
                     <div class="card-header">
-                        <strong>Completions by Department</strong>
+                        <strong>Course Performance</strong>
                     </div>
-                    <div class="card-body">
-                        <canvas id="lms-dept-chart" height="200"></canvas>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Course</th>
+                                        <th>Category</th>
+                                        <th>Enrollments</th>
+                                        <th>In Progress</th>
+                                        <th>Completed</th>
+                                        <th>Completion %</th>
+                                        <th>Avg Quiz Score</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lms-report-course-performance-body">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted py-4">No performance data</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header"><strong>Completion by Department</strong></div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Department</th>
+                                            <th>Enrollments</th>
+                                            <th>Completed</th>
+                                            <th>Rate</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lms-report-dept-completion-body">
+                                        <tr><td colspan="4" class="text-center text-muted py-3">No data</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header"><strong>Quiz Score Distribution</strong></div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Range</th>
+                                            <th>Attempts</th>
+                                            <th>%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lms-report-score-distribution-body">
+                                        <tr><td colspan="3" class="text-center text-muted py-3">No data</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header"><strong>Avg Time on Course</strong></div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Course</th>
+                                            <th>Minutes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lms-report-time-course-body">
+                                        <tr><td colspan="2" class="text-center text-muted py-3">No data</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Top Courses -->
-                <div class="card shadow-sm">
+                <div class="card shadow-sm mb-4">
                     <div class="card-header">
                         <strong>Top Performing Courses</strong>
                     </div>
                     <div class="card-body p-0">
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
-                                <tr>
-                                    <th>Course</th>
-                                    <th>Enrollments</th>
-                                    <th>Completion Rate</th>
-                                    <th>Avg Score</th>
-                                    <th>Avg Rating</th>
-                                </tr>
-                            </thead>
+                                    <tr>
+                                        <th>Course</th>
+                                        <th>Enrollments</th>
+                                        <th>Completion Rate</th>
+                                        <th>Avg Score</th>
+                                        <th>Avg Time</th>
+                                    </tr>
+                                </thead>
                             <tbody id="lms-top-courses-body">
                                 <tr>
                                     <td colspan="5" class="text-center text-muted py-4">

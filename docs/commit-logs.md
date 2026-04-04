@@ -28,6 +28,42 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - LMS Sprint 4 Admin Feature Completion (Legacy Frontend)
+- Commit/PR: pending
+- Type: feat(lms) | test | docs
+- Scope: complete legacy LMS Sprint 4 admin dashboard, bulk assignment, analytics/reporting, and certificate hardening
+- Completed:
+  - Hardened backend admin analytics responses:
+    - `lms/dashboard/stats` now supports `department` + `period` filters and returns stable enrollment/completion/score/time metrics.
+    - `lms/dashboard/recommendations` now returns admin course-performance datasets for reporting tables.
+  - Implemented bulk assignment tooling:
+    - `lms/assignments/create` now supports multi-course + target resolution (`department`, `manager`, explicit `employee_ids`).
+    - returns per-employee result rows and assignment summary (`created/skipped/failed`).
+    - backend guard is restricted to `superadmin|hr`.
+  - Implemented analytics/reporting in legacy LMS admin reports:
+    - completion by department
+    - quiz score distribution
+    - average time-on-course
+    - CSV export from report snapshot
+  - Hardened certificate flow:
+    - admin-aware `lms/certificates/list` with scope metadata
+    - `lms/certificates/generate` now supports safe re-issue (`reissue=true`, superadmin only)
+    - legacy frontend PDF download implemented via `jsPDF` + `jspdf-autotable`
+  - Added Sprint 4 verification assets:
+    - fixture: `tests/contracts/fixtures/lms.sprint4-admin.group.json`
+    - contract test: `tests/contracts/lms-sprint4-admin.test.mjs`
+    - smoke script: `scripts/qa/lms-sprint4-admin-smoke.mjs`
+- Gap Found:
+  - Full runtime E2E scenarios for role-scoped LMS admin actions are still pending.
+  - Legacy LMS still carries technical debt in some pre-existing flows (non-Sprint4 logic).
+- Next Follow-up:
+  - [ ] Add Playwright E2E for bulk assignment and certificate re-issue by role.
+  - [ ] Validate Sprint 4 flows on staging with realistic HR datasets.
+  - [ ] Continue mutation cutover strategy separately without altering verified read endpoints.
+- Notes:
+  - React shell and Supabase cutover paths were intentionally untouched in this Sprint 4 legacy slice.
+  - Verified read endpoints (`lms/courses/list|get`, `lms/enrollments/*`) were preserved.
+
 ## 2026-04-04 - Workforce Directory Scope Hardening + Employee Insights Upgrade
 - Commit/PR: pending
 - Type: feat(employees) | docs
