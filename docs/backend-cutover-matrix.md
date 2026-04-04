@@ -60,6 +60,7 @@ Files verified:
 | `modules/*` read (`list/get/by-category/active`) | verified | Supabase (when `MODULES_READ_SOURCE=auto|supabase` + env configured), else MySQL | contract + integration + smoke verified (`qa:modules:cutover`) | legacy-only / not in live shell nav | verified with seeded superadmin account |
 | `modules/*` write (`update/toggle/activity`) | legacy-only | MySQL | contract only | legacy-only | unchanged in this slice |
 | `db/query` | legacy-only | MySQL | contract only | legacy-only | no cutover in this slice |
+| Employees shell read workflow (`/employees`, `/employees/:employeeId`) | in progress (read-first) | mixed: Supabase direct client reads in supabase mode, legacy `db/query` fallback in auto/legacy modes | frontend typecheck/build + role-scope behavior validated in shell | feature-flagged on for authenticated shell | no in-shell employee mutations; superadmin CRUD links to legacy app |
 | `lms/courses/*` | in progress (read list/get verified) | mixed: Supabase for `list|get` via `LMS_READ_SOURCE`, MySQL for create/update/delete/publish | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | read-only course catalog parity now verified |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |

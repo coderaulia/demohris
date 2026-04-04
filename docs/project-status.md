@@ -32,7 +32,8 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | Supabase Schema + Seed Baseline | Completed (dev/staging baseline) | Supabase is the active development/staging data foundation | Backend runtime still has legacy MySQL query coupling for domain handlers | High | Team | Start backend domain query cutover from MySQL to Supabase by module |
 | Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Backend target in `BACKEND_BASE_URL` fails health check due MySQL connectivity (`ECONNREFUSED 127.0.0.1:3306`) | High | Team | Run backend with reachable DB (or point to staging backend) and rerun `qa:auth:staging` |
 | Backend Endpoint Cutover (Phase C) | In progress | Migrate low-risk endpoint groups to Supabase-backed reads first | Verified Supabase read slices now include modules read, LMS read (`enrollments list/get/my-courses`, `progress/get`, `courses list/get`) and TNA read/report (`summary`, `gaps-report`, `lms-report`); first LMS mutation slice (`lms/enrollments/start`) is cut over and parity-verified, while broader mutation-heavy flows remain legacy-backed | High | Team | Keep LMS/TNA routes flagged off; execute `qa:tna:workflow` in staging, then continue one-mutation-at-a-time cutover |
-| React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Dashboard workflow parity has been rebuilt in React (filter-first, KPI/Assessment tabs, department cards, drill-down-ready route); LMS/TNA module screens remain placeholder-gated pending mutation parity | High | Team | Validate dashboard behavior in staging/live-safe mode, then expand LMS/TNA routes incrementally |
+| React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Dashboard and Employees read-first workflows now run in React shell (adapter + contracts); LMS/TNA module screens remain placeholder-gated pending mutation parity | High | Team | Validate Employees role-scope behavior in staging/live-safe mode, then expand LMS/TNA routes incrementally |
+| Employees Module (React Shell) | In progress (read-first) | Legacy-parity employee management workflow in modern shell | List/detail parity is complete for readable fields; mutation-heavy employee CRUD remains legacy-only and linked via superadmin handoff | High | Team | Add backend employee summary endpoints (LMS/TNA per employee) before enabling richer in-shell management actions |
 | Production Deploy Cutover (Hostinger + Supabase) | In progress | Live frontend uses Supabase-backed auth/data path for shipped routes | LMS/TNA routes still feature-flagged off; read slices are smoke-verified, but mutation parity and route-level rollout checks are still pending | High | Team | Keep shell/login/dashboard scope live and expand route-by-route only after read + mutation parity passes |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
 
@@ -93,6 +94,11 @@ Production deployment note:
   - KPI Summary vs Assessment Summary tabs
   - department grouped overview cards
   - drill-down-ready route boundary (`/dashboard/drilldown/:mode/:department`)
+- React Employees module now preserves read-first management workflow patterns:
+  - searchable/filterable employee list (`search`, `department`, `role`, `manager`, `status`)
+  - employee detail route (`/employees/:employeeId`)
+  - superadmin CRUD handoff button to legacy Employees screen
+  - role-aware scope behavior preserved via adapter + backend/RLS visibility
 
 Cutover note:
 - First Supabase backend domain slice is complete for `modules/*` read endpoints (`list`, `get`, `by-category`, `active`) using `MODULES_READ_SOURCE` switch.

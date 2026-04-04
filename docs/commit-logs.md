@@ -28,6 +28,35 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - React Employees Workflow Parity (Read-First)
+- Commit/PR: pending
+- Type: feat(employees) | docs
+- Scope: implement employee list/detail workflows in React shell with adapter/contracts and role-aware visibility
+- Completed:
+  - Added employee contracts at `packages/contracts/src/employees.ts` and exported in contracts index.
+  - Added source-aware employees adapter:
+    - `apps/web-react/src/adapters/employeesAdapter.ts`
+    - Supabase direct read path in Supabase mode
+    - legacy `db/query` read fallback in auto/legacy modes
+  - Added new shell routes/pages:
+    - `/employees` -> searchable/filterable employee list
+    - `/employees/:employeeId` -> read-only detail page
+  - Added superadmin CRUD handoff button to legacy Employees screen (no mutation path added in React shell).
+  - Updated shell navigation and env contract (`VITE_ENABLE_EMPLOYEES_ROUTE`).
+  - Validation:
+    - `npm run typecheck --prefix apps/web-react` -> pass
+    - `npm run build --prefix apps/web-react` -> pass
+- Gap Found:
+  - In-shell employee mutations remain intentionally out-of-scope until backend mutation parity is verified.
+  - Employee-level LMS/TNA summary metrics are partially deferred when source endpoints are not yet fully cut over.
+- Next Follow-up:
+  - [ ] Add dedicated employee summary endpoints for LMS/TNA parity (`employee-scoped` reads).
+  - [ ] Keep CRUD in legacy path until mutation parity tests exist for employee flows.
+  - [ ] Add integration smoke for role-scope matrix (`superadmin`, `hr`, `manager`, `employee`) on `/employees` routes.
+- Notes:
+  - Adapter/contracts rule is preserved (no direct component fetches).
+  - Restricted role scope is still enforced by backend/RLS and additionally guarded in shell list rendering.
+
 ## 2026-04-04 - React Dashboard Workflow Parity Rebuild (Tailwind + shadcn)
 - Commit/PR: pending
 - Type: feat(dashboard) | refactor(frontend) | docs

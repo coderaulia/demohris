@@ -318,6 +318,28 @@ Data-source behavior:
 - `LMS_MUTATION_SOURCE=auto` -> Supabase when configured, else legacy MySQL
 - `LMS_MUTATION_SOURCE=legacy` -> force legacy MySQL mutation path
 
+## 2026-04-04 React Employees Module - Read Path Mapping
+
+Frontend routes:
+- `/employees`
+- `/employees/:employeeId`
+
+API/data path used by Employees shell:
+- Supabase mode (`VITE_API_TARGET=supabase`):
+  - adapter reads from Supabase `employees` directly (client + RLS)
+  - optional per-employee LMS/TNA summary counts use direct Supabase reads when available
+- Legacy mode (`VITE_API_TARGET=legacy`):
+  - adapter reads employee records through `db/query` (`table=employees`)
+  - detail summary falls back to read-available legacy data only
+- Auto mode (`VITE_API_TARGET=auto`):
+  - adapter prefers Supabase reads and falls back to legacy `db/query` if Supabase read fails
+
+Contract and behavior notes:
+- React layer uses `packages/contracts/src/employees.ts` for list/detail parsing
+- no mutation-heavy employee actions are enabled in React shell
+- superadmin-only CRUD action is intentionally linked to legacy Employees screen
+- LMS/TNA employee-level summary cards are marked deferred when endpoint/source coverage is not available
+
 Legacy-visible contract preserved:
 - request: `{ course_id }`
 - success response: `{ success: true, enrollment }`

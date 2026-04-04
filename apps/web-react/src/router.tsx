@@ -5,6 +5,8 @@ import { env } from '@/lib/env';
 import { RouteGuard } from '@/components/RouteGuard';
 import { DashboardDrilldownPage } from '@/pages/DashboardDrilldownPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { EmployeeDetailPage } from '@/pages/EmployeeDetailPage';
+import { EmployeesPage } from '@/pages/EmployeesPage';
 import { LmsPlaceholderPage } from '@/pages/LmsPlaceholderPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { TnaPlaceholderPage } from '@/pages/TnaPlaceholderPage';
@@ -51,6 +53,18 @@ export const router = createBrowserRouter([
                 path: 'dashboard/drilldown/:mode/:department',
                 element: <DashboardDrilldownPage />,
             },
+            ...(env.enableEmployeesRoute
+                ? [
+                      {
+                          path: 'employees',
+                          element: <EmployeesPage />,
+                      },
+                      {
+                          path: 'employees/:employeeId',
+                          element: <EmployeeDetailPage />,
+                      },
+                  ]
+                : []),
             ...moduleRoutes,
         ],
     },

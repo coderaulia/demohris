@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, LibraryBig, ListTodo, LogOut } from 'lucide-react'
+import { LayoutDashboard, LibraryBig, ListTodo, LogOut, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,9 @@ export function AppLayout() {
 
           <nav className="flex flex-col gap-1">
             <SidebarLink to="/dashboard" label="Dashboard" icon={<LayoutDashboard className="size-4" />} />
+            {env.enableEmployeesRoute ? (
+              <SidebarLink to="/employees" label="Employees" icon={<Users className="size-4" />} />
+            ) : null}
             {env.enableLmsRoute ? (
               <SidebarLink to="/lms" label="LMS Module" icon={<LibraryBig className="size-4" />} />
             ) : null}

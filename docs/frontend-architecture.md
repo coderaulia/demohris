@@ -7,6 +7,7 @@ Last updated: 2026-04-04
 - Added shared contract layer at `packages/contracts` (Zod + inferred types).
 - Added adapter-based data boundary for auth/LMS/TNA/modules calls.
 - Rebuilt dashboard from shell placeholder into workflow-oriented HR management dashboard.
+- Added Employees module in React shell with list + detail read-first workflow parity.
 - Kept legacy frontend untouched for LMS/TNA mutation-heavy screens.
 
 ## Folder Layout
@@ -17,6 +18,7 @@ apps/web-react
     adapters/
       authAdapter.ts
       dashboardAdapter.ts
+      employeesAdapter.ts
       lmsAdapter.ts
       modulesAdapter.ts
       tnaAdapter.ts
@@ -40,6 +42,8 @@ apps/web-react
     pages/
       DashboardPage.tsx
       DashboardDrilldownPage.tsx
+      EmployeeDetailPage.tsx
+      EmployeesPage.tsx
       LoginPage.tsx
       LmsPlaceholderPage.tsx
       TnaPlaceholderPage.tsx
@@ -101,6 +105,8 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
 - Routes:
   - `/dashboard`
   - `/dashboard/drilldown/:mode/:department` (safe placeholder boundary for future detail views)
+  - `/employees`
+  - `/employees/:employeeId`
   - `/login`
 - Feature-flagged routes:
   - `/lms/*` via `VITE_ENABLE_LMS_ROUTE`
@@ -108,6 +114,7 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
 - `RouteGuard` gates authenticated routes.
 - `AppErrorBoundary` isolates shell-level runtime failures.
 - `AppLayout` can optionally show legacy app link via `VITE_SHOW_LEGACY_APP_LINK`.
+- Employees route is controlled by `VITE_ENABLE_EMPLOYEES_ROUTE` (default: enabled).
 
 ## Data Fetching Rules
 - TanStack Query is used for async state.
@@ -167,13 +174,15 @@ Deferred dashboard metrics (explicit boundary, no fake data):
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_ANON_KEY`
   - `VITE_LEGACY_APP_URL`
-  - `VITE_ENABLE_LMS_ROUTE`
-  - `VITE_ENABLE_TNA_ROUTE`
-  - `VITE_SHOW_LEGACY_APP_LINK`
+- `VITE_ENABLE_LMS_ROUTE`
+- `VITE_ENABLE_TNA_ROUTE`
+- `VITE_ENABLE_EMPLOYEES_ROUTE`
+- `VITE_SHOW_LEGACY_APP_LINK`
 - SPA fallback is provided via `apps/web-react/public/.htaccess`.
 
 ## Migration Constraints Preserved
 - LMS/TNA production UI flows are not rewritten in this slice.
+- Employees module is read-first only; mutation-heavy employee editing remains on legacy path.
 - Legacy frontend remains fully operational.
 - Contract fixtures remain the compatibility guardrail.
 - Adapter switching keeps migration reversible.
