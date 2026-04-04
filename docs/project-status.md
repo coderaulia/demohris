@@ -3,7 +3,7 @@
 Purpose: track current implementation state, identify gaps, and prioritize next work.
 
 ## Snapshot
-- Last updated: 2026-04-03
+- Last updated: 2026-04-04
 - Project: demo-kpi
 - Primary active module: LMS
 - Reference docs:
@@ -15,6 +15,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
   - `docs/production-deploy-plan.md`
   - `docs/hostinger-autodeploy-runbook.md`
   - `docs/supabase-production-runbook.md`
+  - `docs/backend-cutover-matrix.md`
 
 ## Overall Status
 
@@ -29,6 +30,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Provisioning complete; parity evidence still pending | High | Team | Keep legacy fallback active and finalize auth parity evidence |
 | Supabase Schema + Seed Baseline | Completed (dev/staging baseline) | Supabase is the active development/staging data foundation | Backend runtime still has legacy MySQL query coupling for domain handlers | High | Team | Start backend domain query cutover from MySQL to Supabase by module |
 | Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Backend target in `BACKEND_BASE_URL` fails health check due MySQL connectivity (`ECONNREFUSED 127.0.0.1:3306`) | High | Team | Run backend with reachable DB (or point to staging backend) and rerun `qa:auth:staging` |
+| Backend Endpoint Cutover (Phase C) | In progress | Migrate low-risk endpoint groups to Supabase-backed reads first | First slice completed for modules read endpoints; LMS/TNA domains still legacy | High | Team | Stabilize modules read cutover and proceed to LMS read-only slice |
 | React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Shell exists, but LMS/TNA screens are still legacy placeholders | High | Team | Migrate next safe view through adapters after auth parity unblocks |
 | Production Deploy Cutover (Hostinger + Supabase) | In progress | Live frontend uses Supabase-backed auth/data path for shipped routes | LMS/TNA routes still legacy-backed and remain feature-flagged off | High | Team | Deploy shell/login/dashboard scope first, then expand route-by-route |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
@@ -69,7 +71,7 @@ Goal: migrate to React + TypeScript + Vite frontend and Supabase-first backend w
 | Phase A - Architecture hardening / inventory | In progress | Freeze API contracts, role matrix, and migration inventory | Contract fixtures + baseline tests approved |
 | Phase B - Database and auth foundation | In progress | Stand up Supabase, migrate schema, implement JWT auth bridge | Dual-auth bridge validated in staging |
 | Phase B.1 - Supabase schema/seed baseline | Completed | Replace dummy MySQL data as dev/staging data source with Supabase schema + seed | Migrations and seeds applied; auth seed users provisioned |
-| Phase C - Backend domain migration | Planned | Migrate auth and domain APIs (LMS first, then TNA) | LMS/TNA parity tests pass against new backend |
+| Phase C - Backend domain migration | In progress | Migrate auth and domain APIs (LMS first, then TNA) | Per-slice cutover matrix maintained; each slice passes contract+integration smoke |
 | Phase D - Frontend shell migration | In progress | React+TS app shell + adapters + dual-auth provider | Shell build passes and dashboard route is stable with auth guard |
 | Phase E - Module-by-module cutover | Planned | Incrementally switch modules to new stack | UAT signoff per module with rollback plan |
 | Phase F - Legacy cleanup | Planned | Remove express-session and legacy generic paths | Legacy endpoints retired with no critical regressions |
@@ -85,3 +87,7 @@ Data foundation note:
 Production deployment note:
 - Current release scope for public deployment is intentionally limited to React shell + Supabase-backed auth/dashboard.
 - LMS/TNA React routes are feature-flagged and not marked live until their backend paths are Supabase-ready.
+
+Cutover note:
+- First Supabase backend domain slice is complete for `modules/*` read endpoints (`list`, `get`, `by-category`, `active`) using `MODULES_READ_SOURCE` switch.
+- `modules/*` write actions and all LMS/TNA routes remain legacy until further tested slices.

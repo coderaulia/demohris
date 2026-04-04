@@ -11,6 +11,7 @@ Launch a safe public slice of `demo-kpi` where:
 ## Execution Status
 - Code/config/docs preparation: complete in repository.
 - Production apply/deploy action: pending (requires Hostinger dashboard access and production Supabase credentials).
+- Backend cutover status: first read-only API slice (`modules/*` read actions) is implemented with Supabase source switch; LMS/TNA routes remain disabled.
 
 ## Step 0 - Reality Check (Code + Docs Verified)
 

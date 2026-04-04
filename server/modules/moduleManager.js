@@ -1,17 +1,90 @@
 import { pool } from '../app.js';
+import { fetchModuleSettingsFromSupabase, resolveModulesReadSource } from '../compat/supabaseModulesRead.js';
+
+function parseJsonObject(value, fallback = {}) {
+    if (value === null || value === undefined || value === '') return fallback;
+    if (typeof value === 'object') return value;
+    try {
+        const parsed = JSON.parse(String(value));
+        return parsed && typeof parsed === 'object' ? parsed : fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+function parseJsonArray(value, fallback = []) {
+    const parsed = parseJsonObject(value, fallback);
+    return Array.isArray(parsed) ? parsed : fallback;
+}
+
+function normalizeModule(row = {}) {
+    return {
+        ...row,
+        is_enabled: Boolean(row.is_enabled),
+        settings: parseJsonObject(row.settings, {}),
+        dependencies: parseJsonArray(row.dependencies, []),
+    };
+}
+
+function getInput(req, key, fallback = '') {
+    const bodyValue = req.body?.[key];
+    if (bodyValue !== undefined && bodyValue !== null && bodyValue !== '') return bodyValue;
+    const queryValue = req.query?.[key];
+    if (queryValue !== undefined && queryValue !== null && queryValue !== '') return queryValue;
+    const paramValue = req.params?.[key];
+    if (paramValue !== undefined && paramValue !== null && paramValue !== '') return paramValue;
+    return fallback;
+}
+
+async function readModulesRows({
+    moduleId = '',
+    category = '',
+    onlyActive = false,
+    orderBy = 'category.asc,module_name.asc',
+} = {}) {
+    const sourceState = resolveModulesReadSource();
+    if (sourceState.source === 'supabase') {
+        const supabaseRows = await fetchModuleSettingsFromSupabase({
+            moduleId,
+            category,
+            onlyActive,
+            orderBy,
+        });
+        return {
+            source: 'supabase',
+            rows: supabaseRows || [],
+        };
+    }
+
+    if (moduleId) {
+        const [rows] = await pool.query(
+            'SELECT * FROM module_settings WHERE module_id = ?',
+            [moduleId]
+        );
+        return { source: 'legacy', rows };
+    }
+
+    const values = [];
+    const conditions = [];
+    if (category) {
+        conditions.push('category = ?');
+        values.push(category);
+    }
+    if (onlyActive) {
+        conditions.push('is_enabled = 1');
+    }
+    const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+    const [rows] = await pool.query(
+        `SELECT * FROM module_settings${where} ORDER BY category, module_name`,
+        values
+    );
+    return { source: 'legacy', rows };
+}
 
 export async function getAllModules(req, res, next) {
     try {
-        const [rows] = await pool.query(
-            'SELECT module_id, module_name, description, category, status, is_enabled, settings, version, dependencies FROM module_settings ORDER BY category, module_name'
-        );
-        
-        const modules = rows.map(row => ({
-            ...row,
-            is_enabled: Boolean(row.is_enabled),
-            settings: typeof row.settings === 'string' ? JSON.parse(row.settings || '{}') : row.settings,
-            dependencies: typeof row.dependencies === 'string' ? JSON.parse(row.dependencies || '[]') : row.dependencies,
-        }));
+        const { rows } = await readModulesRows();
+        const modules = rows.map(normalizeModule);
 
         res.json({ success: true, modules });
     } catch (error) {
@@ -21,26 +94,21 @@ export async function getAllModules(req, res, next) {
 
 export async function getModule(req, res, next) {
     try {
-        const { moduleId } = req.params;
-        
-        const [rows] = await pool.query(
-            'SELECT * FROM module_settings WHERE module_id = ?',
-            [moduleId]
-        );
+        const moduleId = String(getInput(req, 'moduleId', getInput(req, 'module_id', ''))).trim();
+        if (!moduleId) {
+            return res.status(400).json({ success: false, error: 'moduleId is required' });
+        }
+
+        const { rows } = await readModulesRows({ moduleId });
 
         if (rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Module not found' });
         }
 
-        const module = rows[0];
+        const module = normalizeModule(rows[0]);
         res.json({
             success: true,
-            module: {
-                ...module,
-                is_enabled: Boolean(module.is_enabled),
-                settings: typeof module.settings === 'string' ? JSON.parse(module.settings || '{}') : module.settings,
-                dependencies: typeof module.dependencies === 'string' ? JSON.parse(module.dependencies || '[]') : module.dependencies,
-            }
+            module,
         });
     } catch (error) {
         next(error);
@@ -260,7 +328,7 @@ export async function getModuleActivityLog(req, res, next) {
 
 export async function getModulesByCategory(req, res, next) {
     try {
-        const { category } = req.params;
+        const category = String(getInput(req, 'category', '')).trim();
         
         const validCategories = ['core', 'performance', 'talent', 'operations', 'analytics'];
         if (!validCategories.includes(category)) {
@@ -271,19 +339,11 @@ export async function getModulesByCategory(req, res, next) {
             });
         }
 
-        const [rows] = await pool.query(
-            'SELECT * FROM module_settings WHERE category = ? ORDER BY module_name',
-            [category]
-        );
+        const { rows } = await readModulesRows({ category, orderBy: 'module_name.asc' });
 
         res.json({
             success: true,
-            modules: rows.map(row => ({
-                ...row,
-                is_enabled: Boolean(row.is_enabled),
-                settings: typeof row.settings === 'string' ? JSON.parse(row.settings || '{}') : row.settings,
-                dependencies: typeof row.dependencies === 'string' ? JSON.parse(row.dependencies || '[]') : row.dependencies,
-            }))
+            modules: rows.map(normalizeModule),
         });
     } catch (error) {
         next(error);
@@ -292,18 +352,11 @@ export async function getModulesByCategory(req, res, next) {
 
 export async function getActiveModules(req, res, next) {
     try {
-        const [rows] = await pool.query(
-            'SELECT * FROM module_settings WHERE is_enabled = 1 ORDER BY category, module_name'
-        );
+        const { rows } = await readModulesRows({ onlyActive: true });
 
         res.json({
             success: true,
-            modules: rows.map(row => ({
-                ...row,
-                is_enabled: Boolean(row.is_enabled),
-                settings: typeof row.settings === 'string' ? JSON.parse(row.settings || '{}') : row.settings,
-                dependencies: typeof row.dependencies === 'string' ? JSON.parse(row.dependencies || '[]') : row.dependencies,
-            }))
+            modules: rows.map(normalizeModule),
         });
     } catch (error) {
         next(error);

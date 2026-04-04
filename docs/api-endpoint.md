@@ -114,3 +114,26 @@ Purpose: keep API docs consistent with implementation and frontend usage.
 - [ ] Add automated API tests for `lms/enrollments/get` and `lms/progress/get`
 - [ ] Add regression tests ensuring TNA accepts POST payload filters
 
+## 2026-04-04 Cutover Update - First Supabase Endpoint Slice
+
+Cutover scope in this milestone:
+- `modules/*` read endpoints:
+  - `list`
+  - `get`
+  - `by-category`
+  - `active`
+
+Data-source behavior:
+- `MODULES_READ_SOURCE=supabase` -> force Supabase reads (requires `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`)
+- `MODULES_READ_SOURCE=auto` -> Supabase when configured, else legacy MySQL
+- `MODULES_READ_SOURCE=legacy` -> force legacy MySQL reads
+
+Contract impact:
+- no required key changes
+- existing response keys remain:
+  - list/active/by-category: `success`, `modules`
+  - get: `success`, `module`
+
+Out of scope in this slice:
+- `modules/*` write actions (`update`, `toggle`, `activity`) remain legacy/MySQL-backed
+- LMS/TNA endpoint groups remain legacy/MySQL-backed and frontend-flagged off

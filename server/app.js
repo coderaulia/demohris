@@ -9,6 +9,7 @@ import session from 'express-session';
 import mysql from 'mysql2/promise';
 
 import { createDualAuthBridgeMiddleware } from './compat/authBridge.js';
+import { resolveEffectiveModulesRole, validateModulesActionAccess } from './compat/modulesAccess.js';
 import { verifySupabaseJwt, syncSupabaseProfileFromEmployee } from './compat/supabaseClient.js';
 import { normalizeAuthSessionResponse, normalizeErrorResponse } from './compat/responseNormalizer.js';
 import { getTableMeta, getRegisteredTables, isTableRegistered, isTableReadable, isTableWritable } from './modules/registry.js';
@@ -848,14 +849,21 @@ app.get('/api/health', async (_req, res, next) => {
 
 app.all('/api/modules', async (req, res, next) => {
     try {
-        await getCurrentUser(req);
-        const role = currentUserRole(req.currentUser);
-        
-        if (!['superadmin', 'hr'].includes(role)) {
-            throw new ApiError(403, 'Access denied. Superadmin or HR role required.', 'ACCESS_DENIED');
-        }
-        
         const action = String(req.query?.action || '').trim();
+
+        await getCurrentUser(req);
+        const effectiveRole = resolveEffectiveModulesRole({
+            currentUser: req.currentUser,
+            claims: req.authContext?.claims,
+        });
+        const access = validateModulesActionAccess({
+            action,
+            effectiveRole,
+            currentUser: req.currentUser,
+        });
+        if (!access.ok) {
+            throw new ApiError(access.status, access.message, access.code);
+        }
         
         switch (action) {
             case 'list':

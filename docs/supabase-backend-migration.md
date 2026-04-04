@@ -242,6 +242,34 @@ Related docs:
   3. add alerting for identity-collision cases during first-JWT binding
   4. keep LMS/TNA on legacy backend until parity is confirmed
 
+## Step 13 - First Backend Domain Cutover After Shell Launch (2026-04-04)
+
+Cutover slice completed:
+- `modules/*` read actions:
+  - `list`
+  - `get`
+  - `by-category`
+  - `active`
+
+Implementation:
+- Added `server/compat/supabaseModulesRead.js` for Supabase REST reads and row normalization.
+- Updated `server/modules/moduleManager.js` read handlers to use source-selectable read path.
+- Added source switch:
+  - `MODULES_READ_SOURCE=legacy|supabase|auto`
+  - `auto` => Supabase when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are present, else legacy.
+
+Auth/role compatibility for this slice:
+- `/api/modules` now accepts effective role from `req.currentUser` or verified JWT claims.
+- Write actions still require employee-mapped auth context and remain legacy-backed.
+
+Test coverage added:
+- `tests/contracts/modules-cutover.test.mjs` (contract + adapter integration checks)
+- `scripts/qa/modules-cutover-smoke.mjs` (authenticated endpoint smoke harness)
+
+Route exposure decision:
+- No frontend route exposure change in this slice.
+- LMS/TNA routes remain feature-flagged off.
+
 ## Reversibility
 
 This slice is reversible:

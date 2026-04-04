@@ -28,6 +28,33 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - First Backend Domain Cutover Milestone (Modules Read)
+- Commit/PR: pending
+- Type: refactor(api) | test | docs
+- Scope: modules read endpoint cutover (`list/get/by-category/active`) from MySQL to Supabase
+- Completed:
+  - Added Supabase module-read adapter:
+    - `server/compat/supabaseModulesRead.js`
+  - Cut over `modules/*` read actions to source-selectable Supabase path with stable response contracts.
+  - Kept `modules/*` write actions on legacy path to avoid mutation-risk in first slice.
+  - Added contract/integration tests:
+    - `tests/contracts/modules-cutover.test.mjs`
+  - Added authenticated smoke harness for staging/live validation:
+    - `scripts/qa/modules-cutover-smoke.mjs`
+    - `npm run qa:modules:cutover`
+  - Added endpoint matrix doc:
+    - `docs/backend-cutover-matrix.md`
+- Gap Found:
+  - LMS/TNA endpoint groups remain legacy/MySQL-backed.
+  - Modules write actions (`update/toggle/activity`) remain legacy-backed by design in this slice.
+- Next Follow-up:
+  - [ ] Run `qa:modules:cutover` with privileged test account env (`SUPABASE_MODULES_TEST_EMAIL/PASSWORD`).
+  - [ ] Migrate next safe slice: LMS read-only list/overview endpoints.
+  - [ ] Keep LMS/TNA frontend routes disabled until endpoint parity tests pass.
+- Notes:
+  - Cutover source is controlled via `MODULES_READ_SOURCE` (`legacy|supabase|auto`).
+  - API response required keys were preserved.
+
 ## 2026-04-04 - Hard Fix For Hostinger Output Directory Detection
 - Commit/PR: pending
 - Type: fix(deploy)

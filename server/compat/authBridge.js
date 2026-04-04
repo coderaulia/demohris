@@ -71,7 +71,7 @@ export function createDualAuthBridgeMiddleware({
                 applyAuthContext(req, {
                     source: 'anonymous',
                     user: null,
-                    claims: null,
+                    claims: claims || null,
                     tokenPresent: true,
                 });
                 return next();
@@ -84,4 +84,3 @@ export function createDualAuthBridgeMiddleware({
         }
     };
 }
-
