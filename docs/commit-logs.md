@@ -28,6 +28,34 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Supabase Read Cutover Verification Stabilization
+- Commit/PR: pending
+- Type: test(api) | refactor(auth) | docs
+- Scope: execute and stabilize all current Supabase read cutover slices against seeded data
+- Completed:
+  - Verified seeded test-account mapping used by smoke scripts:
+    - `admin.demo@xenos.local` (modules privileged read)
+    - `manager.demo@xenos.local` (LMS admin visibility + TNA summary admin)
+    - `farhan.demo@xenos.local` (LMS learner + TNA unauthorized-role check)
+  - Ran smoke suites successfully:
+    - `npm run qa:modules:cutover`
+    - `npm run qa:lms:cutover`
+    - `npm run qa:tna:cutover`
+  - Ran contract suite successfully:
+    - `npm run qa:contracts` (37/37)
+  - Hardened JWT bridge identity resolution with Supabase employee fallback in `server/app.js` when MySQL lookup is unavailable, keeping dual-auth behavior stable for cutover tests.
+  - Updated API/cutover/status docs to reflect verified read-slice state and rollout implications.
+- Gap Found:
+  - LMS/TNA mutation workflows remain legacy-backed and are not included in this verification milestone.
+  - Workflow smoke scripts (`qa:lms:workflow`, `qa:tna:workflow`) still need dedicated workflow credentials/IDs.
+- Next Follow-up:
+  - [ ] Set workflow env credentials/IDs and run mutation workflow smoke suites.
+  - [ ] Cut over first mutation slice (`lms/enrollments/start`) with rollback switch.
+  - [ ] Keep LMS/TNA routes feature-flagged off until mutation parity is verified.
+- Notes:
+  - Read slice verification is complete for modules + LMS reads + TNA summary.
+  - Rollback for read slices remains env-driven (`*_READ_SOURCE=legacy`).
+
 ## 2026-04-04 - Mutation Workflow Parity Verification Baseline
 - Commit/PR: pending
 - Type: test(workflows) | docs

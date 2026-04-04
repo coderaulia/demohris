@@ -56,19 +56,19 @@ Files verified:
 | Endpoint Group | Status | Data Source | Test Status | Frontend Exposure | Notes |
 |---|---|---|---|---|---|
 | `auth/*` | legacy-only | mixed (Supabase JWT verify + MySQL identity/session) | contract only | public live (`/login`, `/dashboard`) | shell auth is Supabase-first client side, backend parity still mixed |
-| `modules/*` read (`list/get/by-category/active`) | migration-ready -> cut over | Supabase (when `MODULES_READ_SOURCE=auto|supabase` + env configured), else MySQL | contract + adapter integration + smoke script | legacy-only / not in live shell nav | first cutover slice in this milestone |
+| `modules/*` read (`list/get/by-category/active`) | verified | Supabase (when `MODULES_READ_SOURCE=auto|supabase` + env configured), else MySQL | contract + integration + smoke verified (`qa:modules:cutover`) | legacy-only / not in live shell nav | verified with seeded superadmin account |
 | `modules/*` write (`update/toggle/activity`) | legacy-only | MySQL | contract only | legacy-only | unchanged in this slice |
 | `db/query` | legacy-only | MySQL | contract only | legacy-only | no cutover in this slice |
 | `lms/courses/*` | blocked | MySQL | contract only | feature-flagged off | defer to read-first LMS slice |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |
-| `lms/enrollments/*` | in progress (read actions cut over) | mixed: Supabase for `list/get/my-courses` via source switch, MySQL for mutations | contract + adapter integration + smoke script | feature-flagged off | second cutover slice completed for read actions |
-| `lms/progress/*` | in progress (read action cut over) | mixed: Supabase for `get` via source switch, MySQL for mutations | contract + adapter integration + smoke script | feature-flagged off | second cutover slice completed for `get` |
+| `lms/enrollments/*` | in progress (read actions verified; mutations legacy) | mixed: Supabase for `list/get/my-courses` via source switch, MySQL for mutations | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | read parity verified with seeded learner/admin roles |
+| `lms/progress/*` | in progress (read action verified; mutations legacy) | mixed: Supabase for `get` via source switch, MySQL for mutations | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | `progress/get` parity verified |
 | `lms/quizzes/*` | blocked | MySQL | not tested | feature-flagged off | high-risk; defer |
 | `lms/dashboard/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/assignments/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/certificates/*` | blocked | MySQL | not tested | feature-flagged off | high-risk; defer |
-| `tna/*` | in progress (summary read cut over) | mixed: Supabase for `summary` via source switch, MySQL for all other actions | contract + adapter integration + smoke harness (pending env creds) | feature-flagged off | first TNA read-only slice completed for `tna/summary` |
+| `tna/*` | in progress (summary read verified; remaining actions legacy) | mixed: Supabase for `summary` via source switch, MySQL for all other actions | contract + integration + smoke verified (`qa:tna:cutover`) | feature-flagged off | `tna/summary` verified with manager+employee role checks |
 | shell-required backend reads | live-safe | N/A for current shell | integration tested via frontend shell smoke | public live | shell currently does not require LMS/TNA backend routes |
 
 ## STEP 2 - First Safe Cutover Slice
@@ -132,7 +132,7 @@ Validation:
 - Authenticated smoke harness:
   - `scripts/qa/tna-read-cutover-smoke.mjs`
   - `npm run qa:tna:cutover`
-  - current status: blocked in this environment due missing `SUPABASE_TNA_ADMIN_TEST_EMAIL`
+  - current status: pass (seeded role accounts)
 
 Route exposure decision:
 - Keep TNA React route feature-flagged off.
@@ -181,8 +181,8 @@ Current mutation parity test assets:
   - `scripts/qa/tna-mutation-workflow-smoke.mjs` (`npm run qa:tna:workflow`)
 
 Current smoke status:
-- `qa:lms:workflow` blocked in current environment (missing `SUPABASE_LMS_WORKFLOW_TEST_EMAIL`)
-- `qa:tna:workflow` blocked in current environment (missing `SUPABASE_TNA_WORKFLOW_TEST_EMAIL`)
+- `qa:lms:workflow` blocked in current environment (missing workflow seed IDs)
+- `qa:tna:workflow` blocked in current environment (missing workflow seed IDs)
 
 First mutation cutover candidate (not yet migrated):
 - `lms/enrollments/start`
@@ -194,3 +194,30 @@ Why this slice first:
 
 Route expansion rule remains unchanged:
 - keep LMS/TNA frontend routes feature-flagged off until related read + mutation workflows pass parity checks.
+
+## Read Slice Verification Run (2026-04-04)
+
+Verified slices:
+- `modules/*` read
+- LMS reads: `lms/enrollments/list|get|my-courses`, `lms/progress/get`
+- TNA read: `tna/summary`
+
+Smoke commands and results:
+- `npm run qa:modules:cutover` -> pass
+- `npm run qa:lms:cutover` -> pass
+- `npm run qa:tna:cutover` -> pass
+
+Credential mapping used (seeded accounts):
+- modules privileged user:
+  - `SUPABASE_MODULES_TEST_EMAIL=admin.demo@xenos.local`
+- LMS learner:
+  - `SUPABASE_LMS_TEST_EMAIL=farhan.demo@xenos.local`
+- LMS admin check:
+  - `SUPABASE_LMS_ADMIN_TEST_EMAIL=manager.demo@xenos.local`
+- TNA summary admin:
+  - `SUPABASE_TNA_ADMIN_TEST_EMAIL=manager.demo@xenos.local`
+- TNA unauthorized-role check:
+  - `SUPABASE_TNA_EMPLOYEE_TEST_EMAIL=farhan.demo@xenos.local`
+
+Verification caveat:
+- backend process must be started with `.env` loaded so Supabase auth/read-source env values are available at runtime.

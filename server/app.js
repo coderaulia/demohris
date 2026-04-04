@@ -266,6 +266,102 @@ async function hasEmployeesEmailColumn() {
     return employeesEmailColumnKnown;
 }
 
+function getSupabaseServiceConfig() {
+    const supabaseUrl = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
+    const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+    if (!supabaseUrl || !serviceRoleKey) {
+        return null;
+    }
+    return { supabaseUrl, serviceRoleKey };
+}
+
+async function fetchSupabaseEmployeeRows({ filters = {}, limit = 1 } = {}) {
+    const config = getSupabaseServiceConfig();
+    if (!config) return [];
+
+    const params = new URLSearchParams();
+    params.set('select', '*');
+    params.set('limit', String(Math.max(1, Number.parseInt(limit, 10) || 1)));
+
+    for (const [column, value] of Object.entries(filters || {})) {
+        if (value === null || value === undefined || value === '') continue;
+        params.set(column, `eq.${value}`);
+    }
+
+    const response = await fetch(`${config.supabaseUrl}/rest/v1/employees?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+            apikey: config.serviceRoleKey,
+            Authorization: `Bearer ${config.serviceRoleKey}`,
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        const details = await response.text().catch(() => '');
+        console.warn('Supabase employee read fallback failed:', response.status, details);
+        return [];
+    }
+
+    const rows = await response.json().catch(() => []);
+    return Array.isArray(rows) ? rows : [];
+}
+
+async function findEmployeeByAuthIdSupabase(sub) {
+    if (!sub) return null;
+    const rows = await fetchSupabaseEmployeeRows({
+        filters: { auth_id: sub },
+        limit: 1,
+    });
+    return rows[0] || null;
+}
+
+async function findEmployeeByMappedEmailSupabase(email) {
+    if (!email) return null;
+
+    const byAuthEmail = await fetchSupabaseEmployeeRows({
+        filters: { auth_email: email },
+        limit: 1,
+    });
+    if (byAuthEmail[0]) return byAuthEmail[0];
+
+    const byEmail = await fetchSupabaseEmployeeRows({
+        filters: { email },
+        limit: 1,
+    });
+    return byEmail[0] || null;
+}
+
+async function assignJwtIdentityToEmployeeSupabase(employeeId, { sub, email }) {
+    const config = getSupabaseServiceConfig();
+    if (!config || !employeeId || !sub) return false;
+
+    const targetEmail = String(email || '').trim().toLowerCase();
+    const response = await fetch(
+        `${config.supabaseUrl}/rest/v1/employees?employee_id=eq.${encodeURIComponent(employeeId)}`,
+        {
+            method: 'PATCH',
+            headers: {
+                apikey: config.serviceRoleKey,
+                Authorization: `Bearer ${config.serviceRoleKey}`,
+                'Content-Type': 'application/json',
+                Prefer: 'return=minimal',
+            },
+            body: JSON.stringify({
+                auth_id: sub,
+                auth_email: targetEmail || null,
+            }),
+        }
+    );
+
+    if (!response.ok) {
+        const details = await response.text().catch(() => '');
+        console.warn('Supabase employee auth binding fallback failed:', response.status, details);
+        return false;
+    }
+    return true;
+}
+
 async function findEmployeeByAuthId(sub) {
     if (!sub) return null;
     const rows = await queryRows('employees', {
@@ -322,8 +418,23 @@ async function resolveJwtBridgeUser(claims = {}) {
     const sub = String(claims?.sub || '').trim();
     const email = String(claims?.email || '').trim().toLowerCase();
 
-    const byAuthId = await findEmployeeByAuthId(sub);
-    const byEmail = await findEmployeeByMappedEmail(email);
+    let byAuthId = null;
+    let byEmail = null;
+    let mysqlLookupFailed = false;
+    try {
+        byAuthId = await findEmployeeByAuthId(sub);
+        byEmail = await findEmployeeByMappedEmail(email);
+    } catch (error) {
+        mysqlLookupFailed = true;
+        console.warn('MySQL JWT bridge lookup failed, using Supabase employee fallback:', error?.message || error);
+    }
+
+    if (!byAuthId) {
+        byAuthId = await findEmployeeByAuthIdSupabase(sub);
+    }
+    if (!byEmail) {
+        byEmail = await findEmployeeByMappedEmailSupabase(email);
+    }
 
     // Safety: prevent ambiguous identity binding.
     if (byAuthId && byEmail && String(byAuthId.employee_id) !== String(byEmail.employee_id)) {
@@ -343,8 +454,31 @@ async function resolveJwtBridgeUser(claims = {}) {
 
     if (byEmail) {
         // First JWT login path for legacy users: bind auth_id deterministically.
-        await assignJwtIdentityToEmployee(byEmail.employee_id, { sub, email });
-        const refreshed = await getRowByPrimaryKey('employees', byEmail.employee_id);
+        if (!mysqlLookupFailed) {
+            try {
+                await assignJwtIdentityToEmployee(byEmail.employee_id, { sub, email });
+            } catch (error) {
+                console.warn('MySQL auth_id binding failed, falling back to Supabase patch:', error?.message || error);
+                await assignJwtIdentityToEmployeeSupabase(byEmail.employee_id, { sub, email });
+            }
+        } else {
+            await assignJwtIdentityToEmployeeSupabase(byEmail.employee_id, { sub, email });
+        }
+
+        let refreshed = null;
+        if (!mysqlLookupFailed) {
+            try {
+                refreshed = await getRowByPrimaryKey('employees', byEmail.employee_id);
+            } catch (error) {
+                console.warn('MySQL employee refresh failed, using Supabase employee fallback:', error?.message || error);
+            }
+        }
+        if (!refreshed) {
+            refreshed = await fetchSupabaseEmployeeRows({
+                filters: { employee_id: byEmail.employee_id },
+                limit: 1,
+            }).then(rows => rows[0] || null);
+        }
         if (refreshed) {
             await syncSupabaseProfileSafe({ claims, employee: refreshed });
             return refreshed;

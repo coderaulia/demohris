@@ -112,7 +112,7 @@ Purpose: keep API docs consistent with implementation and frontend usage.
 - [ ] Add request/response examples per high-traffic action (`lms/courses/list`, `lms/progress/get`, `tna/calculate-gaps`, `auth/login`)
 - [ ] Add explicit permission matrix per action (employee/manager/hr/superadmin)
 - [x] Add automated API tests for LMS read cutover (`lms/enrollments/get`, `lms/progress/get`) via `tests/contracts/lms-read-cutover.test.mjs`
-- [ ] Add regression tests ensuring TNA accepts POST payload filters
+- [x] Add regression tests ensuring TNA accepts POST payload filters (`tests/contracts/tna-read-cutover.test.mjs`, `scripts/qa/tna-read-cutover-smoke.mjs`)
 
 ## 2026-04-04 Cutover Update - First Supabase Endpoint Slice
 
@@ -202,7 +202,7 @@ Role/access parity assumptions (unchanged from legacy):
 Route enablement decision:
 - LMS React route remains feature-flagged off.
 - blocker: full LMS visible route still depends on non-migrated mutation and quiz/certificate flows.
-- blocker: staging smoke run requires LMS test credentials to be provided for `qa:lms:cutover`.
+- verification status: `npm run qa:lms:cutover` passed with seeded Supabase learner/admin credentials.
 
 ## 2026-04-04 Cutover Update - Third Supabase Endpoint Slice (TNA Read)
 
@@ -245,7 +245,7 @@ Out of scope in this slice:
 
 Validation status:
 - `npm run qa:contracts` -> pass (includes `tests/contracts/tna-read-cutover.test.mjs`)
-- `npm run qa:tna:cutover` -> blocked in current environment (missing `SUPABASE_TNA_ADMIN_TEST_EMAIL`)
+- `npm run qa:tna:cutover` -> pass with seeded Supabase manager + employee credentials
 
 ## 2026-04-04 Workflow Mutation Parity Verification Baseline
 
@@ -277,3 +277,32 @@ Mutation workflow route rule:
 Current workflow smoke status:
 - `npm run qa:lms:workflow` -> blocked in current environment (missing `SUPABASE_LMS_WORKFLOW_TEST_EMAIL`)
 - `npm run qa:tna:workflow` -> blocked in current environment (missing `SUPABASE_TNA_WORKFLOW_TEST_EMAIL`)
+
+## 2026-04-04 Supabase Read Slice Verification (Seeded Data)
+
+Verification run scope:
+- modules read slice
+- LMS read slice
+- TNA summary read slice
+
+Environment/source switches used:
+- `MODULES_READ_SOURCE=supabase`
+- `LMS_READ_SOURCE=supabase`
+- `TNA_READ_SOURCE=supabase`
+
+Seeded test users used:
+- modules privileged read: `admin.demo@xenos.local`
+- LMS learner read: `farhan.demo@xenos.local`
+- LMS admin visibility check: `manager.demo@xenos.local`
+- TNA summary admin read: `manager.demo@xenos.local`
+- TNA unauthorized check: `farhan.demo@xenos.local`
+
+Execution result:
+- `npm run qa:modules:cutover` -> pass
+- `npm run qa:lms:cutover` -> pass
+- `npm run qa:tna:cutover` -> pass
+- `npm run qa:contracts` -> pass (37/37)
+
+Rollout implication:
+- read slices are verified against seeded Supabase data
+- LMS/TNA routes remain feature-flagged off until mutation workflow parity (`qa:lms:workflow`, `qa:tna:workflow`) is verified
