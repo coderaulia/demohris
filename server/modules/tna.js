@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
-import { queryRows, getRowByPrimaryKey, pool } from '../app.js';
+import { queryRows, getRowByPrimaryKey } from '../app.js';
+import { pool } from '../pool.js';
 import { isFeatureEnabled } from '../features.js';
 import {
     fetchTnaGapsReportFromSupabase,

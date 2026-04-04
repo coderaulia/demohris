@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -6,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 
 import express from 'express';
 import session from 'express-session';
-import mysql from 'mysql2/promise';
 
+import { pool } from './pool.js';
 import { createDualAuthBridgeMiddleware } from './compat/authBridge.js';
 import { resolveEffectiveModulesRole, validateModulesActionAccess } from './compat/modulesAccess.js';
 import { verifySupabaseJwt, syncSupabaseProfileFromEmployee } from './compat/supabaseClient.js';
@@ -45,19 +46,6 @@ const SESSION_COOKIE_SAME_SITE = String(
 const SESSION_COOKIE_SECURE = ['1', 'true', 'yes', 'on'].includes(
     String(process.env.SESSION_COOKIE_SECURE || (SESSION_COOKIE_SAME_SITE === 'none' ? 'true' : process.env.NODE_ENV === 'production')).trim().toLowerCase()
 );
-
-export const pool = mysql.createPool({
-    host: process.env.MYSQL_HOST || '127.0.0.1',
-    port: Number(process.env.MYSQL_PORT || 3306),
-    database: process.env.MYSQL_DATABASE || 'demo_kpi',
-    user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || '',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    charset: 'utf8mb4',
-    dateStrings: true,
-});
 
 class ApiError extends Error {
     constructor(status, message, code = 'APP_ERROR', details = '') {
@@ -231,7 +219,21 @@ async function getCurrentUser(req) {
         return null;
     }
 
-    const profile = await getRowByPrimaryKey('employees', sessionUserId);
+    let profile = null;
+    try {
+        profile = await getRowByPrimaryKey('employees', sessionUserId);
+    } catch (err) {
+        console.warn('MySQL employee profile lookup failed, using Supabase fallback:', err.message);
+    }
+
+    if (!profile) {
+        const rows = await fetchSupabaseEmployeeRows({
+            filters: { employee_id: sessionUserId },
+            limit: 1,
+        });
+        profile = rows[0] || null;
+    }
+
     if (!profile) {
         req.session.userId = null;
         req.currentUser = null;
@@ -244,7 +246,14 @@ async function getCurrentUser(req) {
 
 async function resolveSessionBridgeUser(sessionUserId) {
     if (!sessionUserId) return null;
-    return await getRowByPrimaryKey('employees', sessionUserId);
+    try {
+        const row = await getRowByPrimaryKey('employees', sessionUserId);
+        if (row) return row;
+    } catch (err) {
+        console.warn('resolveSessionBridgeUser MySQL failed, using Supabase fallback:', err.message);
+    }
+    const rows = await fetchSupabaseEmployeeRows({ filters: { employee_id: sessionUserId }, limit: 1 });
+    return rows[0] || null;
 }
 
 let employeesEmailColumnKnown = null;
@@ -753,13 +762,29 @@ async function handleAuthAction(req, res, action) {
             throw new ApiError(400, 'Email and password are required.', 'AUTH_INVALID');
         }
 
-        const rows = await queryRows('employees', {
-            filters: [{ op: 'eq', column: 'auth_email', value: email }],
-            limit: 1,
-        });
-        const employee = rows[0] || null;
-        const [rawRows] = await pool.query('SELECT password_hash FROM employees WHERE auth_email = ? LIMIT 1', [email]);
-        const passwordHash = rawRows?.[0]?.password_hash || '';
+        let employee = null;
+        let passwordHash = '';
+
+        try {
+            const rows = await queryRows('employees', {
+                filters: [{ op: 'eq', column: 'auth_email', value: email }],
+                limit: 1,
+            });
+            employee = rows[0] || null;
+            const [rawRows] = await pool.query('SELECT password_hash FROM employees WHERE auth_email = ? LIMIT 1', [email]);
+            passwordHash = rawRows?.[0]?.password_hash || '';
+        } catch (err) {
+            console.warn('MySQL auth lookup failed, using Supabase fallback:', err.message);
+        }
+
+        if (!employee || !passwordHash) {
+            const supabaseRows = await fetchSupabaseEmployeeRows({
+                filters: { auth_email: email },
+                limit: 1,
+            });
+            employee = supabaseRows[0] || null;
+            passwordHash = employee?.password_hash || '';
+        }
 
         if (!employee || !passwordHash || !(await bcrypt.compare(password, passwordHash))) {
             throw new ApiError(401, 'Invalid credentials.', 'AUTH_INVALID');
@@ -974,12 +999,18 @@ app.use(dualAuthBridgeMiddleware);
 
 app.get('/api/health', async (_req, res, next) => {
     try {
-        await pool.query('SELECT 1');
-        res.json({ ok: true });
+        const mysqlStatus = await pool.query('SELECT 1').then(() => true).catch(() => false);
+        const supabaseStatus = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+        if (mysqlStatus || supabaseStatus) {
+            res.json({ ok: true, mysql: mysqlStatus, supabase: supabaseStatus });
+        } else {
+            res.status(503).json({ ok: false, message: 'Offline' });
+        }
     } catch (error) {
         next(error);
     }
 });
+
 
 app.all('/api/modules', async (req, res, next) => {
     try {
@@ -1095,6 +1126,3 @@ app.use((error, _req, res, _next) => {
 app.listen(PORT, () => {
     console.log(`demo-kpi server listening on http://127.0.0.1:${PORT}`);
 });
-
-
-

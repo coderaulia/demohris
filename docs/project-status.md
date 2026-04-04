@@ -17,6 +17,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
   - `docs/supabase-production-runbook.md`
   - `docs/backend-cutover-matrix.md`
   - `docs/workflow-mutation-parity.md`
+  - `docs/auth-parity-evidence.md`
 
 ## Overall Status
 
@@ -30,8 +31,8 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | API/Code Consistency Sync | In progress | Fully aligned contract | Endpoint examples + regression tests still pending after route/action sync | High | Team | Add API tests and finalize per-action examples |
 | Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Provisioning complete; parity evidence still pending | High | Team | Keep legacy fallback active and finalize auth parity evidence |
 | Supabase Schema + Seed Baseline | Completed (dev/staging baseline) | Supabase is the active development/staging data foundation | Backend runtime still has legacy MySQL query coupling for domain handlers | High | Team | Start backend domain query cutover from MySQL to Supabase by module |
-| Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Backend target in `BACKEND_BASE_URL` fails health check due MySQL connectivity (`ECONNREFUSED 127.0.0.1:3306`) | High | Team | Run backend with reachable DB (or point to staging backend) and rerun `qa:auth:staging` |
-| Backend Endpoint Cutover (Phase C) | In progress | Migrate low-risk endpoint groups to Supabase-backed reads first | Verified Supabase read slices now include modules read, LMS read (`enrollments list/get/my-courses`, `progress/get`, `courses list/get`) and TNA read/report (`summary`, `gaps-report`, `lms-report`); first LMS mutation slice (`lms/enrollments/start`) is cut over and parity-verified, while broader mutation-heavy flows remain legacy-backed | High | Team | Keep LMS/TNA routes flagged off; execute `qa:tna:workflow` in staging, then continue one-mutation-at-a-time cutover |
+| Supabase Auth Stabilization | **Validated** ✅ | Real JWT parity validation against staging | `qa:auth:staging` passes in Supabase-only mode (MySQL down). Evidence in `docs/auth-parity-evidence.md`. Backend is now resilient via `server/pool.js` isolation + Supabase fallbacks in health check and session bridge. | — | Team | Proceed to Phase C mutation cutover |
+| Backend Endpoint Cutover (Phase C) | In progress | Migrate low-risk endpoint groups to Supabase-backed reads first | Verified Supabase read slices now include modules read, LMS read (`enrollments list/get/my-courses`, `progress/get`, `courses list/get`) and TNA read/report (`summary`, `gaps-report`, `lms-report`); LMS mutation slices now include `lms/enrollments/start` and `lms/enrollments/enroll|unenroll` with parity verification, while broader mutation-heavy flows remain legacy-backed | High | Team | Keep LMS/TNA routes flagged off; execute `qa:tna:workflow` in staging, then continue one-mutation-at-a-time cutover |
 | React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Role-aware IA has been rolled out (Core/Workforce/Assessment/Performance/Learning/Organization/System); Dashboard, Employees, and KPI/Assessment read-first workflows are active | High | Team | Validate role-based menu and route guard behavior in staging across superadmin/hr/manager |
 | Employees Module (React Shell) | In progress (read-first) | Legacy-parity employee management workflow in modern shell | Workforce directory + employee insights are active; HR has full visibility, manager is scoped to own team, and mutation-heavy CRUD remains legacy-only | High | Team | Add dedicated backend employee-summary endpoints (latest KPI trend, latest assessment timestamp, LMS completion aggregates) for stronger parity |
 | KPI & Assessment Module (React Shell) | In progress (read-first) | Legacy-parity management reporting workflow for KPI and assessment summaries | Summary tabs and grouped department/team breakdown are available; KPI achievement metrics are deferred where backend target fields are not consistently cut over | High | Team | Add dedicated Supabase-safe KPI reporting endpoint set, then unlock deeper drill-down record pages |
@@ -118,8 +119,18 @@ Cutover note:
   - `qa:modules:cutover` pass
   - `qa:lms:cutover` pass
   - `qa:tna:cutover` pass
-  - `qa:contracts` pass (48/48)
-- First LMS mutation slice is complete for `lms/enrollments/start` using `LMS_MUTATION_SOURCE` switch, with follow-up read parity verification via `qa:lms:workflow`.
+  - `qa:contracts` pass (51/51)
+- LMS mutation slices now complete:
+  - `lms/enrollments/start`
+  - `lms/enrollments/enroll`
+  - `lms/enrollments/unenroll`
+  - all under `LMS_MUTATION_SOURCE` switch with follow-up read parity checks (`qa:lms:workflow`).
 - `modules/*` write actions, LMS mutations, and most TNA routes remain legacy until further tested slices.
 - Mutation workflow parity baseline is defined in `docs/workflow-mutation-parity.md` with test assets and smoke harness commands.
-- Next mutation cutover candidate is `tna/needs/update-status` or `lms/enrollments/enroll` (single-slice rule).
+- Next mutation cutover candidate is `tna/needs/update-status` or `lms/enrollments/complete` (single-slice rule).
+- Auth parity between Supabase JWT and legacy session is now validated (2026-04-04):
+  - `server/pool.js` introduced as standalone DB pool module (breaks circular import chain that caused `Cannot access 'pool' before initialization` in MySQL-down environments).
+  - `/api/health` returns `{ok:true, mysql:false, supabase:true}` when Supabase env vars are set and MySQL is unreachable.
+  - `resolveSessionBridgeUser` and `getCurrentUser` both fall back to Supabase employee fetch when MySQL fails.
+  - `qa:auth:staging` confirms: `employee_id` and `role` are identical between JWT and session paths for `ADM001`.
+  - Evidence: `docs/auth-parity-evidence.md`.

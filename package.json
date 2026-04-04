@@ -32,15 +32,15 @@
 		"qa:hardening": "npm run qa:migrations && npm run qa:rls-audit",
 		"qa:contracts": "node --test tests/contracts/*.test.mjs",
 		"qa:supabase:provision": "node scripts/qa/supabase-provision.mjs",
-    "qa:supabase:auth-users": "node scripts/qa/supabase-provision-auth-users.mjs",
-    "qa:auth:staging": "node scripts/qa/supabase-auth-staging-check.mjs",
-    "qa:modules:cutover": "node scripts/qa/modules-cutover-smoke.mjs",
-    "qa:lms:cutover": "node scripts/qa/lms-read-cutover-smoke.mjs",
-    "qa:tna:cutover": "node scripts/qa/tna-read-cutover-smoke.mjs",
-    "qa:lms:workflow": "node scripts/qa/lms-mutation-workflow-smoke.mjs",
-    "qa:lms:sprint4": "node scripts/qa/lms-sprint4-admin-smoke.mjs",
-    "qa:tna:workflow": "node scripts/qa/tna-mutation-workflow-smoke.mjs"
-  },
+		"qa:supabase:auth-users": "node scripts/qa/supabase-provision-auth-users.mjs",
+		"qa:auth:staging": "node scripts/qa/supabase-auth-staging-check.mjs",
+		"qa:modules:cutover": "node scripts/qa/modules-cutover-smoke.mjs",
+		"qa:lms:cutover": "node scripts/qa/lms-read-cutover-smoke.mjs",
+		"qa:tna:cutover": "node scripts/qa/tna-read-cutover-smoke.mjs",
+		"qa:lms:workflow": "node scripts/qa/lms-mutation-workflow-smoke.mjs",
+		"qa:lms:sprint4": "node scripts/qa/lms-sprint4-admin-smoke.mjs",
+		"qa:tna:workflow": "node scripts/qa/tna-mutation-workflow-smoke.mjs"
+	},
 	"devDependencies": {
 		"@playwright/test": "^1.58.2",
 		"vite": "^7.3.1"
@@ -48,6 +48,7 @@
 	"dependencies": {
 		"bcryptjs": "^3.0.2",
 		"chart.js": "^4.5.1",
+		"dotenv": "^17.4.0",
 		"exceljs": "^4.4.0",
 		"express": "^5.1.0",
 		"express-session": "^1.18.2",

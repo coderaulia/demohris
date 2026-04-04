@@ -1,4 +1,4 @@
-import { pool } from './app.js';
+import { pool } from './pool.js';
 
 export const FEATURES = Object.freeze({
     KPI: String(process.env.ENABLE_KPI || 'true').toLowerCase() === 'true',

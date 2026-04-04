@@ -1,4 +1,4 @@
-import { pool } from '../app.js';
+import { pool } from '../pool.js';
 import {
     fetchLmsCourseByIdFromSupabase,
     fetchLmsCoursesFromSupabase,
