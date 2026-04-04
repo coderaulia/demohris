@@ -31,7 +31,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | Supabase Foundation | In progress | Dual-auth bridge + profile/RLS baseline stable | Provisioning complete; parity evidence still pending | High | Team | Keep legacy fallback active and finalize auth parity evidence |
 | Supabase Schema + Seed Baseline | Completed (dev/staging baseline) | Supabase is the active development/staging data foundation | Backend runtime still has legacy MySQL query coupling for domain handlers | High | Team | Start backend domain query cutover from MySQL to Supabase by module |
 | Supabase Auth Stabilization | In progress (blocked) | Real JWT parity validation against staging | Backend target in `BACKEND_BASE_URL` fails health check due MySQL connectivity (`ECONNREFUSED 127.0.0.1:3306`) | High | Team | Run backend with reachable DB (or point to staging backend) and rerun `qa:auth:staging` |
-| Backend Endpoint Cutover (Phase C) | In progress | Migrate low-risk endpoint groups to Supabase-backed reads first | Modules read slice + LMS read slice (`enrollments list/get/my-courses`, `progress/get`) + first TNA read-only slice (`tna/summary`) are verified against seeded Supabase data; first LMS mutation slice (`lms/enrollments/start`) is now cut over and parity-verified, while TNA mutation workflow smoke remains blocked by missing workflow test credentials/IDs | High | Team | Keep LMS route flagged off; execute `qa:tna:workflow` in staging, then cut over next single mutation slice |
+| Backend Endpoint Cutover (Phase C) | In progress | Migrate low-risk endpoint groups to Supabase-backed reads first | Verified Supabase read slices now include modules read, LMS read (`enrollments list/get/my-courses`, `progress/get`, `courses list/get`) and TNA read/report (`summary`, `gaps-report`, `lms-report`); first LMS mutation slice (`lms/enrollments/start`) is cut over and parity-verified, while broader mutation-heavy flows remain legacy-backed | High | Team | Keep LMS/TNA routes flagged off; execute `qa:tna:workflow` in staging, then continue one-mutation-at-a-time cutover |
 | React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Shell exists, but LMS/TNA screens are still legacy placeholders | High | Team | Migrate next safe view through adapters after auth parity unblocks |
 | Production Deploy Cutover (Hostinger + Supabase) | In progress | Live frontend uses Supabase-backed auth/data path for shipped routes | LMS/TNA routes still feature-flagged off; read slices are smoke-verified, but mutation parity and route-level rollout checks are still pending | High | Team | Keep shell/login/dashboard scope live and expand route-by-route only after read + mutation parity passes |
 | QA Automation | Partial | Reliable regression protection | LMS and related end-to-end suites still pending | High | Team | Build and run missing Playwright specs |
@@ -92,13 +92,15 @@ Production deployment note:
 Cutover note:
 - First Supabase backend domain slice is complete for `modules/*` read endpoints (`list`, `get`, `by-category`, `active`) using `MODULES_READ_SOURCE` switch.
 - Second Supabase backend read slice is complete for LMS read actions (`lms/enrollments/list|get|my-courses`, `lms/progress/get`) using `LMS_READ_SOURCE` switch.
+- Additional LMS catalog read slice is complete for `lms/courses/list|get` via `LMS_READ_SOURCE`.
 - LMS read parity hardening is complete (shape mapper + null ordering alignment + role/not-found contract checks in tests).
 - Third Supabase backend read slice is complete for `tna/summary` using `TNA_READ_SOURCE` switch.
+- Additional TNA report read slices are complete for `tna/gaps-report` and `tna/lms-report` via `TNA_READ_SOURCE`.
 - Verified read-cutover smoke run on seeded Supabase users:
   - `qa:modules:cutover` pass
   - `qa:lms:cutover` pass
   - `qa:tna:cutover` pass
-  - `qa:contracts` pass (42/42)
+  - `qa:contracts` pass (48/48)
 - First LMS mutation slice is complete for `lms/enrollments/start` using `LMS_MUTATION_SOURCE` switch, with follow-up read parity verification via `qa:lms:workflow`.
 - `modules/*` write actions, LMS mutations, and most TNA routes remain legacy until further tested slices.
 - Mutation workflow parity baseline is defined in `docs/workflow-mutation-parity.md` with test assets and smoke harness commands.

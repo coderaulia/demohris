@@ -92,6 +92,12 @@ async function fetchSupabaseRows({
         if (filter.type === 'in') {
             if (!Array.isArray(filter.values) || filter.values.length === 0) continue;
             params.set(column, toInFilter(filter.values));
+            continue;
+        }
+        if (filter.type === 'not_in') {
+            if (!Array.isArray(filter.values) || filter.values.length === 0) continue;
+            const escaped = filter.values.map(value => `"${String(value).replaceAll('"', '\\"')}"`).join(',');
+            params.set(column, `not.in.(${escaped})`);
         }
     }
 
@@ -115,6 +121,29 @@ async function fetchSupabaseRows({
     }
 
     return payload;
+}
+
+function normalizeCourseRow(row = {}) {
+    return {
+        ...row,
+        tags: parseJsonArray(row.tags, []),
+        prerequisites: parseJsonArray(row.prerequisites, []),
+        competencies_covered: parseJsonArray(row.competencies_covered, []),
+    };
+}
+
+function normalizeLessonCatalogRow(row = {}) {
+    return {
+        id: row.id,
+        section_id: row.section_id,
+        course_id: row.course_id,
+        title: row.title,
+        description: row.description,
+        content_type: row.content_type,
+        estimated_duration_minutes: row.estimated_duration_minutes,
+        ordinal: row.ordinal,
+        is_preview: row.is_preview,
+    };
 }
 
 async function fetchEmployeesByIds(employeeIds = []) {
@@ -249,6 +278,163 @@ export async function fetchLmsProgressFromSupabase({
     });
 
     return (rows || []).map(parseLessonProgressRow);
+}
+
+export async function fetchLmsCoursesFromSupabase({
+    status = '',
+    category = '',
+    search = '',
+    page = 1,
+    limit = 20,
+}) {
+    const pageSafe = Math.max(1, Number.parseInt(page, 10) || 1);
+    const limitSafe = Math.max(1, Number.parseInt(limit, 10) || 20);
+    const offset = (pageSafe - 1) * limitSafe;
+
+    const rows = await fetchSupabaseRows({
+        table: 'courses',
+        select: '*',
+        filters: {
+            status: status ? { type: 'eq', value: status } : null,
+            category: category ? { type: 'eq', value: category } : null,
+        },
+        order: 'created_at.desc',
+    });
+
+    const searchValue = String(search || '').trim().toLowerCase();
+    const filtered = (rows || []).filter(row => {
+        if (!searchValue) return true;
+        const title = String(row?.title || '').toLowerCase();
+        const description = String(row?.description || '').toLowerCase();
+        return title.includes(searchValue) || description.includes(searchValue);
+    });
+
+    const total = filtered.length;
+    const paged = filtered.slice(offset, offset + limitSafe);
+    const courseIds = paged.map(row => String(row.id || '')).filter(Boolean);
+
+    const [enrollmentRows, reviewRows] = await Promise.all([
+        courseIds.length > 0
+            ? fetchSupabaseRows({
+                table: 'course_enrollments',
+                select: 'id,course_id',
+                filters: { course_id: { type: 'in', values: courseIds } },
+            })
+            : [],
+        courseIds.length > 0
+            ? fetchSupabaseRows({
+                table: 'course_reviews',
+                select: 'id,course_id,rating',
+                filters: { course_id: { type: 'in', values: courseIds } },
+            })
+            : [],
+    ]);
+
+    const enrollmentCountMap = new Map();
+    for (const row of enrollmentRows || []) {
+        const key = String(row?.course_id || '');
+        if (!key) continue;
+        enrollmentCountMap.set(key, Number(enrollmentCountMap.get(key) || 0) + 1);
+    }
+
+    const reviewStatsMap = new Map();
+    for (const row of reviewRows || []) {
+        const key = String(row?.course_id || '');
+        if (!key) continue;
+        const current = reviewStatsMap.get(key) || { count: 0, sum: 0 };
+        const rating = Number(row?.rating);
+        if (Number.isFinite(rating)) {
+            current.sum += rating;
+        }
+        current.count += 1;
+        reviewStatsMap.set(key, current);
+    }
+
+    const courses = paged.map(raw => {
+        const normalized = normalizeCourseRow(raw);
+        const courseKey = String(raw?.id || '');
+        const enrollmentCount = Number(enrollmentCountMap.get(courseKey) || 0);
+        const reviewStats = reviewStatsMap.get(courseKey) || { count: 0, sum: 0 };
+        const avgRating = reviewStats.count > 0 ? (reviewStats.sum / reviewStats.count) : null;
+        return {
+            ...normalized,
+            enrollment_count: enrollmentCount,
+            review_count: Number(reviewStats.count || 0),
+            avg_rating: avgRating,
+        };
+    });
+
+    return {
+        courses,
+        total,
+        page: pageSafe,
+        limit: limitSafe,
+    };
+}
+
+export async function fetchLmsCourseByIdFromSupabase({
+    courseId,
+    employeeId = '',
+}) {
+    const id = String(courseId || '').trim();
+    if (!id) return null;
+
+    const courses = await fetchSupabaseRows({
+        table: 'courses',
+        select: '*',
+        filters: {
+            id: { type: 'eq', value: id },
+        },
+        limit: 1,
+    });
+    const course = courses?.[0] ? normalizeCourseRow(courses[0]) : null;
+    if (!course) return null;
+
+    const [sections, lessons, enrollments] = await Promise.all([
+        fetchSupabaseRows({
+            table: 'course_sections',
+            select: '*',
+            filters: { course_id: { type: 'eq', value: id } },
+            order: 'ordinal.asc',
+        }),
+        fetchSupabaseRows({
+            table: 'lessons',
+            select: 'id,section_id,course_id,title,description,content_type,estimated_duration_minutes,ordinal,is_preview',
+            filters: { course_id: { type: 'eq', value: id } },
+            order: 'ordinal.asc',
+        }),
+        employeeId
+            ? fetchSupabaseRows({
+                table: 'course_enrollments',
+                select: '*',
+                filters: {
+                    course_id: { type: 'eq', value: id },
+                    employee_id: { type: 'eq', value: employeeId },
+                },
+                limit: 1,
+            })
+            : [],
+    ]);
+
+    const lessonsBySection = new Map();
+    for (const rawLesson of lessons || []) {
+        const lesson = normalizeLessonCatalogRow(rawLesson);
+        const sectionId = String(lesson.section_id || '');
+        const bucket = lessonsBySection.get(sectionId) || [];
+        bucket.push(lesson);
+        lessonsBySection.set(sectionId, bucket);
+    }
+
+    const normalizedSections = (sections || []).map(section => ({
+        ...section,
+        lessons: lessonsBySection.get(String(section.id || '')) || [],
+    }));
+
+    return {
+        ...course,
+        sections: normalizedSections,
+        my_enrollment: enrollments?.[0] || null,
+    };
 }
 
 function normalizeEnrollmentParity(row = {}) {

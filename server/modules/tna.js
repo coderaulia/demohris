@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 import { queryRows, getRowByPrimaryKey, pool } from '../app.js';
 import { isFeatureEnabled } from '../features.js';
-import { fetchTnaSummaryFromSupabase, resolveTnaReadSource } from '../compat/supabaseTnaRead.js';
+import {
+    fetchTnaGapsReportFromSupabase,
+    fetchTnaLmsReportFromSupabase,
+    fetchTnaSummaryFromSupabase,
+    resolveTnaReadSource,
+} from '../compat/supabaseTnaRead.js';
 
 export function isTnaEnabled() {
     return isFeatureEnabled('TNA');
@@ -646,6 +651,11 @@ export async function handleTnaAction(req, res, action) {
         requireRole(req, ['superadmin', 'manager', 'director', 'hr']);
 
         const department = String(getInput(req, 'department', '')).trim();
+        const sourceState = resolveTnaReadSource();
+        if (sourceState.source === 'supabase') {
+            const rows = await fetchTnaGapsReportFromSupabase({ department });
+            return res.json({ data: rows });
+        }
 
         let query = `
             SELECT 
@@ -905,6 +915,11 @@ export async function handleTnaAction(req, res, action) {
         requireRole(req, ['superadmin', 'manager', 'director', 'hr']);
 
         const department = String(getInput(req, 'department', '')).trim();
+        const sourceState = resolveTnaReadSource();
+        if (sourceState.source === 'supabase') {
+            const report = await fetchTnaLmsReportFromSupabase({ department });
+            return res.json({ data: report });
+        }
 
         let query = `
             SELECT 

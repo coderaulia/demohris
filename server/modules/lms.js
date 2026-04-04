@@ -1,5 +1,7 @@
 import { pool } from '../app.js';
 import {
+    fetchLmsCourseByIdFromSupabase,
+    fetchLmsCoursesFromSupabase,
     fetchLmsEnrollmentByIdFromSupabase,
     fetchLmsEnrollmentsFromSupabase,
     fetchLmsProgressFromSupabase,
@@ -175,6 +177,25 @@ export async function handleLmsAction(req, res, action) {
 
 async function listCourses(req, res, currentUser) {
     const { status, category, search, employee_id, page = 1, limit = 20 } = req.body;
+
+    const sourceState = resolveLmsReadSource();
+    if (sourceState.source === 'supabase') {
+        const supabaseResponse = await fetchLmsCoursesFromSupabase({
+            status: status || '',
+            category: category || '',
+            search: search || '',
+            page,
+            limit,
+        });
+        return res.json({
+            success: true,
+            courses: (supabaseResponse.courses || []).map(normalizeRow),
+            total: Number(supabaseResponse.total || 0),
+            page: supabaseResponse.page,
+            limit: supabaseResponse.limit,
+        });
+    }
+
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const values = [];
     const conditions = [];
@@ -229,6 +250,18 @@ async function getCourse(req, res, currentUser) {
     const { course_id } = req.body;
     if (!course_id) {
         return res.status(400).json({ error: 'course_id is required' });
+    }
+
+    const sourceState = resolveLmsReadSource();
+    if (sourceState.source === 'supabase') {
+        const course = await fetchLmsCourseByIdFromSupabase({
+            courseId: course_id,
+            employeeId: currentUser.employee_id || '',
+        });
+        if (!course) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+        return res.json({ success: true, course: normalizeRow(course) });
     }
     
     const [courses] = await pool.query('SELECT * FROM courses WHERE id = ?', [course_id]);

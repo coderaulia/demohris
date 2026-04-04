@@ -84,6 +84,20 @@ async function callLmsEndpoint({ baseUrl, action, jwt, body = {} }) {
     return { status: response.status, payload };
 }
 
+function assertCourseListShape(payload) {
+    assert(payload?.success === true, 'courses/list missing success=true');
+    assert(Array.isArray(payload?.courses), 'courses/list missing courses[]');
+    assert(Number.isFinite(Number(payload?.total)), 'courses/list missing numeric total');
+    assert(Number.isFinite(Number(payload?.page)), 'courses/list missing numeric page');
+    assert(Number.isFinite(Number(payload?.limit)), 'courses/list missing numeric limit');
+}
+
+function assertCourseDetailShape(payload) {
+    assert(payload?.success === true, 'courses/get missing success=true');
+    assert(payload?.course && typeof payload.course === 'object', 'courses/get missing course object');
+    assert(Array.isArray(payload.course.sections), 'courses/get missing course.sections[]');
+}
+
 async function main() {
     const supabaseUrl = required('SUPABASE_URL');
     const supabaseAnonKey = required('SUPABASE_ANON_KEY');
@@ -177,6 +191,40 @@ async function main() {
     assert(progressResp.status === 200, `progress/get should return 200, got ${progressResp.status}`);
     assert(progressResp.payload?.success === true, 'progress/get missing success=true');
     assert(progressResp.payload?.progress, 'progress/get missing progress payload');
+
+    const coursesListResp = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/courses/list',
+        jwt,
+        body: { status: 'published', page: 1, limit: 10 },
+    });
+    assert(coursesListResp.status === 200, `courses/list should return 200, got ${coursesListResp.status}`);
+    assertCourseListShape(coursesListResp.payload);
+
+    const courseIdFromEnrollment = String(getResp.payload?.enrollment?.course_id || '').trim();
+    const fallbackCourseId = String(coursesListResp.payload?.courses?.[0]?.id || '').trim();
+    const courseIdForDetail = courseIdFromEnrollment || fallbackCourseId;
+    assert(courseIdForDetail, 'No course ID available for courses/get parity check');
+
+    const courseGetResp = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/courses/get',
+        jwt,
+        body: { course_id: courseIdForDetail },
+    });
+    assert(courseGetResp.status === 200, `courses/get should return 200, got ${courseGetResp.status}`);
+    assertCourseDetailShape(courseGetResp.payload);
+
+    const missingCourseResp = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/courses/get',
+        jwt,
+        body: { course_id: '00000000-0000-4000-8000-000000000000' },
+    });
+    assert(
+        missingCourseResp.status === 404,
+        `courses/get missing id should return 404, got ${missingCourseResp.status}`
+    );
 
     const invalidLessonProgressResp = await callLmsEndpoint({
         baseUrl: backendBaseUrl,

@@ -176,7 +176,8 @@ Remaining legacy LMS endpoints:
 - `lms/quizzes/*`
 - `lms/assignments/*`
 - `lms/certificates/*`
-- `lms/courses/*`, `lms/sections/*`, `lms/lessons/*`, `lms/questions/*`, `lms/reviews/*`, `lms/dashboard/*`
+- `lms/courses/create|update|delete|publish`
+- `lms/sections/*`, `lms/lessons/*`, `lms/questions/*`, `lms/reviews/*`, `lms/dashboard/*`
 
 Parity hardening applied:
 - response-shape compatibility mappers added in `server/compat/supabaseLmsRead.js`:
@@ -240,7 +241,7 @@ Contract impact:
 
 Out of scope in this slice:
 - all TNA mutations remain on legacy/MySQL path
-- `tna/gaps-report` and `tna/lms-report` remain legacy/MySQL-backed
+- `tna/gaps-report` and `tna/lms-report` remained legacy/MySQL-backed in this slice (superseded by later 2026-04-04 report-read cutover update below)
 - TNA frontend route remains feature-flagged off
 
 Validation status:
@@ -341,3 +342,50 @@ Validation status:
 Route enablement decision:
 - LMS route remains feature-flagged off.
 - one mutation slice is not sufficient to expose full LMS screens.
+
+## 2026-04-04 Cutover Update - Additional LMS/TNA Read-Only Slices
+
+Cutover scope in this milestone:
+- LMS read actions:
+  - `lms/courses/list`
+  - `lms/courses/get`
+- TNA read/report actions:
+  - `tna/gaps-report`
+  - `tna/lms-report`
+
+Data-source behavior:
+- LMS:
+  - `LMS_READ_SOURCE=supabase` -> force Supabase for enrolled/progress/course reads
+  - `LMS_READ_SOURCE=auto` -> Supabase when configured, else legacy
+  - `LMS_READ_SOURCE=legacy` -> force legacy
+- TNA:
+  - `TNA_READ_SOURCE=supabase` -> force Supabase for `summary`, `gaps-report`, `lms-report`
+  - `TNA_READ_SOURCE=auto` -> Supabase when configured, else legacy
+  - `TNA_READ_SOURCE=legacy` -> force legacy
+
+Contract parity notes:
+- `lms/courses/list` keeps:
+  - `success`, `courses`, `total`, `page`, `limit`
+- `lms/courses/get` keeps:
+  - `success`, `course` (with nested `sections[].lessons[]` and optional `my_enrollment`)
+- `tna/gaps-report` keeps:
+  - `data[]` with `employee_id`, `employee_name`, `position`, `department`, `competency_name`, `required_level`, `current_level`, `gap_level`, `priority`, `status`, `identified_at`
+- `tna/lms-report` keeps:
+  - `data.summary` + `data.by_course[]`
+- parity hardening fix applied:
+  - `tna/lms-report` average score now ignores null scores to match legacy SQL `AVG` semantics
+
+Validation status:
+- Contract tests:
+  - `tests/contracts/lms-catalog-read-cutover.test.mjs` -> pass
+  - `tests/contracts/tna-read-cutover.test.mjs` (extended) -> pass
+- Smoke tests:
+  - `npm run qa:lms:cutover` -> pass (now includes `lms/courses/list|get`)
+  - `npm run qa:tna:cutover` -> pass (now includes `tna/gaps-report` + `tna/lms-report`)
+  - `npm run qa:modules:cutover` -> pass
+- Full contract suite:
+  - `npm run qa:contracts` -> pass (48/48)
+
+Route readiness decision:
+- LMS/TNA routes remain feature-flagged off.
+- Read coverage is now broader, but visible LMS/TNA screens still depend on mutation-heavy actions that remain legacy-backed.

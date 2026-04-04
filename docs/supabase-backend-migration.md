@@ -478,3 +478,49 @@ Route exposure decision:
 
 Rollback:
 - set `LMS_MUTATION_SOURCE=legacy` for immediate fallback.
+
+## Step 19 - Additional Read/Report Cutover Slices (2026-04-04)
+
+Scope:
+- LMS catalog reads:
+  - `lms/courses/list`
+  - `lms/courses/get`
+- TNA report reads:
+  - `tna/gaps-report`
+  - `tna/lms-report`
+
+Implementation:
+- `server/modules/lms.js`
+  - source-selectable Supabase path added for `lms/courses/list|get`
+- `server/compat/supabaseLmsRead.js`
+  - added `fetchLmsCoursesFromSupabase(...)`
+  - added `fetchLmsCourseByIdFromSupabase(...)`
+- `server/modules/tna.js`
+  - source-selectable Supabase path added for `tna/gaps-report` and `tna/lms-report`
+- `server/compat/supabaseTnaRead.js`
+  - added `fetchTnaGapsReportFromSupabase(...)`
+  - added `fetchTnaLmsReportFromSupabase(...)`
+  - parity fix: null scores are excluded from LMS report averages (aligns with legacy SQL `AVG`)
+
+Contract/test coverage:
+- new:
+  - `tests/contracts/lms-catalog-read-cutover.test.mjs`
+- extended:
+  - `tests/contracts/tna-read-cutover.test.mjs`
+  - `scripts/qa/lms-read-cutover-smoke.mjs`
+  - `scripts/qa/tna-read-cutover-smoke.mjs`
+
+Validation result:
+- `npm run qa:contracts` -> pass (48/48)
+- `npm run qa:modules:cutover` -> pass
+- `npm run qa:lms:cutover` -> pass
+- `npm run qa:tna:cutover` -> pass
+
+Route exposure decision:
+- LMS/TNA routes remain feature-flagged off.
+- Read parity breadth improved, but mutation-heavy dependencies still block safe route expansion.
+
+Rollback:
+- read slices remain reversible via:
+  - `LMS_READ_SOURCE=legacy`
+  - `TNA_READ_SOURCE=legacy`

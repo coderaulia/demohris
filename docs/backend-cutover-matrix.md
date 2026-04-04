@@ -30,8 +30,9 @@ Files verified:
 ### 2) Endpoint groups still legacy/MySQL-backed
 - `auth/*` -> MySQL `employees` still used for legacy login/session and role mapping
 - `db/query` -> MySQL generic table gateway
-- `lms/*` -> MySQL
-- `tna/*` -> MySQL
+- `lms/*` mutation-heavy paths -> MySQL (`enroll|unenroll|complete`, `progress/update|complete-lesson`, `quizzes/*`, `assignments/*`, `certificates/*`, dashboard reads)
+- `lms/sections/*`, `lms/lessons/*`, `lms/questions/*`, `lms/reviews/*` -> MySQL
+- `tna/*` mutation and management paths -> MySQL (`needs*`, `plans*`, `course*`, `enroll*`, import/migration utilities)
 - `modules/*` write/actions -> MySQL
 
 ### 3) Endpoint groups safe to migrate first
@@ -59,7 +60,7 @@ Files verified:
 | `modules/*` read (`list/get/by-category/active`) | verified | Supabase (when `MODULES_READ_SOURCE=auto|supabase` + env configured), else MySQL | contract + integration + smoke verified (`qa:modules:cutover`) | legacy-only / not in live shell nav | verified with seeded superadmin account |
 | `modules/*` write (`update/toggle/activity`) | legacy-only | MySQL | contract only | legacy-only | unchanged in this slice |
 | `db/query` | legacy-only | MySQL | contract only | legacy-only | no cutover in this slice |
-| `lms/courses/*` | blocked | MySQL | contract only | feature-flagged off | defer to read-first LMS slice |
+| `lms/courses/*` | in progress (read list/get verified) | mixed: Supabase for `list|get` via `LMS_READ_SOURCE`, MySQL for create/update/delete/publish | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | read-only course catalog parity now verified |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/enrollments/*` | in progress (read actions verified; `start` mutation cut over) | mixed: Supabase for `list/get/my-courses` + `start` via source switch, MySQL for remaining mutations | contract + integration + smoke verified (`qa:lms:cutover`, `qa:lms:workflow`) | feature-flagged off | `start` parity verified with follow-up `enrollments/get` + `progress/get` |
@@ -68,7 +69,7 @@ Files verified:
 | `lms/dashboard/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/assignments/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/certificates/*` | blocked | MySQL | not tested | feature-flagged off | high-risk; defer |
-| `tna/*` | in progress (summary read verified; remaining actions legacy) | mixed: Supabase for `summary` via source switch, MySQL for all other actions | contract + integration + smoke verified (`qa:tna:cutover`) | feature-flagged off | `tna/summary` verified with manager+employee role checks |
+| `tna/*` | in progress (summary + report reads verified; mutations legacy) | mixed: Supabase for `summary`, `gaps-report`, `lms-report` via `TNA_READ_SOURCE`; MySQL for all mutation/management actions | contract + integration + smoke verified (`qa:tna:cutover`) | feature-flagged off | report parity verified with role checks and department filter checks |
 | shell-required backend reads | live-safe | N/A for current shell | integration tested via frontend shell smoke | public live | shell currently does not require LMS/TNA backend routes |
 
 ## STEP 2 - First Safe Cutover Slice
@@ -138,6 +139,45 @@ Route exposure decision:
 - Keep TNA React route feature-flagged off.
 - Do not enable TNA route until visible screens are fully backed by migrated and parity-tested reads.
 
+## STEP 5 - Next Safe Read/Report Slices (Current Milestone)
+
+Selected slices:
+- LMS course catalog reads:
+  - `lms/courses/list`
+  - `lms/courses/get`
+- TNA read-only report endpoints:
+  - `tna/gaps-report`
+  - `tna/lms-report`
+
+Why these were selected now:
+- read-only/report-only actions with no write side effects
+- direct dependency for future LMS/TNA UI list/detail screens
+- no quiz/certificate/bulk mutation coupling
+
+Implementation:
+- Extended `server/compat/supabaseLmsRead.js` with:
+  - `fetchLmsCoursesFromSupabase(...)`
+  - `fetchLmsCourseByIdFromSupabase(...)`
+- Updated `server/modules/lms.js`:
+  - source-selectable Supabase path for `lms/courses/list|get`
+- Extended `server/compat/supabaseTnaRead.js` with:
+  - `fetchTnaGapsReportFromSupabase(...)`
+  - `fetchTnaLmsReportFromSupabase(...)`
+- Updated `server/modules/tna.js`:
+  - source-selectable Supabase path for `tna/gaps-report` and `tna/lms-report`
+
+Validation:
+- Contract tests:
+  - `tests/contracts/lms-catalog-read-cutover.test.mjs`
+  - `tests/contracts/tna-read-cutover.test.mjs` (extended for report parity)
+- Smoke harness:
+  - `scripts/qa/lms-read-cutover-smoke.mjs` (extended to verify `lms/courses/list|get`)
+  - `scripts/qa/tna-read-cutover-smoke.mjs` (extended to verify `tna/gaps-report`, `tna/lms-report`)
+- Result:
+  - `npm run qa:contracts` -> pass (48/48)
+  - `npm run qa:lms:cutover` -> pass
+  - `npm run qa:tna:cutover` -> pass
+
 ## STEP 6 - Repeatable Cutover Pattern
 
 Use this checklist for every next slice:
@@ -202,8 +242,8 @@ Route expansion rule remains unchanged:
 
 Verified slices:
 - `modules/*` read
-- LMS reads: `lms/enrollments/list|get|my-courses`, `lms/progress/get`
-- TNA read: `tna/summary`
+- LMS reads: `lms/enrollments/list|get|my-courses`, `lms/progress/get`, `lms/courses/list|get`
+- TNA reads: `tna/summary`, `tna/gaps-report`, `tna/lms-report`
 
 Smoke commands and results:
 - `npm run qa:modules:cutover` -> pass

@@ -28,6 +28,46 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Continue Supabase Read/Report Cutover (LMS Catalog + TNA Reports)
+- Commit/PR: pending
+- Type: refactor(api) | test | docs
+- Scope: migrate next safe read slices for LMS/TNA and verify parity against seeded Supabase data
+- Completed:
+  - Cut over LMS course catalog reads to Supabase in `server/modules/lms.js`:
+    - `lms/courses/list`
+    - `lms/courses/get`
+  - Added LMS Supabase read helpers in `server/compat/supabaseLmsRead.js`:
+    - `fetchLmsCoursesFromSupabase`
+    - `fetchLmsCourseByIdFromSupabase`
+  - Cut over TNA report reads to Supabase in `server/modules/tna.js`:
+    - `tna/gaps-report`
+    - `tna/lms-report`
+  - Added TNA Supabase read helpers in `server/compat/supabaseTnaRead.js`:
+    - `fetchTnaGapsReportFromSupabase`
+    - `fetchTnaLmsReportFromSupabase`
+  - Fixed parity bug in TNA LMS report averaging:
+    - null scores are now excluded from average (legacy SQL `AVG` behavior parity)
+  - Added/extended contract coverage:
+    - new `tests/contracts/lms-catalog-read-cutover.test.mjs`
+    - extended `tests/contracts/tna-read-cutover.test.mjs` for `gaps-report` and `lms-report`
+  - Extended smoke harnesses:
+    - `scripts/qa/lms-read-cutover-smoke.mjs` now verifies `lms/courses/list|get`
+    - `scripts/qa/tna-read-cutover-smoke.mjs` now verifies `tna/gaps-report` + `tna/lms-report`
+  - Validation:
+    - `npm run qa:contracts` -> pass (48/48)
+    - `npm run qa:modules:cutover` -> pass
+    - `npm run qa:lms:cutover` -> pass
+    - `npm run qa:tna:cutover` -> pass
+- Gap Found:
+  - LMS/TNA mutation-heavy actions are still legacy-backed and remain the primary blocker for route enablement.
+  - Full LMS/TNA React route exposure is still unsafe until mutation workflows are parity-verified.
+- Next Follow-up:
+  - [ ] Run `npm run qa:tna:workflow` with complete seeded workflow IDs and credentials.
+  - [ ] Continue one mutation slice at a time (`tna/needs/update-status` or `lms/enrollments/enroll`).
+  - [ ] Keep LMS/TNA routes feature-flagged off until read + mutation parity gates pass.
+- Notes:
+  - Rollback remains env-driven (`LMS_READ_SOURCE` / `TNA_READ_SOURCE` set back to `legacy`).
+
 ## 2026-04-04 - First LMS Mutation Cutover (`enrollments/start`) to Supabase
 - Commit/PR: pending
 - Type: refactor(lms) | test | docs

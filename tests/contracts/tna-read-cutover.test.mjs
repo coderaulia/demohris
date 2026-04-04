@@ -4,6 +4,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+    fetchTnaGapsReportFromSupabase,
+    fetchTnaLmsReportFromSupabase,
     fetchTnaSummaryFromSupabase,
     resolveTnaReadSource,
 } from '../../server/compat/supabaseTnaRead.js';
@@ -148,6 +150,131 @@ test('fetchTnaSummaryFromSupabase surfaces upstream failures', async () => {
     );
 });
 
+test('fetchTnaGapsReportFromSupabase preserves legacy report fields and department filter', async () => {
+    process.env.TNA_READ_SOURCE = 'supabase';
+    process.env.SUPABASE_URL = 'https://example.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
+
+    mockFetchSequence([
+        (url) => {
+            const decoded = decodeURIComponent(String(url));
+            assert.match(decoded, /rest\/v1\/training_need_records/);
+            assert.match(decoded, /status=not\.in\.\("completed","cancelled"\)/);
+            return jsonResponse([
+                {
+                    employee_id: 'EMP001',
+                    training_need_id: 'need-1',
+                    current_level: 2,
+                    gap_level: 2,
+                    priority: 'high',
+                    status: 'identified',
+                    identified_at: '2026-04-01T00:00:00Z',
+                },
+                {
+                    employee_id: 'EMP002',
+                    training_need_id: 'need-2',
+                    current_level: 3,
+                    gap_level: 1,
+                    priority: 'high',
+                    status: 'identified',
+                    identified_at: '2026-04-01T00:00:00Z',
+                },
+            ]);
+        },
+        (url) => {
+            const decoded = decodeURIComponent(String(url));
+            assert.match(decoded, /rest\/v1\/employees/);
+            return jsonResponse([
+                { employee_id: 'EMP001', name: 'Farhan Akbar', position: 'Sales Executive', department: 'Sales' },
+                { employee_id: 'EMP002', name: 'Maya Suryani', position: 'HR Officer', department: 'HR' },
+            ]);
+        },
+        (url) => {
+            const decoded = decodeURIComponent(String(url));
+            assert.match(decoded, /rest\/v1\/training_needs/);
+            return jsonResponse([
+                { id: 'need-1', competency_name: 'Negotiation', required_level: 4 },
+                { id: 'need-2', competency_name: 'Compliance', required_level: 4 },
+            ]);
+        },
+    ]);
+
+    const report = await fetchTnaGapsReportFromSupabase({ department: 'Sales' });
+    assert.equal(Array.isArray(report), true);
+    assert.equal(report.length, 1);
+    assert.deepEqual(Object.keys(report[0]).sort(), [
+        'competency_name',
+        'current_level',
+        'department',
+        'employee_id',
+        'employee_name',
+        'gap_level',
+        'identified_at',
+        'position',
+        'priority',
+        'required_level',
+        'status',
+    ]);
+    assert.equal(report[0].employee_id, 'EMP001');
+    assert.equal(report[0].department, 'Sales');
+});
+
+test('fetchTnaLmsReportFromSupabase preserves summary and by_course shape', async () => {
+    process.env.TNA_READ_SOURCE = 'supabase';
+    process.env.SUPABASE_URL = 'https://example.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
+
+    mockFetchSequence([
+        (url) => {
+            const decoded = decodeURIComponent(String(url));
+            assert.match(decoded, /rest\/v1\/training_enrollments/);
+            return jsonResponse([
+                { id: 'enr-1', employee_id: 'EMP001', course_id: 'course-1', status: 'completed', score: 90, enrollment_date: '2026-04-01' },
+                { id: 'enr-2', employee_id: 'EMP001', course_id: 'course-1', status: 'in_progress', score: null, enrollment_date: '2026-04-02' },
+                { id: 'enr-3', employee_id: 'EMP002', course_id: 'course-2', status: 'enrolled', score: 70, enrollment_date: '2026-04-03' },
+            ]);
+        },
+        (url) => {
+            const decoded = decodeURIComponent(String(url));
+            assert.match(decoded, /rest\/v1\/employees/);
+            return jsonResponse([
+                { employee_id: 'EMP001', department: 'Sales' },
+                { employee_id: 'EMP002', department: 'HR' },
+            ]);
+        },
+        (url) => {
+            const decoded = decodeURIComponent(String(url));
+            assert.match(decoded, /rest\/v1\/training_courses/);
+            return jsonResponse([
+                { id: 'course-1', course_name: 'Sales Fundamentals', provider: 'Internal' },
+                { id: 'course-2', course_name: 'HR Compliance', provider: 'External' },
+            ]);
+        },
+    ]);
+
+    const report = await fetchTnaLmsReportFromSupabase({ department: 'Sales' });
+    assert.equal(typeof report, 'object');
+    assert.deepEqual(Object.keys(report).sort(), ['by_course', 'summary']);
+    assert.deepEqual(Object.keys(report.summary).sort(), ['avg_score', 'completed', 'enrolled', 'in_progress', 'total_enrollments']);
+    assert.equal(report.summary.total_enrollments, 3);
+    assert.equal(report.summary.completed, 1);
+    assert.equal(report.summary.in_progress, 1);
+    assert.equal(report.summary.enrolled, 1);
+    assert.equal(report.summary.avg_score, 80);
+    assert.equal(Array.isArray(report.by_course), true);
+    assert.equal(report.by_course.length, 1);
+    assert.deepEqual(Object.keys(report.by_course[0]).sort(), [
+        'avg_score',
+        'completed',
+        'course_name',
+        'department',
+        'in_progress',
+        'provider',
+        'total_enrolled',
+    ]);
+    assert.equal(report.by_course[0].department, 'Sales');
+});
+
 test('tna/summary keeps role guard and supports body-query input compatibility', () => {
     assert.match(
         tnaSource,
@@ -160,5 +287,16 @@ test('tna/summary keeps role guard and supports body-query input compatibility',
     assert.match(
         tnaSource,
         /const sourceState = resolveTnaReadSource\(\)/
+    );
+});
+
+test('tna report endpoints are source-selectable on read path', () => {
+    assert.match(
+        tnaSource,
+        /if \(action === 'tna\/gaps-report'\)[\s\S]*resolveTnaReadSource\(\)[\s\S]*fetchTnaGapsReportFromSupabase\(/,
+    );
+    assert.match(
+        tnaSource,
+        /if \(action === 'tna\/lms-report'\)[\s\S]*resolveTnaReadSource\(\)[\s\S]*fetchTnaLmsReportFromSupabase\(/,
     );
 });
