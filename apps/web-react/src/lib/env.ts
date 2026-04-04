@@ -23,6 +23,7 @@ export const env = {
     supabaseAnonKey: String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim(),
     legacyAppUrl: String(import.meta.env.VITE_LEGACY_APP_URL || '/').trim() || '/',
     enableEmployeesRoute: normalizeBoolean(import.meta.env.VITE_ENABLE_EMPLOYEES_ROUTE, true),
+    enableKpiRoute: normalizeBoolean(import.meta.env.VITE_ENABLE_KPI_ROUTE, true),
     enableLmsRoute: normalizeBoolean(import.meta.env.VITE_ENABLE_LMS_ROUTE, false),
     enableTnaRoute: normalizeBoolean(import.meta.env.VITE_ENABLE_TNA_ROUTE, false),
     showLegacyAppLink: normalizeBoolean(import.meta.env.VITE_SHOW_LEGACY_APP_LINK, true),

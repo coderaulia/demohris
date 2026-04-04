@@ -340,6 +340,28 @@ Contract and behavior notes:
 - superadmin-only CRUD action is intentionally linked to legacy Employees screen
 - LMS/TNA employee-level summary cards are marked deferred when endpoint/source coverage is not available
 
+## 2026-04-04 React KPI/Assessment Module - Read Path Mapping
+
+Frontend routes:
+- `/kpi`
+- `/kpi/drilldown/:mode/:group`
+
+API/data path used by KPI/Assessment shell:
+- verified reads:
+  - `tna/summary`
+  - `tna/gaps-report`
+  - `tna/lms-report`
+  - employees directory read (Supabase direct in `supabase` mode or `db/query` fallback in `auto|legacy`)
+- KPI records:
+  - Supabase mode: direct read from `kpi_records`
+  - auto/legacy mode: fallback read via `db/query` (`table=kpi_records`)
+
+Contract and behavior notes:
+- React reporting view model is validated with `packages/contracts/src/kpi.ts`
+- KPI achievement percentages are only shown when usable target fields are available
+- when KPI target/value parity is unavailable, UI marks those metrics as `Deferred` instead of fabricating totals
+- no KPI/assessment mutation tools are exposed in this shell slice
+
 Legacy-visible contract preserved:
 - request: `{ course_id }`
 - success response: `{ success: true, enrollment }`

@@ -8,6 +8,7 @@ Last updated: 2026-04-04
 - Added adapter-based data boundary for auth/LMS/TNA/modules calls.
 - Rebuilt dashboard from shell placeholder into workflow-oriented HR management dashboard.
 - Added Employees module in React shell with list + detail read-first workflow parity.
+- Added Assessment & KPI reporting module in React shell with grouped summary workflow parity.
 - Kept legacy frontend untouched for LMS/TNA mutation-heavy screens.
 
 ## Folder Layout
@@ -19,6 +20,7 @@ apps/web-react
       authAdapter.ts
       dashboardAdapter.ts
       employeesAdapter.ts
+      kpiAdapter.ts
       lmsAdapter.ts
       modulesAdapter.ts
       tnaAdapter.ts
@@ -44,6 +46,8 @@ apps/web-react
       DashboardDrilldownPage.tsx
       EmployeeDetailPage.tsx
       EmployeesPage.tsx
+      KpiDrilldownPage.tsx
+      KpiReportingPage.tsx
       LoginPage.tsx
       LmsPlaceholderPage.tsx
       TnaPlaceholderPage.tsx
@@ -54,6 +58,7 @@ packages/contracts
   src/
     api.ts
     auth.ts
+    kpi.ts
     lms.ts
     modules.ts
     tna.ts
@@ -105,16 +110,21 @@ This keeps dual-auth bridge compatibility while migration is in mixed state.
 - Routes:
   - `/dashboard`
   - `/dashboard/drilldown/:mode/:department` (safe placeholder boundary for future detail views)
+  - `/kpi`
+  - `/kpi/drilldown/:mode/:group`
   - `/employees`
   - `/employees/:employeeId`
   - `/login`
 - Feature-flagged routes:
+  - `/kpi` via `VITE_ENABLE_KPI_ROUTE`
+  - `/kpi/drilldown/:mode/:group` via `VITE_ENABLE_KPI_ROUTE`
   - `/lms/*` via `VITE_ENABLE_LMS_ROUTE`
   - `/tna/*` via `VITE_ENABLE_TNA_ROUTE`
 - `RouteGuard` gates authenticated routes.
 - `AppErrorBoundary` isolates shell-level runtime failures.
 - `AppLayout` can optionally show legacy app link via `VITE_SHOW_LEGACY_APP_LINK`.
 - Employees route is controlled by `VITE_ENABLE_EMPLOYEES_ROUTE` (default: enabled).
+- KPI route is controlled by `VITE_ENABLE_KPI_ROUTE` (default: enabled).
 
 ## Data Fetching Rules
 - TanStack Query is used for async state.
@@ -169,20 +179,22 @@ Deferred dashboard metrics (explicit boundary, no fake data):
 - Required SPA fallback behavior (Hostinger/Nginx-style):
   - Route unmatched paths to `index.html`.
 - Env vars required for runtime:
-  - `VITE_API_BASE_URL`
-  - `VITE_API_TARGET`
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_ANON_KEY`
-  - `VITE_LEGACY_APP_URL`
-- `VITE_ENABLE_LMS_ROUTE`
-- `VITE_ENABLE_TNA_ROUTE`
-- `VITE_ENABLE_EMPLOYEES_ROUTE`
-- `VITE_SHOW_LEGACY_APP_LINK`
+- `VITE_API_BASE_URL`
+- `VITE_API_TARGET`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_LEGACY_APP_URL`
+  - `VITE_ENABLE_LMS_ROUTE`
+  - `VITE_ENABLE_TNA_ROUTE`
+  - `VITE_ENABLE_EMPLOYEES_ROUTE`
+  - `VITE_ENABLE_KPI_ROUTE`
+  - `VITE_SHOW_LEGACY_APP_LINK`
 - SPA fallback is provided via `apps/web-react/public/.htaccess`.
 
 ## Migration Constraints Preserved
 - LMS/TNA production UI flows are not rewritten in this slice.
 - Employees module is read-first only; mutation-heavy employee editing remains on legacy path.
+- KPI/Assessment module is read-first only; editing/mutation tools remain deferred.
 - Legacy frontend remains fully operational.
 - Contract fixtures remain the compatibility guardrail.
 - Adapter switching keeps migration reversible.

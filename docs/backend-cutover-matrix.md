@@ -61,6 +61,7 @@ Files verified:
 | `modules/*` write (`update/toggle/activity`) | legacy-only | MySQL | contract only | legacy-only | unchanged in this slice |
 | `db/query` | legacy-only | MySQL | contract only | legacy-only | no cutover in this slice |
 | Employees shell read workflow (`/employees`, `/employees/:employeeId`) | in progress (read-first) | mixed: Supabase direct client reads in supabase mode, legacy `db/query` fallback in auto/legacy modes | frontend typecheck/build + role-scope behavior validated in shell | feature-flagged on for authenticated shell | no in-shell employee mutations; superadmin CRUD links to legacy app |
+| KPI/Assessment shell read workflow (`/kpi`) | in progress (read-first) | mixed: verified TNA report reads + employee directory reads, KPI records via Supabase direct read or legacy `db/query` fallback | frontend typecheck/build validated; no dedicated backend smoke yet | feature-flagged on for authenticated shell | KPI achievement metrics explicitly deferred when target fields are unavailable/inconsistent |
 | `lms/courses/*` | in progress (read list/get verified) | mixed: Supabase for `list|get` via `LMS_READ_SOURCE`, MySQL for create/update/delete/publish | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | read-only course catalog parity now verified |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |

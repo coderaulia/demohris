@@ -28,6 +28,35 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - React Assessment & KPI Reporting Workflow Parity (Read-First)
+- Commit/PR: pending
+- Type: feat(kpi) | docs
+- Scope: implement KPI Summary + Assessment For TNA Summary workflows in React shell
+- Completed:
+  - Added KPI/assessment contracts in `packages/contracts/src/kpi.ts` and exported through contracts index.
+  - Added `kpiAdapter` to build reporting view models from verified reads:
+    - employee directory scope
+    - `tna/summary`, `tna/gaps-report`, `tna/lms-report`
+    - KPI records read via Supabase direct path or legacy `db/query` fallback
+  - Added React pages/routes:
+    - `/kpi` (summary tabs, filters, grouped breakdown, record visibility)
+    - `/kpi/drilldown/:mode/:group` (drill-down boundary)
+  - Added shell navigation + env toggle:
+    - `VITE_ENABLE_KPI_ROUTE`
+  - Validation:
+    - `npm run typecheck --prefix apps/web-react` -> pass
+    - `npm run build --prefix apps/web-react` -> pass
+- Gap Found:
+  - No dedicated Supabase-cutover backend KPI reporting endpoint yet; KPI target/value fields are inconsistent across sources.
+  - Deep drill-down record pages are still deferred.
+- Next Follow-up:
+  - [ ] Add dedicated backend KPI reporting endpoint slice with Supabase parity and contract tests.
+  - [ ] Replace deferred KPI achievement cards with verified endpoint metrics once cutover is complete.
+  - [ ] Add integration smoke for `/kpi` role scope and filter parity.
+- Notes:
+  - Module is read-first only; no editing/mutation tools were added.
+  - Deferred badges are explicit where backend cutover coverage is incomplete.
+
 ## 2026-04-04 - React Employees Workflow Parity (Read-First)
 - Commit/PR: pending
 - Type: feat(employees) | docs

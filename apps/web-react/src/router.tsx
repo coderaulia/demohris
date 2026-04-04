@@ -7,6 +7,8 @@ import { DashboardDrilldownPage } from '@/pages/DashboardDrilldownPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { EmployeeDetailPage } from '@/pages/EmployeeDetailPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
+import { KpiDrilldownPage } from '@/pages/KpiDrilldownPage';
+import { KpiReportingPage } from '@/pages/KpiReportingPage';
 import { LmsPlaceholderPage } from '@/pages/LmsPlaceholderPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { TnaPlaceholderPage } from '@/pages/TnaPlaceholderPage';
@@ -53,6 +55,18 @@ export const router = createBrowserRouter([
                 path: 'dashboard/drilldown/:mode/:department',
                 element: <DashboardDrilldownPage />,
             },
+            ...(env.enableKpiRoute
+                ? [
+                      {
+                          path: 'kpi',
+                          element: <KpiReportingPage />,
+                      },
+                      {
+                          path: 'kpi/drilldown/:mode/:group',
+                          element: <KpiDrilldownPage />,
+                      },
+                  ]
+                : []),
             ...(env.enableEmployeesRoute
                 ? [
                       {
