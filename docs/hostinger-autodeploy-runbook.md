@@ -20,16 +20,22 @@ Production intent:
 
 Use these exact values in Hostinger Git deployment:
 
-- Install command:
-  - `npm ci --prefix apps/web-react`
-- Build command:
-  - `npm run build --prefix apps/web-react`
+- Install command (recommended):
+  - `npm install`
+- Build command (recommended for this monorepo):
+  - `npm run hostinger:build`
 - Publish directory:
   - `apps/web-react/dist`
 
 If Hostinger UI asks for root directory only:
 - keep repo root as source
-- keep commands above with `--prefix apps/web-react`
+- keep build command as `npm run hostinger:build`
+
+If Hostinger defaults to `Express` preset in the review screen:
+1. Keep `Root directory` as `./`
+2. Click `Change` under Build and output settings
+3. Override the defaults with the values above
+4. Ensure the publish/output directory is exactly `apps/web-react/dist`
 
 ## Hostinger Environment Variables (Frontend)
 
@@ -85,6 +91,15 @@ Optional check that `.htaccess` is in dist output:
 ```bash
 dir apps\web-react\dist
 ```
+
+## Quick Mapping For Your Current Screen
+
+From the "Review build settings" page shown:
+- Framework preset: can remain `Express` as long as custom build/output are set
+- Branch: `main`
+- Node version: `20.x`
+- Root directory: `./`
+- Build/output: must be overridden to build `apps/web-react` and publish `apps/web-react/dist`
 
 ## Rollback
 

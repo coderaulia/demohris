@@ -14,6 +14,7 @@
     "dev:full": "npm run dev:server & npm run dev",
     "build": "vite build",
     "build:web-react": "npm run build --prefix apps/web-react",
+    "hostinger:build": "npm install --prefix apps/web-react --no-fund --no-audit && npm run build --prefix apps/web-react",
     "preview": "vite preview",
     "start": "node server/app.js",
     "start:prod": "NODE_ENV=production node server/app.js",

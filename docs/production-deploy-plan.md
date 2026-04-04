@@ -85,6 +85,8 @@ Security rule:
 ## Step 4 - Smoke Test Checklist (Pre and Post Go-Live)
 
 Frontend:
+- [ ] Hostinger build command set to `npm run hostinger:build`
+- [ ] Hostinger output directory set to `apps/web-react/dist`
 - [ ] Build succeeds from `apps/web-react`
 - [ ] `/dashboard` page refresh resolves to SPA fallback (no 404)
 - [ ] static assets load with no missing file errors
