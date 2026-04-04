@@ -1,0 +1,105 @@
+{
+  "id": "workflow:lms-core-mutation",
+  "description": "Critical learner workflow parity contract used before any LMS mutation cutover.",
+  "sequence": [
+    {
+      "action": "lms/enrollments/enroll",
+      "request": {
+        "body": {
+          "course_id": "course-seed-001"
+        }
+      },
+      "response": {
+        "requiredTopLevelKeys": [
+          "success",
+          "enrollment"
+        ]
+      },
+      "sideEffects": [
+        "insert course_enrollments row with status=enrolled"
+      ],
+      "followUpReads": [
+        "lms/enrollments/my-courses",
+        "lms/enrollments/get"
+      ]
+    },
+    {
+      "action": "lms/enrollments/start",
+      "request": {
+        "body": {
+          "course_id": "course-seed-001"
+        }
+      },
+      "response": {
+        "requiredTopLevelKeys": [
+          "success",
+          "enrollment"
+        ]
+      },
+      "sideEffects": [
+        "update course_enrollments status to in_progress",
+        "insert first lesson_progress row when missing"
+      ],
+      "followUpReads": [
+        "lms/progress/get"
+      ]
+    },
+    {
+      "action": "lms/progress/complete-lesson",
+      "request": {
+        "body": {
+          "enrollment_id": "enroll-seed-001",
+          "lesson_id": "lesson-seed-001"
+        }
+      },
+      "response": {
+        "requiredTopLevelKeys": [
+          "success",
+          "enrollment"
+        ]
+      },
+      "sideEffects": [
+        "upsert lesson_progress status=completed",
+        "recalculate enrollment progress and status"
+      ],
+      "followUpReads": [
+        "lms/progress/get",
+        "lms/enrollments/get"
+      ]
+    },
+    {
+      "action": "lms/quizzes/submit",
+      "request": {
+        "body": {
+          "enrollment_id": "enroll-seed-001",
+          "lesson_id": "lesson-seed-quiz-001",
+          "answers": {
+            "question-seed-001": "A"
+          }
+        }
+      },
+      "response": {
+        "requiredTopLevelKeys": [
+          "success",
+          "attempt"
+        ],
+        "requiredAttemptKeys": [
+          "id",
+          "attempt_number",
+          "score",
+          "passed"
+        ]
+      },
+      "sideEffects": [
+        "insert quiz_attempts row",
+        "if passed: upsert completed lesson_progress and recalculate enrollment progress"
+      ],
+      "followUpReads": [
+        "lms/quizzes/get-attempt",
+        "lms/progress/get"
+      ]
+    }
+  ],
+  "firstMutationSliceCandidate": "lms/enrollments/start",
+  "firstMutationSliceReason": "Lowest mutation risk among progression actions: scoped to one enrollment with deterministic status and first-lesson side effects."
+}

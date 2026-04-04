@@ -164,3 +164,33 @@ Use this checklist for every next slice:
 - No new frontend route exposure in this cutover commit.
 - Next recommended slice:
   - TNA read reporting expansion (`tna/gaps-report` or `tna/lms-report`) after `tna/summary` smoke parity passes with real credentials.
+
+## Mutation Parity Readiness (Pre-Cutover Gate)
+
+Reference matrix:
+- `docs/workflow-mutation-parity.md`
+
+Current mutation parity test assets:
+- Contract/readiness test:
+  - `tests/contracts/workflow-parity-readiness.test.mjs`
+- Workflow fixtures:
+  - `tests/contracts/fixtures/lms.workflow-core-mutation.json`
+  - `tests/contracts/fixtures/tna.workflow-basic-mutation.json`
+- Workflow smoke scripts:
+  - `scripts/qa/lms-mutation-workflow-smoke.mjs` (`npm run qa:lms:workflow`)
+  - `scripts/qa/tna-mutation-workflow-smoke.mjs` (`npm run qa:tna:workflow`)
+
+Current smoke status:
+- `qa:lms:workflow` blocked in current environment (missing `SUPABASE_LMS_WORKFLOW_TEST_EMAIL`)
+- `qa:tna:workflow` blocked in current environment (missing `SUPABASE_TNA_WORKFLOW_TEST_EMAIL`)
+
+First mutation cutover candidate (not yet migrated):
+- `lms/enrollments/start`
+
+Why this slice first:
+- bounded side effects
+- strong follow-up read verification path
+- lower blast radius than quiz/certificate/bulk mutations
+
+Route expansion rule remains unchanged:
+- keep LMS/TNA frontend routes feature-flagged off until related read + mutation workflows pass parity checks.

@@ -246,3 +246,34 @@ Out of scope in this slice:
 Validation status:
 - `npm run qa:contracts` -> pass (includes `tests/contracts/tna-read-cutover.test.mjs`)
 - `npm run qa:tna:cutover` -> blocked in current environment (missing `SUPABASE_TNA_ADMIN_TEST_EMAIL`)
+
+## 2026-04-04 Workflow Mutation Parity Verification Baseline
+
+Purpose:
+- freeze mutation-heavy workflow expectations before mutation cutover and before LMS/TNA route expansion.
+
+Parity assets added:
+- workflow matrix/spec:
+  - `docs/workflow-mutation-parity.md`
+- workflow fixtures:
+  - `tests/contracts/fixtures/lms.workflow-core-mutation.json`
+  - `tests/contracts/fixtures/tna.workflow-basic-mutation.json`
+- contract/readiness checks:
+  - `tests/contracts/workflow-parity-readiness.test.mjs`
+- integration smoke harness:
+  - `scripts/qa/lms-mutation-workflow-smoke.mjs` (`npm run qa:lms:workflow`)
+  - `scripts/qa/tna-mutation-workflow-smoke.mjs` (`npm run qa:tna:workflow`)
+
+First mutation cutover candidate (readiness decision only):
+- `lms/enrollments/start`
+
+Reason:
+- smallest safe mutation slice with deterministic side effects and straightforward follow-up read verification.
+
+Mutation workflow route rule:
+- do not enable LMS/TNA frontend routes from read parity alone.
+- route exposure requires passing both read parity and relevant mutation workflow parity checks.
+
+Current workflow smoke status:
+- `npm run qa:lms:workflow` -> blocked in current environment (missing `SUPABASE_LMS_WORKFLOW_TEST_EMAIL`)
+- `npm run qa:tna:workflow` -> blocked in current environment (missing `SUPABASE_TNA_WORKFLOW_TEST_EMAIL`)

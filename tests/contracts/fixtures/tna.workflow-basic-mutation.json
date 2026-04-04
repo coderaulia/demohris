@@ -1,0 +1,53 @@
+{
+  "id": "workflow:tna-basic-mutation",
+  "description": "Minimal TNA mutation parity workflow that must pass before broader TNA route enablement.",
+  "sequence": [
+    {
+      "action": "tna/needs/create",
+      "request": {
+        "body": {
+          "employee_id": "EMP001",
+          "training_need_id": "need-seed-001",
+          "current_level": 2,
+          "priority": "high",
+          "notes": "workflow parity smoke"
+        }
+      },
+      "response": {
+        "requiredTopLevelKeys": [
+          "data"
+        ]
+      },
+      "sideEffects": [
+        "insert or update training_need_records"
+      ],
+      "followUpReads": [
+        "tna/needs"
+      ]
+    },
+    {
+      "action": "tna/needs/update-status",
+      "request": {
+        "body": {
+          "id": "need-record-seed-001",
+          "status": "planned"
+        }
+      },
+      "response": {
+        "requiredTopLevelKeys": [
+          "data"
+        ]
+      },
+      "sideEffects": [
+        "update training_need_records.status",
+        "set completed_at when status=completed"
+      ],
+      "followUpReads": [
+        "tna/needs",
+        "tna/summary"
+      ]
+    }
+  ],
+  "firstMutationSliceCandidate": "tna/needs/update-status",
+  "firstMutationSliceReason": "Simple status transition with bounded side effects and straightforward follow-up read checks."
+}

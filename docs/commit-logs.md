@@ -28,6 +28,36 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Mutation Workflow Parity Verification Baseline
+- Commit/PR: pending
+- Type: test(workflows) | docs
+- Scope: parity criteria + workflow tests for mutation-heavy LMS/TNA paths before route expansion
+- Completed:
+  - Added workflow mutation parity matrix doc:
+    - `docs/workflow-mutation-parity.md`
+  - Added mutation workflow fixtures:
+    - `tests/contracts/fixtures/lms.workflow-core-mutation.json`
+    - `tests/contracts/fixtures/tna.workflow-basic-mutation.json`
+  - Added contract/readiness test:
+    - `tests/contracts/workflow-parity-readiness.test.mjs`
+  - Added workflow smoke scripts:
+    - `scripts/qa/lms-mutation-workflow-smoke.mjs`
+    - `scripts/qa/tna-mutation-workflow-smoke.mjs`
+  - Added QA commands:
+    - `npm run qa:lms:workflow`
+    - `npm run qa:tna:workflow`
+  - Documented first mutation cutover candidate:
+    - `lms/enrollments/start`
+- Gap Found:
+  - Mutation endpoints are still legacy-backed; no mutation Supabase cutover in this milestone.
+  - Workflow smoke execution is blocked in current environment due missing workflow credentials/seed IDs.
+- Next Follow-up:
+  - [ ] Run workflow smoke checks in staging with real test accounts and IDs.
+  - [ ] Cut over `lms/enrollments/start` with env-driven rollback guard.
+  - [ ] Keep LMS/TNA routes feature-flagged off until read + mutation parity both pass.
+- Notes:
+  - This milestone is test-first and reversible by design.
+
 ## 2026-04-04 - First TNA Read-Only Supabase Cutover (Summary)
 - Commit/PR: pending
 - Type: refactor(tna) | test | docs

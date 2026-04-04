@@ -386,6 +386,46 @@ Remaining TNA blockers:
 - read reporting endpoints `tna/gaps-report` and `tna/lms-report` still legacy-backed
 - mutation flows (`plan/*`, `needs/*`, `enroll*`, import/migration actions) still legacy-backed
 
+## Step 17 - Mutation Workflow Parity Baseline (2026-04-04)
+
+Scope:
+- define and test workflow parity expectations for mutation-heavy LMS/TNA paths before mutation cutover.
+
+Added artifacts:
+- parity matrix/spec:
+  - `docs/workflow-mutation-parity.md`
+- workflow fixtures:
+  - `tests/contracts/fixtures/lms.workflow-core-mutation.json`
+  - `tests/contracts/fixtures/tna.workflow-basic-mutation.json`
+- contract/readiness tests:
+  - `tests/contracts/workflow-parity-readiness.test.mjs`
+- workflow smoke scripts:
+  - `scripts/qa/lms-mutation-workflow-smoke.mjs`
+  - `scripts/qa/tna-mutation-workflow-smoke.mjs`
+- commands:
+  - `npm run qa:lms:workflow`
+  - `npm run qa:tna:workflow`
+
+First mutation cutover candidate:
+- `lms/enrollments/start`
+
+Why this first:
+- bounded status transition
+- deterministic side effects
+- clear follow-up read verification path
+- lower migration risk than quizzes/certificates/bulk flows
+
+Current status:
+- mutation cutover not started in this step
+- mutation endpoints remain legacy-backed
+- route flags remain unchanged (LMS/TNA off)
+- workflow smoke execution blocked in current environment:
+  - `qa:lms:workflow` missing `SUPABASE_LMS_WORKFLOW_TEST_EMAIL`
+  - `qa:tna:workflow` missing `SUPABASE_TNA_WORKFLOW_TEST_EMAIL`
+
+Enablement rule:
+- do not expose LMS/TNA frontend routes until both read parity and relevant mutation workflow parity pass staging smoke checks.
+
 ## Reversibility
 
 This slice is reversible:

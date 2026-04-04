@@ -36,6 +36,13 @@ test('fixture files are valid and contain request + response contracts', () => {
     for (const fileName of files) {
         const fixture = readFixture(fileName);
         assert.ok(fixture.id, `${fileName}: id is required`);
+
+        if (fileName.includes('.workflow-')) {
+            assert.ok(Array.isArray(fixture.sequence), `${fileName}: sequence array is required`);
+            assert.ok(fixture.sequence.length > 0, `${fileName}: sequence cannot be empty`);
+            continue;
+        }
+
         assert.ok(fixture.route, `${fileName}: route is required`);
         assert.ok(fixture.method, `${fileName}: method is required`);
 

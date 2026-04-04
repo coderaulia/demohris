@@ -36,7 +36,9 @@
     "qa:auth:staging": "node scripts/qa/supabase-auth-staging-check.mjs",
     "qa:modules:cutover": "node scripts/qa/modules-cutover-smoke.mjs",
     "qa:lms:cutover": "node scripts/qa/lms-read-cutover-smoke.mjs",
-    "qa:tna:cutover": "node scripts/qa/tna-read-cutover-smoke.mjs"
+    "qa:tna:cutover": "node scripts/qa/tna-read-cutover-smoke.mjs",
+    "qa:lms:workflow": "node scripts/qa/lms-mutation-workflow-smoke.mjs",
+    "qa:tna:workflow": "node scripts/qa/tna-mutation-workflow-smoke.mjs"
   },
 	"devDependencies": {
 		"@playwright/test": "^1.58.2",
