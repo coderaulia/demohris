@@ -28,6 +28,23 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Hard Fix For Hostinger Build Toolchain
+- Commit/PR: pending
+- Type: fix(deploy)
+- Scope: remove CI dependence on missing `tsc` binary and enforce frontend-only build path
+- Completed:
+  - Changed `apps/web-react` build script to `vite build` for deployment robustness.
+  - Added strict local build script (`build:strict`) that keeps typecheck gate available.
+  - Changed root `build` to frontend-only Hostinger pipeline.
+  - Hardened build pipeline to install frontend dependencies with `--include=dev` before building.
+- Gap Found:
+  - Hostinger project may still be using old cached settings/commands from previous deploy config.
+- Next Follow-up:
+  - [ ] Confirm Hostinger build command is `npm run build` and start command is `npm run hostinger:start`.
+  - [ ] Trigger fresh redeploy and verify successful build logs include dependency install step for `apps/web-react`.
+- Notes:
+  - This specifically addresses `sh: tsc: command not found` in CI.
+
 ## 2026-04-04 - Hostinger Frontend-Only Runtime Fix
 - Commit/PR: pending
 - Type: fix(deploy) | chore

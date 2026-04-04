@@ -23,7 +23,7 @@ Use these exact values in Hostinger Git deployment:
 - Install command (recommended):
   - `npm install`
 - Build command (recommended for this monorepo):
-  - `npm run hostinger:build`
+  - `npm run build`
 - Start command:
   - `npm run hostinger:start`
 - Publish directory:
@@ -39,6 +39,10 @@ If Hostinger defaults to `Express` preset in the review screen:
 3. Override the defaults with the values above
 4. Ensure the publish/output directory is exactly `apps/web-react/dist`
 5. Ensure start command is `npm run hostinger:start` (not `npm run start`)
+
+Why this is hardened:
+- Root `npm run build` now always runs the frontend-only build pipeline.
+- Build pipeline installs `apps/web-react` dependencies with `--include=dev` so `vite`/`typescript` tools are always available in CI.
 
 ## Hostinger Environment Variables (Frontend)
 
