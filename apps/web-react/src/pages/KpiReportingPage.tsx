@@ -54,9 +54,13 @@ function CardGrid({
     );
 }
 
-export function KpiReportingPage() {
+interface KpiReportingPageProps {
+    initialMode?: Mode;
+}
+
+export function KpiReportingPage({ initialMode = 'kpi' }: KpiReportingPageProps) {
     const auth = useAuth();
-    const [mode, setMode] = useState<Mode>('kpi');
+    const [mode, setMode] = useState<Mode>(initialMode);
     const [draftFilters, setDraftFilters] = useState<Filters>({
         department: '',
         manager_id: '',

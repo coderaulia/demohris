@@ -84,7 +84,7 @@ export function EmployeeDetailPage() {
     return (
         <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-2">
-                <Link to="/employees">
+                <Link to="/workforce/directory">
                     <Button type="button" variant="outline">
                         <ArrowLeft className="size-4" />
                         Back To Employees

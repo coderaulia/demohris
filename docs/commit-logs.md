@@ -28,6 +28,39 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-04 - Role-Aware IA Rollout + LMS Read-Only Enablement
+- Commit/PR: pending
+- Type: feat(shell) | feat(lms) | docs
+- Scope: transform shell from placeholder navigation into usable SaaS IA while preserving read-first/mutation-safe strategy
+- Completed:
+  - Reworked React shell menu into final grouped IA:
+    - Core
+    - Workforce
+    - Assessment (TNA)
+    - Performance
+    - Learning (LMS)
+    - Organization
+    - System Settings
+  - Added route-level role gating for superadmin/hr/manager scope enforcement.
+  - Replaced LMS placeholder with real read-only Learning views:
+    - `/lms` (Training Catalog via `lms/courses/list`)
+    - `/lms/my-courses` (via `lms/enrollments/my-courses`)
+    - `/lms/:courseId` (detail via `lms/courses/get` + progress visibility via `lms/progress/get`)
+  - Added explicit deferred boundaries for mutation-heavy modules/pages to keep parity-safe rollout.
+  - Validation:
+    - `npm run typecheck --prefix apps/web-react` -> pass
+    - `npm run build --prefix apps/web-react` -> pass
+- Gap Found:
+  - LMS quiz/completion/certificate mutation paths are still deferred in shell.
+  - Assessment/Performance/Organization/System settings pages are still scaffolded boundaries for safe incremental rollout.
+- Next Follow-up:
+  - [ ] Continue mutation cutover slices before enabling mutation UI paths.
+  - [ ] Add role matrix smoke checks for all major routes.
+  - [ ] Expand deferred pages into read-first operational pages using verified endpoints.
+- Notes:
+  - API contract parity and cutover safety rules are preserved.
+  - This milestone prioritizes usable navigation and stable read workflows over broad feature mutation release.
+
 ## 2026-04-04 - React Assessment & KPI Reporting Workflow Parity (Read-First)
 - Commit/PR: pending
 - Type: feat(kpi) | docs
