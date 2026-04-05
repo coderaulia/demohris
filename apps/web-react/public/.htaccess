@@ -5,5 +5,8 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
+# Gzip compression for text-based assets.
+AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
+
 # SPA fallback for React Router browser history mode.
 RewriteRule ^ index.html [L]

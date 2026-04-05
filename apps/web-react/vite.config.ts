@@ -26,5 +26,16 @@ export default defineConfig({
     },
     build: {
         outDir: 'dist',
+        target: 'esnext',
+        minify: 'esbuild',
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    vendor: ['react', 'react-dom', 'react-router-dom'],
+                    query: ['@tanstack/react-query'],
+                    supabase: ['@supabase/supabase-js'],
+                },
+            },
+        },
     },
 });
