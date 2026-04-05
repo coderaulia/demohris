@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Navigate } from 'react-router-dom';
 
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/providers/AuthProvider';
@@ -8,6 +9,7 @@ interface RoleGateProps {
     children: ReactNode;
     title?: string;
     description?: string;
+    redirectTo?: string;
 }
 
 export function RoleGate({
@@ -15,11 +17,16 @@ export function RoleGate({
     children,
     title = 'Access Restricted',
     description = 'Your current role does not have access to this area.',
+    redirectTo,
 }: RoleGateProps) {
     const auth = useAuth();
     const role = auth.role || 'employee';
     if (allow.includes(role)) {
         return <>{children}</>;
+    }
+
+    if (redirectTo) {
+        return <Navigate to={redirectTo} replace />;
     }
 
     return (

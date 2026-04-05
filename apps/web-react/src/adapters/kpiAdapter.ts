@@ -27,6 +27,24 @@ const DbQueryRowsSchema = z
     })
     .passthrough();
 
+const KpiReportingSummaryResponseSchema = z
+    .object({
+        source: z.enum(['legacy', 'supabase']),
+        period: z.string().nullable().optional(),
+        department: z.string().nullable().optional(),
+        rows: z.array(z.object({
+            department: z.string(),
+            manager: z.string().nullable().optional(),
+            employee_count: z.number().int().nonnegative(),
+            record_count: z.number().int().nonnegative(),
+            met_count: z.number().int().nonnegative().optional(),
+            not_met_count: z.number().int().nonnegative().optional(),
+            avg_score: z.number().nullable().optional(),
+            missing_count: z.number().int().nonnegative(),
+        }).passthrough()),
+    })
+    .passthrough();
+
 function toNumber(value: unknown): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -40,11 +58,6 @@ function resolveSource(): ReadSource {
     if (env.backendTarget === 'legacy') return 'legacy';
     if (env.backendTarget === 'supabase') return 'supabase';
     return supabase ? 'supabase' : 'legacy';
-}
-
-function currentPeriodKey(): string {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 async function getAccessToken(): Promise<string> {
@@ -94,14 +107,26 @@ async function fetchKpiRecords(source: ReadSource, period: string): Promise<Arra
     return queryLegacyTable('kpi_records', { filters });
 }
 
+async function fetchKpiReportingSummary(filters: ReportingFilters = {}) {
+    const accessToken = await getAccessToken();
+    return transport.execute<z.infer<typeof KpiReportingSummaryResponseSchema>>({
+        domain: 'kpi',
+        action: 'kpi/reporting-summary',
+        payload: filters,
+        method: 'POST',
+        schema: KpiReportingSummaryResponseSchema,
+        accessToken: accessToken || undefined,
+    });
+}
+
 export const kpiAdapter = {
     async getOverview(
         filters: ReportingFilters = {},
         context: { role: EmployeeRole | null; employeeId: string },
     ): Promise<{ kpi: KpiOverview; assessment: AssessmentOverview }> {
         const source = resolveSource();
-        const period = toStringValue(filters.period) || currentPeriodKey();
-        const departmentFilter = toStringValue(filters.department);
+        const period = toStringValue(filters.period);
+        let departmentFilter = toStringValue(filters.department);
         const managerFilter = toStringValue(filters.manager_id);
         const deferred: string[] = [];
 
@@ -113,7 +138,22 @@ export const kpiAdapter = {
             context,
         );
 
-        const employees = employeesResult.employees.filter(row => toStringValue(row.role || 'employee') === 'employee');
+        const selfEmployee = employeesResult.employees.find(
+            row => toStringValue(row.employee_id) === toStringValue(context.employeeId),
+        );
+        const managerDepartment = context.role === 'manager'
+            ? toStringValue(selfEmployee?.department)
+            : '';
+
+        if (context.role === 'manager' && !departmentFilter && managerDepartment) {
+            departmentFilter = managerDepartment;
+        }
+
+        const employees = employeesResult.employees.filter(row => {
+            if (toStringValue(row.role || 'employee') !== 'employee') return false;
+            if (departmentFilter && toStringValue(row.department) !== departmentFilter) return false;
+            return true;
+        });
         const employeeById = new Map(employees.map(row => [toStringValue(row.employee_id), row]));
         const groupsByDept = new Map<string, {
             department: string;
@@ -136,88 +176,136 @@ export const kpiAdapter = {
             groupsByDept.get(department)!.employeeIds.add(employeeId);
         }
 
-        let kpiRecords: Array<Record<string, unknown>> = [];
+        let kpiSource = employeesResult.source;
+        let kpiDeferred = [...employeesResult.deferred];
+        let kpiGroups: Array<z.infer<typeof KpiOverviewSchema>['groups'][number]> = [];
+        let kpiCards: Array<z.infer<typeof KpiOverviewSchema>['cards'][number]> = [];
+
         try {
-            kpiRecords = await fetchKpiRecords(source, period);
+            const summary = await fetchKpiReportingSummary({
+                department: departmentFilter,
+                manager_id: managerFilter,
+                period,
+            });
+
+            kpiSource = summary.source;
+            kpiGroups = summary.rows
+                .map(row => ({
+                    key: row.department,
+                    department: row.department,
+                    manager: row.manager ?? null,
+                    employee_count: row.employee_count,
+                    record_count: row.record_count,
+                    missing_count: row.missing_count,
+                    avg_achievement: row.avg_score ?? null,
+                }))
+                .sort((a, b) => a.department.localeCompare(b.department));
+
+            const avgScores = kpiGroups
+                .map(row => row.avg_achievement)
+                .filter((value): value is number => value !== null);
+
+            kpiCards = [
+                { label: 'Employees In Scope', value: String(kpiGroups.reduce((sum, row) => sum + row.employee_count, 0)), hint: 'Employees after role and filter scope' },
+                { label: 'KPI Records (Period)', value: String(kpiGroups.reduce((sum, row) => sum + row.record_count, 0)), hint: period ? `Period ${period}` : 'All available periods' },
+                {
+                    label: 'Employees Missing KPI',
+                    value: String(kpiGroups.reduce((sum, row) => sum + row.missing_count, 0)),
+                    hint: 'Employees with no KPI records in selected period',
+                },
+                {
+                    label: 'Average Achievement',
+                    value: avgScores.length > 0
+                        ? `${Math.round((avgScores.reduce((sum, value) => sum + value, 0) / avgScores.length) * 10) / 10}%`
+                        : 'No data',
+                    hint: avgScores.length > 0 ? 'Computed from kpi/reporting-summary' : 'No scored KPI records for selected scope',
+                },
+            ];
         } catch {
-            deferred.push('KPI records source unavailable for selected mode.');
-        }
-
-        const recordsByDept = new Map<string, {
-            recordCount: number;
-            achievementSamples: number[];
-            employeesWithRecords: Set<string>;
-        }>();
-
-        for (const record of kpiRecords) {
-            const employeeId = toStringValue(record.employee_id);
-            const employee = employeeById.get(employeeId);
-            if (!employee) continue;
-            const department = toStringValue(employee.department) || 'Unassigned';
-
-            if (!recordsByDept.has(department)) {
-                recordsByDept.set(department, {
-                    recordCount: 0,
-                    achievementSamples: [],
-                    employeesWithRecords: new Set<string>(),
-                });
+            let kpiRecords: Array<Record<string, unknown>> = [];
+            try {
+                kpiRecords = await fetchKpiRecords(source, period);
+            } catch {
+                kpiDeferred.push('KPI records source unavailable for selected mode.');
             }
 
-            const bucket = recordsByDept.get(department)!;
-            bucket.recordCount += 1;
-            bucket.employeesWithRecords.add(employeeId);
+            const recordsByDept = new Map<string, {
+                recordCount: number;
+                achievementSamples: number[];
+                employeesWithRecords: Set<string>;
+            }>();
 
-            const value = toNumber((record as Record<string, unknown>).value);
-            const target = toNumber((record as Record<string, unknown>).target_value ?? (record as Record<string, unknown>).target);
-            if (target > 0) {
-                bucket.achievementSamples.push((value / target) * 100);
+            for (const record of kpiRecords) {
+                const employeeId = toStringValue(record.employee_id);
+                const employee = employeeById.get(employeeId);
+                if (!employee) continue;
+                const department = toStringValue(employee.department) || 'Unassigned';
+
+                if (!recordsByDept.has(department)) {
+                    recordsByDept.set(department, {
+                        recordCount: 0,
+                        achievementSamples: [],
+                        employeesWithRecords: new Set<string>(),
+                    });
+                }
+
+                const bucket = recordsByDept.get(department)!;
+                bucket.recordCount += 1;
+                bucket.employeesWithRecords.add(employeeId);
+
+                const value = toNumber((record as Record<string, unknown>).value);
+                const target = toNumber((record as Record<string, unknown>).target_value ?? (record as Record<string, unknown>).target);
+                if (target > 0) {
+                    bucket.achievementSamples.push((value / target) * 100);
+                }
             }
+
+            kpiGroups = [...groupsByDept.values()]
+                .map(group => {
+                    const recordInfo = recordsByDept.get(group.department);
+                    const recordCount = recordInfo?.recordCount || 0;
+                    const employeesWithRecords = recordInfo?.employeesWithRecords.size || 0;
+                    const avgAchievement = recordInfo && recordInfo.achievementSamples.length > 0
+                        ? Math.round((recordInfo.achievementSamples.reduce((sum, n) => sum + n, 0) / recordInfo.achievementSamples.length) * 10) / 10
+                        : null;
+
+                    return {
+                        key: group.department,
+                        department: group.department,
+                        manager: group.manager,
+                        employee_count: group.employeeIds.size,
+                        record_count: recordCount,
+                        missing_count: Math.max(0, group.employeeIds.size - employeesWithRecords),
+                        avg_achievement: avgAchievement,
+                    };
+                })
+                .sort((a, b) => a.department.localeCompare(b.department));
+
+            if (!kpiGroups.some(row => row.avg_achievement !== null)) {
+                kpiDeferred.push('KPI achievement percentage deferred: target fields are not consistently available.');
+            }
+
+            kpiCards = [
+                { label: 'Employees In Scope', value: String(employees.length), hint: 'Employees after role and filter scope' },
+                { label: 'KPI Records (Period)', value: String(kpiRecords.length), hint: period ? `Period ${period}` : 'All available periods' },
+                {
+                    label: 'Employees Missing KPI',
+                    value: String(kpiGroups.reduce((sum, row) => sum + row.missing_count, 0)),
+                    hint: 'Employees with no KPI records in selected period',
+                },
+                {
+                    label: 'Average Achievement',
+                    value: (() => {
+                        const vals = kpiGroups.map(row => row.avg_achievement).filter((n): n is number => n !== null);
+                        if (vals.length === 0) return 'No data';
+                        return `${Math.round((vals.reduce((s, n) => s + n, 0) / vals.length) * 10) / 10}%`;
+                    })(),
+                    hint: kpiGroups.some(row => row.avg_achievement !== null)
+                        ? 'Computed only when value/target are available'
+                        : 'No KPI achievement values are available for this scope',
+                },
+            ];
         }
-
-        const kpiGroups = [...groupsByDept.values()]
-            .map(group => {
-                const recordInfo = recordsByDept.get(group.department);
-                const recordCount = recordInfo?.recordCount || 0;
-                const employeesWithRecords = recordInfo?.employeesWithRecords.size || 0;
-                const avgAchievement = recordInfo && recordInfo.achievementSamples.length > 0
-                    ? Math.round((recordInfo.achievementSamples.reduce((sum, n) => sum + n, 0) / recordInfo.achievementSamples.length) * 10) / 10
-                    : null;
-
-                return {
-                    key: group.department,
-                    department: group.department,
-                    manager: group.manager,
-                    employee_count: group.employeeIds.size,
-                    record_count: recordCount,
-                    missing_count: Math.max(0, group.employeeIds.size - employeesWithRecords),
-                    avg_achievement: avgAchievement,
-                };
-            })
-            .sort((a, b) => a.department.localeCompare(b.department));
-
-        if (!kpiGroups.some(row => row.avg_achievement !== null)) {
-            deferred.push('KPI achievement percentage deferred: target fields are not consistently available.');
-        }
-
-        const kpiCards = [
-            { label: 'Employees In Scope', value: String(employees.length), hint: 'Employees after role and filter scope' },
-            { label: 'KPI Records (Period)', value: String(kpiRecords.length), hint: `Period ${period}` },
-            {
-                label: 'Employees Missing KPI',
-                value: String(kpiGroups.reduce((sum, row) => sum + row.missing_count, 0)),
-                hint: 'Employees with no KPI records in selected period',
-            },
-            {
-                label: 'Average Achievement',
-                value: (() => {
-                    const vals = kpiGroups.map(row => row.avg_achievement).filter((n): n is number => n !== null);
-                    if (vals.length === 0) return 'Deferred';
-                    return `${Math.round((vals.reduce((s, n) => s + n, 0) / vals.length) * 10) / 10}%`;
-                })(),
-                hint: 'Computed only when value/target are available',
-                deferred: !kpiGroups.some(row => row.avg_achievement !== null),
-            },
-        ];
 
         const gapsResponse = (await tnaAdapter.gapsReport(
             departmentFilter ? { department: departmentFilter } : {},
@@ -284,8 +372,8 @@ export const kpiAdapter = {
 
         return {
             kpi: KpiOverviewSchema.parse({
-                source: employeesResult.source,
-                deferred: [...deferred, ...employeesResult.deferred],
+                source: kpiSource,
+                deferred: kpiDeferred,
                 cards: kpiCards,
                 groups: kpiGroups,
             }),

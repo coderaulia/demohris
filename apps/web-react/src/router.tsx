@@ -46,8 +46,12 @@ export const router = createBrowserRouter([
 
             {
                 path: 'workforce/directory',
+                element: <Navigate to="/employees" replace />,
+            },
+            {
+                path: 'employees',
                 element: (
-                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]} redirectTo="/dashboard">
                         <EmployeesPage />
                     </RoleGate>
                 ),
@@ -55,7 +59,15 @@ export const router = createBrowserRouter([
             {
                 path: 'workforce/directory/:employeeId',
                 element: (
-                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]} redirectTo="/dashboard">
+                        <EmployeeDetailPage />
+                    </RoleGate>
+                ),
+            },
+            {
+                path: 'employees/:employeeId',
+                element: (
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]} redirectTo="/dashboard">
                         <EmployeeDetailPage />
                     </RoleGate>
                 ),
@@ -131,8 +143,12 @@ export const router = createBrowserRouter([
 
             {
                 path: 'performance/kpi-records',
+                element: <Navigate to="/kpi" replace />,
+            },
+            {
+                path: 'kpi',
                 element: (
-                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]} redirectTo="/dashboard">
                         <KpiReportingPage initialMode="kpi" />
                     </RoleGate>
                 ),
@@ -298,24 +314,8 @@ export const router = createBrowserRouter([
             },
 
             {
-                path: 'kpi',
-                element: <Navigate to="/performance/kpi-records" replace />,
-            },
-            {
                 path: 'kpi/drilldown/:mode/:group',
                 element: <KpiDrilldownPage />,
-            },
-            {
-                path: 'employees',
-                element: <Navigate to="/workforce/directory" replace />,
-            },
-            {
-                path: 'employees/:employeeId',
-                element: (
-                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
-                        <EmployeeDetailPage />
-                    </RoleGate>
-                ),
             },
             {
                 path: 'tna',

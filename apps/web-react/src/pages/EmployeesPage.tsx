@@ -310,7 +310,7 @@ export function EmployeesPage() {
                                                         </Badge>
                                                     </td>
                                                     <td className="px-4 py-3 text-right">
-                                                        <Link to={`/workforce/directory/${encodeURIComponent(String(employee.employee_id))}`}>
+                                                        <Link to={`/employees/${encodeURIComponent(String(employee.employee_id))}`}>
                                                             <Button type="button" size="sm" variant="outline">
                                                                 View Detail
                                                                 <ArrowUpRight className="size-4" />

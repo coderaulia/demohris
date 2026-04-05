@@ -2,8 +2,9 @@ import type { ZodTypeAny } from 'zod';
 
 import { env, type BackendTarget } from '@/lib/env';
 import { HttpError, requestJson } from '@/lib/httpClient';
+import { getSupabaseSession } from '@/lib/supabaseClient';
 
-type Domain = 'auth' | 'employees' | 'lms' | 'tna' | 'modules' | 'db';
+type Domain = 'auth' | 'employees' | 'kpi' | 'lms' | 'tna' | 'modules' | 'db';
 type RequestMethod = 'GET' | 'POST';
 type TransportSource = 'legacy' | 'supabase';
 
@@ -33,6 +34,10 @@ const SUPABASE_ACTIONS = new Set<string>([
     'tna/summary',
     'tna/gaps-report',
     'tna/lms-report',
+    // KPI read cutovers.
+    'kpi/reporting-summary',
+    // Employee insights cutover.
+    'employees/insights',
 ]);
 
 function buildActionUrl(action: string, domain: Domain): string {
@@ -95,13 +100,20 @@ async function requestSupabase<TSchema>(
     return requestLegacy(domain, action, payload, method, schema, accessToken);
 }
 
+async function resolveAccessToken(accessToken?: string): Promise<string | undefined> {
+    if (accessToken) return accessToken;
+    const session = await getSupabaseSession();
+    return session?.access_token || undefined;
+}
+
 export const transport = {
     async execute<TSchema>(request: AdapterRequest): Promise<TSchema> {
         const source = resolveSource(request.action, env.backendTarget);
         const method = request.method || 'POST';
+        const accessToken = await resolveAccessToken(request.accessToken);
         if (source === 'supabase') {
-            return requestSupabase(request.domain, request.action, request.payload, method, request.schema, request.accessToken);
+            return requestSupabase(request.domain, request.action, request.payload, method, request.schema, accessToken);
         }
-        return requestLegacy(request.domain, request.action, request.payload, method, request.schema, request.accessToken);
+        return requestLegacy(request.domain, request.action, request.payload, method, request.schema, accessToken);
     },
 };

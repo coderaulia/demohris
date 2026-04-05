@@ -28,6 +28,41 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-05 - Playwright E2E Coverage for Auth, Dashboard, Employees, and KPI
+- Commit/PR: pending
+- Type: test(e2e) | docs | fix(frontend)
+- Scope: React shell non-LMS regression coverage and route/auth-state alignment
+- Completed:
+  - Added role-based Playwright auth bootstrap with reusable storage state:
+    - `tests/e2e/helpers/auth.ts`
+    - `tests/e2e/global.setup.ts`
+    - `playwright.config.ts`
+  - Added new non-LMS E2E specs:
+    - `tests/e2e/auth.spec.ts`
+    - `tests/e2e/dashboard.spec.ts`
+    - `tests/e2e/employees.spec.ts`
+    - `tests/e2e/kpi.spec.ts`
+  - Aligned React shell route behavior with testable live paths:
+    - `/employees` and `/employees/:employeeId` are now canonical employee routes
+    - `/kpi` is now the canonical KPI route
+    - employee access to `/employees` and `/kpi` redirects to `/dashboard`
+  - Fixed authenticated transport behavior by auto-forwarding the Supabase access token for backend API reads.
+  - Hardened KPI reporting behavior:
+    - manager KPI view narrows to manager department when no explicit department filter is selected
+    - KPI empty states render `No data` instead of literal `Deferred` badges
+  - Validation:
+    - `npm run build --prefix apps/web-react` -> pass
+    - `E2E_BASE_URL=http://127.0.0.1:3000 npm run qa:e2e` -> pass (24/24)
+- Gap Found:
+  - Existing legacy/LMS `.spec.js` files remain in `tests/e2e`, but the active Playwright run now targets the new TypeScript non-LMS suite only.
+  - Staging-specific `E2E_BASE_URL` is still environment-driven and must be provided outside local runs when validating the hosted shell.
+- Next Follow-up:
+  - [ ] Add LMS/TNA E2E coverage once those routes are in-scope for end-to-end rollout.
+  - [ ] Decide whether to migrate or archive the older legacy `.spec.js` Playwright smoke files.
+  - [ ] Point the suite at staging `E2E_BASE_URL` in CI to validate the hosted environment continuously.
+- Notes:
+  - Local verification used the backend-served React shell on `http://127.0.0.1:3000` after mirroring the React build into root `dist`.
+
 ## 2026-04-05 - Bundle Optimization and Dead File Cleanup
 - Commit/PR: `f01520e` + `03f92ec`
 - Type: chore | perf

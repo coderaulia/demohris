@@ -20,11 +20,6 @@ interface Filters {
     period: string;
 }
 
-function monthNow(): string {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
 function CardGrid({
     title,
     description,
@@ -64,12 +59,12 @@ export function KpiReportingPage({ initialMode = 'kpi' }: KpiReportingPageProps)
     const [draftFilters, setDraftFilters] = useState<Filters>({
         department: '',
         manager_id: '',
-        period: monthNow(),
+        period: '',
     });
     const [filters, setFilters] = useState<Filters>({
         department: '',
         manager_id: '',
-        period: monthNow(),
+        period: '',
     });
 
     const overviewQuery = useQuery({
@@ -157,7 +152,7 @@ export function KpiReportingPage({ initialMode = 'kpi' }: KpiReportingPageProps)
                             type="button"
                             variant="outline"
                             onClick={() => {
-                                const reset = { department: '', manager_id: '', period: monthNow() };
+                                const reset = { department: '', manager_id: '', period: '' };
                                 setDraftFilters(reset);
                                 setFilters(reset);
                             }}
@@ -250,7 +245,7 @@ export function KpiReportingPage({ initialMode = 'kpi' }: KpiReportingPageProps)
                                                 <td className="px-4 py-3">
                                                     {mode === 'kpi'
                                                         ? (row.avg_achievement === null ? (
-                                                            <Badge variant="outline">Deferred</Badge>
+                                                            <span className="text-muted-foreground">No data</span>
                                                         ) : (
                                                             <span>{row.avg_achievement}% avg</span>
                                                         ))

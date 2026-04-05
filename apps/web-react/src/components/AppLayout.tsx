@@ -46,7 +46,7 @@ const navSections: NavSection[] = [
         label: 'Workforce',
         roles: ['superadmin', 'hr', 'manager'],
         items: [
-            { to: '/workforce/directory', label: 'Employee Directory', icon: <Users className="size-4" />, roles: ['superadmin', 'hr', 'manager'] },
+            { to: '/employees', label: 'Employee Directory', icon: <Users className="size-4" />, roles: ['superadmin', 'hr', 'manager'] },
             { to: '/workforce/manpower-planning', label: 'Manpower Planning', icon: <BriefcaseBusiness className="size-4" />, roles: ['superadmin', 'hr'] },
         ],
     },
@@ -65,7 +65,7 @@ const navSections: NavSection[] = [
         label: 'Performance',
         roles: ['superadmin', 'hr', 'manager'],
         items: [
-            { to: '/performance/kpi-records', label: 'KPI Records', icon: <BarChart3 className="size-4" />, roles: ['superadmin', 'hr', 'manager'] },
+            { to: '/kpi', label: 'KPI Records', icon: <BarChart3 className="size-4" />, roles: ['superadmin', 'hr', 'manager'] },
             { to: '/performance/kpi-input', label: 'KPI Input', icon: <Gauge className="size-4" />, roles: ['superadmin', 'hr', 'manager'] },
             { to: '/performance/appraisal', label: 'Performance Appraisal', icon: <Compass className="size-4" />, roles: ['superadmin', 'hr'] },
             { to: '/performance/probation', label: 'Probation', icon: <Shield className="size-4" />, roles: ['superadmin', 'hr'] },
