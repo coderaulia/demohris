@@ -40,7 +40,11 @@
 		"qa:lms:workflow": "node scripts/qa/lms-mutation-workflow-smoke.mjs",
 		"qa:lms:sprint4": "node scripts/qa/lms-sprint4-admin-smoke.mjs",
 		"qa:tna:workflow": "node scripts/qa/tna-mutation-workflow-smoke.mjs",
-		"qa:employees:insights": "node scripts/qa/employees-insights-smoke.mjs"
+		"qa:employees:insights": "node scripts/qa/employees-insights-smoke.mjs",
+		"qa:role:employees": "node scripts/qa/employees-role-scope-smoke.mjs",
+		"qa:role:kpi": "node scripts/qa/kpi-role-scope-smoke.mjs",
+		"qa:role:tna": "node scripts/qa/tna-role-scope-smoke.mjs",
+		"qa:role:all": "npm run qa:role:employees && npm run qa:role:kpi && npm run qa:role:tna"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.58.2",
