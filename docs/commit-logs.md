@@ -28,6 +28,60 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-05 - KPI Management End-to-End Implementation
+- Commit/PR: `45140ee`
+- Type: feat(kpi) | refactor | docs
+- Scope: Full KPI management system — definitions, targets, governance, approvals, records, department drill-down
+- Completed:
+  - Backend (server/modules/kpi.js):
+    - Complete rewrite with 18 new KPI actions (all Supabase-only)
+    - kpi/definitions/list|create|update|delete (with governance support)
+    - kpi/targets/get|set (personalized per-employee per-period)
+    - kpi/governance/get|set (HR approval toggle)
+    - kpi/approvals/list|approve|reject
+    - kpi/records/list (role-scoped: all/team/self)
+    - kpi/record/create|update|delete (auto achievement calculation, ratio support)
+    - kpi/department-summary (for dashboard drill-down modal)
+    - kpi/version-history (audit trail)
+  - Database (supabase/migrations/010_kpi_management_schema.sql):
+    - kpi_targets table (personalized targets)
+    - kpi_governance table (HR approval toggle)
+    - Enhanced kpi_definitions (formula, kpi_type, applies_to_position, etc.)
+    - RLS policies for all new tables
+  - Contracts (packages/contracts/src/kpi.ts):
+    - KpiDefinitionSchema, KpiTargetSchema, KpiGovernanceSchema
+    - KpiRecordEnrichedSchema, KpiDepartmentSummarySchema
+    - KpiVersionHistorySchema
+  - React Frontend (apps/web-react/src):
+    - KpiRecordsPage: Records table with filters, edit/delete modal
+    - KpiInputPage: Assessment setup + KPI achievement input panel
+    - KpiManagementPage: Settings page with targets, governance, definitions, approvals, version history
+    - KpiDrillDownModal: Department drill-down with stats, period tabs, employee performance
+    - Updated DashboardPage to open drill-down modal on department card click
+    - Updated router with new KPI routes
+    - Updated kpiAdapter with all new methods
+  - Documentation:
+    - Updated docs/api-endpoint.md (full KPI permission matrix + examples)
+    - Updated docs/backend-cutover-matrix.md (KPI cutover section)
+    - Updated docs/project-status.md
+  - Validation:
+    - `npm run qa:contracts` -> pass (72/72)
+    - `npm run build --prefix apps/web-react` -> pass
+    - Bundle: 439.93kB → 119.84kB gzipped (main chunk)
+- Gap Found:
+  - No E2E Playwright tests for KPI workflows yet
+  - KPI record create/update uses `Record<string, unknown>` payload type (not fully typed)
+  - Manager role-scoping for `kpi/record/create` relies on `manager_id` field in employees table
+- Next Follow-up:
+  - [ ] Add E2E Playwright tests for KPI input → records flow
+  - [ ] Add contract tests for new KPI endpoints
+  - [ ] Add role-scope smoke tests for KPI endpoints
+  - [ ] Consider adding KPI export (Excel/PDF) functionality
+- Notes:
+  - Supabase-only implementation (no legacy MySQL fallback)
+  - Follows single-slice rule for new code
+  - Certificate is NOT auto-triggered on LMS complete (explicit decoupling)
+
 ## 2026-04-05 - Playwright E2E Coverage for Auth, Dashboard, Employees, and KPI
 - Commit/PR: `5485eee`
 - Type: test(e2e) | docs | fix(frontend)

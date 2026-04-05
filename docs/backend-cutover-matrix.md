@@ -1,6 +1,6 @@
 # Backend Cutover Matrix
 
-Last updated: 2026-04-04
+Last updated: 2026-04-05
 
 Purpose: source-of-truth matrix for API rollout from legacy MySQL handlers to Supabase-backed handlers.
 
@@ -61,11 +61,12 @@ Files verified:
 | `modules/*` write (`update/toggle/activity`) | legacy-only | MySQL | contract only | legacy-only | unchanged in this slice |
 | `db/query` | legacy-only | MySQL | contract only | legacy-only | no cutover in this slice |
 | Employees shell read workflow (`/employees`, `/employees/:employeeId`) | in progress (read-first) | mixed: Supabase direct client reads in supabase mode, legacy `db/query` fallback in auto/legacy modes | frontend typecheck/build + role-scope behavior validated in shell | feature-flagged on for authenticated shell | no in-shell employee mutations; superadmin CRUD links to legacy app |
-| KPI/Assessment shell read workflow (`/kpi`) | in progress (read-first) | mixed: verified TNA report reads + employee directory reads, KPI records via Supabase direct read or legacy `db/query` fallback | frontend typecheck/build validated; no dedicated backend smoke yet | feature-flagged on for authenticated shell | KPI achievement metrics explicitly deferred when target fields are unavailable/inconsistent |
+| `kpi/*` | Supabase-only (new) | Supabase | contract verified (72/72) | React shell (`/kpi`, `/performance/kpi-records`, `/performance/kpi-input`, `/system/kpi-settings`) | Full KPI management: definitions, targets, governance, approvals, records, department-summary, version-history |
+| `kpi/reporting-summary` | verified | Supabase (with legacy fallback) | contract verified | React shell | Department-grouped KPI achievement summary |
 | `lms/courses/*` | in progress (read list/get verified) | mixed: Supabase for `list|get` via `LMS_READ_SOURCE`, MySQL for create/update/delete/publish | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | read-only course catalog parity now verified |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |
-| `lms/enrollments/*` | in progress (read actions verified; `start`, `enroll`, `unenroll` mutation slices cut over) | mixed: Supabase for `list/get/my-courses` + `start|enroll|unenroll` via source switch, MySQL for remaining mutations | contract verified (`qa:contracts`), workflow smoke partially blocked locally (`qa:lms:workflow` auth mapping) | feature-flagged off | `start` + `enroll|unenroll` use mutation source switch with legacy rollback |
+| `lms/enrollments/complete` | verified | Supabase (via `LMS_MUTATION_SOURCE`) | workflow smoke verified | React shell | Supabase-only path; NO auto certificate trigger |
 | `lms/progress/*` | in progress (read action verified; mutations legacy) | mixed: Supabase for `get` via source switch, MySQL for mutations | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | `progress/get` parity verified |
 | `lms/quizzes/*` | blocked | MySQL | not tested | feature-flagged off | high-risk; defer |
 | `lms/dashboard/*` | blocked | MySQL | not tested | feature-flagged off | defer |
@@ -326,3 +327,45 @@ Validation status:
 Rollback plan:
 - set `LMS_MUTATION_SOURCE=legacy`
 - keep LMS React route feature-flagged off
+
+## KPI Full Management Cutover (2026-04-05)
+
+Slice:
+- Full KPI management suite (Supabase-only, no legacy MySQL fallback):
+  - `kpi/definitions/list|create|update|delete`
+  - `kpi/targets/get|set`
+  - `kpi/governance/get|set`
+  - `kpi/approvals/list|approve|reject`
+  - `kpi/records/list`
+  - `kpi/record/create|update|delete`
+  - `kpi/department-summary`
+  - `kpi/version-history`
+  - `kpi/reporting-summary` (existing, now with Supabase-first)
+
+Why Supabase-only:
+- New feature build from scratch
+- No legacy MySQL coupling
+- Clean RLS policies from day one
+- Follows single-slice rule for new code
+
+Database migration:
+- `supabase/migrations/010_kpi_management_schema.sql`
+- Tables: `kpi_targets`, `kpi_governance`
+- Enhanced: `kpi_definitions` (formula, kpi_type, applies_to_position, target_value, effective_date, version, created_by, change_note)
+- RLS policies for all new tables
+
+Validation:
+- `npm run qa:contracts` -> pass (72/72)
+- `npm run build --prefix apps/web-react` -> pass
+- Bundle: 439.93kB → 119.84kB gzipped (main chunk)
+
+Frontend exposure:
+- `/kpi` → KpiRecordsPage (records table with filters, edit/delete)
+- `/performance/kpi-records` → KpiRecordsPage (same)
+- `/performance/kpi-input` → KpiInputPage (assessment setup + KPI input)
+- `/system/kpi-settings` → KpiManagementPage (definitions, targets, governance, approvals, version history)
+- Dashboard department cards → KpiDrillDownModal (stats, period tabs, employee performance)
+
+Rollback:
+- Feature is new; no legacy path to revert to
+- Can disable routes in `router.tsx` if needed

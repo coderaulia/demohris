@@ -6,9 +6,9 @@ Purpose: keep API docs consistent with implementation and frontend usage.
 - Last sync date: 2026-04-05
 - Scope:
   - backend handlers in `server/app.js`, `server/modules/lms.js`, `server/modules/tna.js`, `server/modules/kpi.js`, `server/modules/employees.js`
-  - frontend API callers in `src/modules/data/*.js`
+  - frontend API callers in `src/modules/data/*.js` and `apps/web-react/src/adapters/*.ts`
   - React feature flags in `apps/web-react/src/lib/env.ts`
-- Result: API/docs/frontend drift reduced; Phase A gate formally closed (2026-04-05 audit pass).
+- Result: Full KPI management suite added (definitions, targets, governance, approvals, records, department-summary, version-history). All Supabase-only.
 
 ## PHASE 1 - Cross Check
 
@@ -1112,7 +1112,24 @@ HTTP 403.
 
 | Action | employee | manager | hr | superadmin |
 |---|---|---|---|---|
-| `kpi/reporting-summary` | — | dept (forced) | all | all |
+| `kpi/reporting-summary` | 403 | dept (forced) | all | all |
+| `kpi/records/list` | self | team | all | all |
+| `kpi/record/create` | — | team | any | any |
+| `kpi/record/update` | — | — | any | any |
+| `kpi/record/delete` | — | — | — | ✓ [sa] |
+| `kpi/definitions/list` | ✓ | ✓ | ✓ | ✓ |
+| `kpi/definitions/create` | — | ✓ (pending if governance) | ✓ | ✓ |
+| `kpi/definitions/update` | — | ✓ (pending if governance) | ✓ | ✓ |
+| `kpi/definitions/delete` | — | — | ✓ | ✓ |
+| `kpi/targets/get` | self | team | any | any |
+| `kpi/targets/set` | — | — | ✓ | ✓ |
+| `kpi/governance/get` | ✓ | ✓ | ✓ | ✓ |
+| `kpi/governance/set` | — | — | — | ✓ [sa] |
+| `kpi/approvals/list` | — | — | ✓ | ✓ |
+| `kpi/approvals/approve` | — | — | ✓ | ✓ |
+| `kpi/approvals/reject` | — | — | ✓ | ✓ |
+| `kpi/department-summary` | — | dept | all | all |
+| `kpi/version-history` | ✓ | ✓ | ✓ | ✓ |
 
 ---
 
@@ -1120,7 +1137,7 @@ HTTP 403.
 
 | Action | Tag | Notes |
 |---|---|---|
-| `lms/enrollments/complete` | `[legacy-only]` | MySQL-backed only; `LMS_MUTATION_SOURCE=supabase` path not yet implemented. Do not enable LMS route until this slice is cut over. |
+| `lms/enrollments/complete` | `[supabase-cutover]` | Supabase-backed via `LMS_MUTATION_SOURCE=supabase`. Certificate is NOT auto-triggered (separate action). |
 | `lms/progress/update` | `[legacy-only]` | MySQL-backed only. Enforces `employee_id === currentUser.employee_id` strictly. |
 | `lms/progress/complete-lesson` | `[legacy-only]` | MySQL-backed only. |
 | `lms/quizzes/submit` | `[legacy-only]` | MySQL-backed only. No Supabase cutover planned yet. |
@@ -1818,21 +1835,96 @@ Scope in this update:
 
 #### `kpi/record/create`
 - Request: `POST /api?action=kpi/record/create`
-- Body: `{ employee_id, period, score|actual_value, target_value?, notes?, kpi_id? }`
+- Body: `{ employee_id, kpi_definition_id, period, actual_value|score|numerator+denominator, notes? }`
 - Success: `{ success: true, record }`
 - Role scope:
-  - `superadmin`, `hr` only
+  - `superadmin`, `hr`: any employee
+  - `manager`: direct reports only
 - Notes:
-  - handler resolves an active KPI definition (or uses provided `kpi_id`)
-  - stores score as `kpi_records.value`
-  - persists `target_snapshot` when `target_value` is supplied or an active target exists
+  - For ratio KPIs: `actual_value = numerator / denominator * 100`
+  - Auto-resolves target from `kpi_targets` (personal) or `kpi_definitions` (default)
+  - Auto-calculates `achievement_pct = actual_value / target_value * 100`
 
 #### `kpi/record/update`
 - Request: `POST /api?action=kpi/record/update`
-- Body: `{ record_id, period?, score?, actual_value?, target_value?, notes?, kpi_id? }`
+- Body: `{ record_id, period?, actual_value|score?, target_value?, notes? }`
 - Success: `{ success: true, record }`
-- Role scope:
-  - `superadmin`, `hr` only
+- Role scope: `superadmin`, `hr` only
+
+#### `kpi/record/delete`
+- Request: `POST /api?action=kpi/record/delete`
+- Body: `{ record_id }`
+- Success: `{ success: true }`
+- Role scope: `superadmin`, `hr` only
+- Notes: soft-delete sets `deleted_at`
+
+#### `kpi/definitions/create`
+- Request: `POST /api?action=kpi/definitions/create`
+- Body: `{ name, description?, formula?, unit, kpi_type, applies_to_position?, target_value, effective_date, change_note? }`
+- Success: `{ success: true, definition }`
+- Role scope: `superadmin`, `hr` (approved); `manager` (pending if governance enabled)
+
+#### `kpi/definitions/update`
+- Request: `POST /api?action=kpi/definitions/update`
+- Body: `{ definition_id, ...fields, change_note? }`
+- Success: `{ success: true, definition }`
+- Notes: bumps version number
+
+#### `kpi/definitions/delete`
+- Request: `POST /api?action=kpi/definitions/delete`
+- Body: `{ definition_id }`
+- Success: `{ success: true }`
+- Notes: soft-delete sets `status='archived'`
+
+#### `kpi/targets/get`
+- Request: `POST /api?action=kpi/targets/get`
+- Body: `{ employee_id, period }`
+- Success: `{ success: true, targets: [{ kpi_definition_id, kpi_name, unit, target_value, source }] }`
+- Notes: falls back to definition `target_value` if no personalized target exists
+
+#### `kpi/targets/set`
+- Request: `POST /api?action=kpi/targets/set`
+- Body: `{ employee_id, period, targets: [{ kpi_definition_id, target_value }] }`
+- Success: `{ success: true, targets }`
+- Role scope: `superadmin`, `hr` only
+
+#### `kpi/governance/get`
+- Request: `POST /api?action=kpi/governance/get`
+- Success: `{ success: true, require_hr_approval: boolean }`
+
+#### `kpi/governance/set`
+- Request: `POST /api?action=kpi/governance/set`
+- Body: `{ require_hr_approval: boolean }`
+- Success: `{ success: true, require_hr_approval: boolean }`
+- Role scope: `superadmin` only
+
+#### `kpi/approvals/list`
+- Request: `POST /api?action=kpi/approvals/list`
+- Success: `{ success: true, pending: [KpiDefinition] }`
+- Role scope: `superadmin`, `hr` only
+
+#### `kpi/approvals/approve`
+- Request: `POST /api?action=kpi/approvals/approve`
+- Body: `{ definition_id }`
+- Success: `{ success: true }`
+- Notes: sets `status='approved'`
+
+#### `kpi/approvals/reject`
+- Request: `POST /api?action=kpi/approvals/reject`
+- Body: `{ definition_id }`
+- Success: `{ success: true }`
+- Notes: sets `status='rejected'`
+
+#### `kpi/department-summary`
+- Request: `POST /api?action=kpi/department-summary`
+- Body: `{ department, period? }`
+- Success: `{ success: true, department, period, total_employees, employees_with_records, employees_without_records, active_kpis, overall_achievement_pct, six_month_trend: [{ month, avg_achievement }], employees: [{ employee_id, name, position, kpi_group, has_record, avg_achievement, kpis: [{ kpi_name, target, actual, achievement_pct, status, unit }] }] }`
+- Role scope: `superadmin`, `hr` (any dept); `manager` (own dept only)
+
+#### `kpi/version-history`
+- Request: `POST /api?action=kpi/version-history`
+- Body: `{ kpi_definition_id?, limit? }`
+- Success: `{ success: true, history: [{ type, scope, effective, version, status, value, change_note, created_by, created_at }] }`
 
 ### Assessment / TNA Write Action
 
