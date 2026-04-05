@@ -15,7 +15,8 @@ import {
     type EmployeeUpdateInput,
 } from '@demo-kpi/contracts';
 
-import { getSupabaseSession } from '@/lib/supabaseClient';
+import { env } from '@/lib/env';
+import { getSupabaseSession, supabase } from '@/lib/supabaseClient';
 import { transport } from './transport';
 
 export interface EmployeeListFilters {
@@ -28,36 +29,134 @@ export interface EmployeeListFilters {
     limit?: number;
 }
 
+function normalizeString(value: unknown): string {
+    return String(value || '').trim();
+}
+
+function buildSearchIndex(row: EmployeeRecord) {
+    return [row.employee_id, row.name, row.email, row.auth_email, row.department, row.position]
+        .map(value => String(value || '').toLowerCase())
+        .join(' ');
+}
+
+function enforceClientScope(rows: EmployeeRecord[], context: { role: EmployeeRole | null; employeeId: string }): EmployeeRecord[] {
+    const currentId = normalizeString(context.employeeId);
+    if (!currentId) return rows;
+
+    if (context.role === 'employee') {
+        return rows.filter(row => normalizeString(row.employee_id) === currentId);
+    }
+
+    if (context.role === 'manager') {
+        return rows.filter(row => normalizeString(row.manager_id) === currentId);
+    }
+
+    return rows;
+}
+
+function applyListFilters(rows: EmployeeRecord[], filters: EmployeeListFilters): EmployeeRecord[] {
+    const search = normalizeString(filters.search).toLowerCase();
+    const department = normalizeString(filters.department).toLowerCase();
+    const role = normalizeString(filters.role).toLowerCase();
+    const managerId = normalizeString(filters.manager_id);
+    const status = normalizeString(filters.status).toLowerCase();
+
+    return rows.filter(row => {
+        if (department && normalizeString(row.department).toLowerCase() !== department) return false;
+        if (role && normalizeString(row.role).toLowerCase() !== role) return false;
+        if (managerId && normalizeString(row.manager_id) !== managerId) return false;
+        if (status && normalizeString(row.status || 'active').toLowerCase() !== status) return false;
+        if (search && !buildSearchIndex(row).includes(search)) return false;
+        return true;
+    });
+}
+
 async function getAuthAccessToken(): Promise<string> {
     const session = await getSupabaseSession();
     return String(session?.access_token || '');
 }
 
+async function fetchSupabaseEmployees(): Promise<EmployeeRecord[]> {
+    if (!supabase) {
+        throw new Error('Supabase client is not configured for Employees reads.');
+    }
+
+    const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('name', { ascending: true });
+
+    if (error) {
+        throw new Error(error.message || 'Failed to load employees from Supabase.');
+    }
+
+    return (data || [])
+        .map(row => EmployeeRecordSchema.safeParse(row))
+        .filter(result => result.success)
+        .map(result => result.data);
+}
+
 export const employeesAdapter = {
     async list(
         filters: EmployeeListFilters = {},
-        _context?: { role: EmployeeRole | null; employeeId: string },
+        context: { role: EmployeeRole | null; employeeId: string } = { role: null, employeeId: '' },
     ): Promise<EmployeeListResponse> {
         const accessToken = await getAuthAccessToken();
-        return transport.execute<EmployeeListResponse>({
-            domain: 'employees',
-            action: 'employees/list',
-            payload: filters,
-            schema: EmployeeListResponseSchema,
-            accessToken: accessToken || undefined,
-        });
+
+        try {
+            const response = await transport.execute<EmployeeListResponse>({
+                domain: 'employees',
+                action: 'employees/list',
+                payload: filters,
+                schema: EmployeeListResponseSchema,
+                accessToken: accessToken || undefined,
+            });
+            return EmployeeListResponseSchema.parse(response);
+        } catch (error) {
+            if (env.backendTarget === 'legacy') {
+                throw error;
+            }
+
+            const rows = await fetchSupabaseEmployees();
+            const scoped = enforceClientScope(rows, context);
+            const filtered = applyListFilters(scoped, filters);
+            const page = Math.max(1, Number(filters.page || 1));
+            const limit = Math.max(1, Number(filters.limit || filtered.length || 100));
+            const start = (page - 1) * limit;
+
+            return EmployeeListResponseSchema.parse({
+                success: true,
+                source: 'supabase',
+                deferred: ['Backend employees/list unavailable; fell back to direct Supabase read.'],
+                employees: filtered.slice(start, start + limit),
+                total: filtered.length,
+                page,
+            });
+        }
     },
 
-    async getEmployee(employeeId: string): Promise<EmployeeRecord | null> {
+    async getEmployee(
+        employeeId: string,
+        context: { role: EmployeeRole | null; employeeId: string } = { role: null, employeeId: '' },
+    ): Promise<EmployeeRecord | null> {
         const accessToken = await getAuthAccessToken();
-        const response = await transport.execute<EmployeeMutationResponse>({
-            domain: 'employees',
-            action: 'employees/get',
-            payload: { employee_id: employeeId },
-            schema: EmployeeMutationResponseSchema,
-            accessToken: accessToken || undefined,
-        });
-        return EmployeeRecordSchema.parse(response.employee);
+        try {
+            const response = await transport.execute<EmployeeMutationResponse>({
+                domain: 'employees',
+                action: 'employees/get',
+                payload: { employee_id: employeeId },
+                schema: EmployeeMutationResponseSchema,
+                accessToken: accessToken || undefined,
+            });
+            return EmployeeRecordSchema.parse(response.employee);
+        } catch (error) {
+            if (env.backendTarget === 'legacy') {
+                throw error;
+            }
+            const rows = await fetchSupabaseEmployees();
+            const scoped = enforceClientScope(rows, context);
+            return scoped.find(row => normalizeString(row.employee_id) === normalizeString(employeeId)) || null;
+        }
     },
 
     async create(input: EmployeeCreateInput): Promise<EmployeeMutationResponse> {
@@ -110,9 +209,9 @@ export const employeesAdapter = {
         const roles = new Set<string>();
 
         for (const employee of employees) {
-            const department = String(employee.department || '').trim();
-            const managerId = String(employee.manager_id || '').trim();
-            const role = String(employee.role || '').trim();
+            const department = normalizeString(employee.department);
+            const managerId = normalizeString(employee.manager_id);
+            const role = normalizeString(employee.role);
             if (department) departments.add(department);
             if (managerId) managerIds.add(managerId);
             if (role) roles.add(role);

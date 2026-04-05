@@ -116,7 +116,10 @@ export function EmployeeDetailPage() {
 
     const detailQuery = useQuery({
         queryKey: ['employees', 'detail', decodedEmployeeId],
-        queryFn: () => employeesAdapter.getEmployee(decodedEmployeeId),
+        queryFn: () => employeesAdapter.getEmployee(decodedEmployeeId, {
+            employeeId: String(auth.user?.employee_id || ''),
+            role: auth.role || null,
+        }),
         enabled: Boolean(decodedEmployeeId),
         staleTime: 30_000,
     });
