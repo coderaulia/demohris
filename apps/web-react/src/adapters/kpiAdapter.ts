@@ -54,6 +54,15 @@ function toStringValue(value: unknown): string {
     return String(value ?? '').trim();
 }
 
+function makeCard(label: string, value: string, hint: string) {
+    return {
+        label,
+        value,
+        hint,
+        deferred: false,
+    };
+}
+
 function resolveSource(): ReadSource {
     if (env.backendTarget === 'legacy') return 'legacy';
     if (env.backendTarget === 'supabase') return 'supabase';
@@ -128,7 +137,6 @@ export const kpiAdapter = {
         const period = toStringValue(filters.period);
         let departmentFilter = toStringValue(filters.department);
         const managerFilter = toStringValue(filters.manager_id);
-        const deferred: string[] = [];
 
         const employeesResult = await employeesAdapter.list(
             {
@@ -206,20 +214,20 @@ export const kpiAdapter = {
                 .filter((value): value is number => value !== null);
 
             kpiCards = [
-                { label: 'Employees In Scope', value: String(kpiGroups.reduce((sum, row) => sum + row.employee_count, 0)), hint: 'Employees after role and filter scope' },
-                { label: 'KPI Records (Period)', value: String(kpiGroups.reduce((sum, row) => sum + row.record_count, 0)), hint: period ? `Period ${period}` : 'All available periods' },
-                {
-                    label: 'Employees Missing KPI',
-                    value: String(kpiGroups.reduce((sum, row) => sum + row.missing_count, 0)),
-                    hint: 'Employees with no KPI records in selected period',
-                },
-                {
-                    label: 'Average Achievement',
-                    value: avgScores.length > 0
+                makeCard('Employees In Scope', String(kpiGroups.reduce((sum, row) => sum + row.employee_count, 0)), 'Employees after role and filter scope'),
+                makeCard('KPI Records (Period)', String(kpiGroups.reduce((sum, row) => sum + row.record_count, 0)), period ? `Period ${period}` : 'All available periods'),
+                makeCard(
+                    'Employees Missing KPI',
+                    String(kpiGroups.reduce((sum, row) => sum + row.missing_count, 0)),
+                    'Employees with no KPI records in selected period',
+                ),
+                makeCard(
+                    'Average Achievement',
+                    avgScores.length > 0
                         ? `${Math.round((avgScores.reduce((sum, value) => sum + value, 0) / avgScores.length) * 10) / 10}%`
                         : 'No data',
-                    hint: avgScores.length > 0 ? 'Computed from kpi/reporting-summary' : 'No scored KPI records for selected scope',
-                },
+                    avgScores.length > 0 ? 'Computed from kpi/reporting-summary' : 'No scored KPI records for selected scope',
+                ),
             ];
         } catch {
             let kpiRecords: Array<Record<string, unknown>> = [];
@@ -286,24 +294,24 @@ export const kpiAdapter = {
             }
 
             kpiCards = [
-                { label: 'Employees In Scope', value: String(employees.length), hint: 'Employees after role and filter scope' },
-                { label: 'KPI Records (Period)', value: String(kpiRecords.length), hint: period ? `Period ${period}` : 'All available periods' },
-                {
-                    label: 'Employees Missing KPI',
-                    value: String(kpiGroups.reduce((sum, row) => sum + row.missing_count, 0)),
-                    hint: 'Employees with no KPI records in selected period',
-                },
-                {
-                    label: 'Average Achievement',
-                    value: (() => {
+                makeCard('Employees In Scope', String(employees.length), 'Employees after role and filter scope'),
+                makeCard('KPI Records (Period)', String(kpiRecords.length), period ? `Period ${period}` : 'All available periods'),
+                makeCard(
+                    'Employees Missing KPI',
+                    String(kpiGroups.reduce((sum, row) => sum + row.missing_count, 0)),
+                    'Employees with no KPI records in selected period',
+                ),
+                makeCard(
+                    'Average Achievement',
+                    (() => {
                         const vals = kpiGroups.map(row => row.avg_achievement).filter((n): n is number => n !== null);
                         if (vals.length === 0) return 'No data';
                         return `${Math.round((vals.reduce((s, n) => s + n, 0) / vals.length) * 10) / 10}%`;
                     })(),
-                    hint: kpiGroups.some(row => row.avg_achievement !== null)
+                    kpiGroups.some(row => row.avg_achievement !== null)
                         ? 'Computed only when value/target are available'
                         : 'No KPI achievement values are available for this scope',
-                },
+                ),
             ];
         }
 
@@ -360,14 +368,14 @@ export const kpiAdapter = {
             .sort((a, b) => a.department.localeCompare(b.department));
 
         const assessmentCards = [
-            { label: 'Needs Identified', value: String(toNumber(tnaSummary.total_needs_identified)), hint: 'From verified TNA summary endpoint' },
-            { label: 'Needs Completed', value: String(toNumber(tnaSummary.needs_completed)), hint: 'Completed training needs' },
-            { label: 'Critical Gaps', value: String(toNumber(tnaSummary.critical_gaps)), hint: 'Critical-priority needs' },
-            {
-                label: 'Employees Missing Assessment',
-                value: String(assessmentGroups.reduce((sum, row) => sum + row.missing_count, 0)),
-                hint: 'Employees without visible TNA gap records',
-            },
+            makeCard('Needs Identified', String(toNumber(tnaSummary.total_needs_identified)), 'From verified TNA summary endpoint'),
+            makeCard('Needs Completed', String(toNumber(tnaSummary.needs_completed)), 'Completed training needs'),
+            makeCard('Critical Gaps', String(toNumber(tnaSummary.critical_gaps)), 'Critical-priority needs'),
+            makeCard(
+                'Employees Missing Assessment',
+                String(assessmentGroups.reduce((sum, row) => sum + row.missing_count, 0)),
+                'Employees without visible TNA gap records',
+            ),
         ];
 
         return {

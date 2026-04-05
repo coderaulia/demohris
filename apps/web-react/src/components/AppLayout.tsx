@@ -16,6 +16,7 @@ import {
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { env } from '@/lib/env';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -74,10 +75,10 @@ const navSections: NavSection[] = [
     },
     {
         label: 'Learning (LMS)',
-        roles: ['superadmin', 'hr', 'manager'],
+        roles: ['superadmin', 'hr', 'manager', 'employee'],
         items: [
-            { to: '/lms', label: 'Training Catalog', icon: <BookOpen className="size-4" />, roles: ['superadmin', 'hr'] },
-            { to: '/lms/my-courses', label: 'My Courses', icon: <GraduationCap className="size-4" />, roles: ['superadmin', 'hr', 'manager'] },
+            { to: '/lms', label: 'Training Catalog', icon: <BookOpen className="size-4" />, roles: ['superadmin', 'hr', 'manager', 'employee'] },
+            { to: '/lms/my-courses', label: 'My Courses', icon: <GraduationCap className="size-4" />, roles: ['superadmin', 'hr', 'manager', 'employee'] },
             { to: '/learning/settings', label: 'LMS Settings', icon: <Settings className="size-4" />, roles: ['superadmin', 'hr'] },
         ],
     },
@@ -127,6 +128,7 @@ export function AppLayout() {
     const role = (auth.role || 'employee') as Role;
 
     const visibleSections = navSections
+        .filter(section => section.label !== 'Learning (LMS)' || env.enableLmsRoute)
         .filter(section => section.roles.includes(role))
         .map(section => ({
             ...section,

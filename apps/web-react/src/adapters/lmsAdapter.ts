@@ -121,6 +121,10 @@ export const lmsAdapter = {
         });
     },
 
+    myCourses(input: LmsListEnrollmentsInput = {}) {
+        return this.getMyCourses(input);
+    },
+
     startCourse(course_id: string) {
         return transport.execute({
             domain: 'lms',

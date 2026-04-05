@@ -29,7 +29,7 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 ## Current Baseline
 
 ## 2026-04-05 - Playwright E2E Coverage for Auth, Dashboard, Employees, and KPI
-- Commit/PR: pending
+- Commit/PR: `5485eee`
 - Type: test(e2e) | docs | fix(frontend)
 - Scope: React shell non-LMS regression coverage and route/auth-state alignment
 - Completed:
@@ -62,6 +62,49 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
   - [ ] Point the suite at staging `E2E_BASE_URL` in CI to validate the hosted environment continuously.
 - Notes:
   - Local verification used the backend-served React shell on `http://127.0.0.1:3000` after mirroring the React build into root `dist`.
+
+## 2026-04-05 - LMS React Routes Enabled for Production Shell
+- Commit/PR: pending
+- Type: feat(lms) | fix(contracts) | docs
+- Scope: enable `/lms`, `/lms/my-courses`, and `/lms/:courseId` in the React shell with Supabase-safe LMS actions
+- Completed:
+  - Upgraded the existing LMS shell pages from read-only views to production-ready read-first workflows:
+    - `/lms` now shows catalog filters (`category`, `status`, `search`)
+    - catalog cards now show title, category, duration, enrolled count, and enroll/continue CTAs
+    - enroll CTA now runs `lms/enrollments/enroll` followed by `lms/enrollments/start`
+  - Upgraded `/lms/my-courses`:
+    - progress indicator on each course card
+    - status badge + continue CTA to detail route
+  - Upgraded `/lms/:courseId`:
+    - course summary and lesson progress visibility
+    - `Mark Complete` CTA wired to `lms/enrollments/complete`
+    - deferred copy kept explicit only for quiz submission and certificate verification
+  - Opened LMS shell access for employee role and enabled LMS shell routing by default:
+    - `apps/web-react/src/router.tsx`
+    - `apps/web-react/src/components/AppLayout.tsx`
+    - `apps/web-react/src/lib/env.ts`
+    - `apps/web-react/.env.example`
+    - `apps/web-react/.env.production.example`
+  - Enabled LMS mutation actions in Supabase-target frontend transport so production `VITE_API_TARGET=supabase` builds do not 501 on enroll/start/complete.
+  - Cleared prerequisite gates before implementation:
+    - `npm run qa:lms:cutover` -> pass
+    - `npm run qa:lms:workflow` -> pass
+    - `npm run qa:contracts` -> pass (72/72)
+    - `npm run build --prefix apps/web-react` -> pass
+  - Added local browser smoke against the backend-served shell:
+    - `/lms`
+    - `/lms/my-courses`
+    - `/lms/:courseId`
+- Gap Found:
+  - Hosted staging/live validation is still pending because these local shell changes are not deployed yet.
+  - Quiz submission and certificate issuance remain explicitly deferred in the React LMS surface.
+- Next Follow-up:
+  - [ ] Deploy the updated shell and run the same LMS smoke on the hosted environment.
+  - [ ] Add Playwright LMS E2E coverage for enroll/start/complete flows.
+  - [ ] Decide whether to surface unenroll and lesson-completion actions in a later LMS UX pass.
+- Notes:
+  - `apps/web-react/src/pages/LmsPlaceholderPage.tsx` is no longer part of the surface; the production work upgraded the existing `LmsReadOnlyPage.tsx` and `LmsCourseDetailPage.tsx` in place.
+  - A small contract follow-up was included so `KpiReportingSummaryResponseSchema` exists in `packages/contracts/src/kpi.ts`, unblocking `npm run qa:contracts`.
 
 ## 2026-04-05 - Bundle Optimization and Dead File Cleanup
 - Commit/PR: `f01520e` + `03f92ec`

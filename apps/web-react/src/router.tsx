@@ -13,9 +13,11 @@ import { LmsCourseDetailPage } from '@/pages/LmsCourseDetailPage';
 import { LmsReadOnlyPage } from '@/pages/LmsReadOnlyPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RouteGuard } from '@/components/RouteGuard';
+import { env } from '@/lib/env';
 
 const ADMIN_HR = ['superadmin', 'hr'] as const;
 const ADMIN_HR_MANAGER = ['superadmin', 'hr', 'manager'] as const;
+const LMS_ACCESS = ['superadmin', 'hr', 'manager', 'employee'] as const;
 
 export const router = createBrowserRouter([
     {
@@ -196,39 +198,39 @@ export const router = createBrowserRouter([
 
             {
                 path: 'lms',
-                element: (
-                    <RoleGate allow={[...ADMIN_HR]}>
+                element: env.enableLmsRoute ? (
+                    <RoleGate allow={[...LMS_ACCESS]}>
                         <LmsReadOnlyPage mode="catalog" />
                     </RoleGate>
-                ),
+                ) : <Navigate to="/dashboard" replace />,
             },
             {
                 path: 'lms/my-courses',
-                element: (
-                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
+                element: env.enableLmsRoute ? (
+                    <RoleGate allow={[...LMS_ACCESS]}>
                         <LmsReadOnlyPage mode="my-courses" />
                     </RoleGate>
-                ),
+                ) : <Navigate to="/dashboard" replace />,
             },
             {
                 path: 'lms/:courseId',
-                element: (
-                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
+                element: env.enableLmsRoute ? (
+                    <RoleGate allow={[...LMS_ACCESS]}>
                         <LmsCourseDetailPage />
                     </RoleGate>
-                ),
+                ) : <Navigate to="/dashboard" replace />,
             },
             {
                 path: 'learning/settings',
-                element: (
+                element: env.enableLmsRoute ? (
                     <RoleGate allow={[...ADMIN_HR]}>
                         <DeferredModulePage title="LMS Settings" description="LMS admin settings are deferred until admin mutation endpoints are parity-tested." />
                     </RoleGate>
-                ),
+                ) : <Navigate to="/dashboard" replace />,
             },
             {
                 path: 'learning',
-                element: <Navigate to="/lms/my-courses" replace />,
+                element: env.enableLmsRoute ? <Navigate to="/lms/my-courses" replace /> : <Navigate to="/dashboard" replace />,
             },
 
             {

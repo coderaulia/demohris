@@ -36,7 +36,7 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | React Frontend Shell Migration | In progress | React+TS shell with adapter-based API layer | Role-aware IA has been rolled out (Core/Workforce/Assessment/Performance/Learning/Organization/System); Dashboard, Employees, and KPI/Assessment read-first workflows are active | High | Team | Validate role-based menu and route guard behavior in staging across superadmin/hr/manager |
 | Employees Module (React Shell) | In progress (read-first + insights) | Legacy-parity employee management workflow in modern shell | Workforce directory + employee insights are active; `employees/insights` endpoint now provides real KPI/Assessment/LMS data per employee — deferred badges removed from detail page | — | Team | Add dedicated backend employee-summary endpoints for deeper drill-down (latest KPI trend per period, full TNA history) |
 | KPI & Assessment Module (React Shell) | In progress (read-first) | Legacy-parity management reporting workflow for KPI and assessment summaries | Summary tabs and grouped department/team breakdown are available; KPI achievement metrics are deferred where backend target fields are not consistently cut over | High | Team | Add dedicated Supabase-safe KPI reporting endpoint set, then unlock deeper drill-down record pages |
-| Production Deploy Cutover (Hostinger + Supabase) | In progress | Live frontend uses Supabase-backed auth/data path for shipped routes | LMS is now enabled in read-only mode (`/lms`, `/lms/my-courses`, `/lms/:courseId`); mutation-heavy LMS/TNA flows remain deferred pending parity gates | High | Team | Keep read-first LMS visible and continue mutation cutover one slice at a time |
+| Production Deploy Cutover (Hostinger + Supabase) | In progress | Live frontend uses Supabase-backed auth/data path for shipped routes | LMS React routes are now enabled for catalog, my-courses, and detail in the production shell; hosted staging/live deploy validation is still pending, and quiz/certificate flows remain explicitly deferred | High | Team | Deploy the updated shell, then run hosted smoke for `/lms`, `/lms/my-courses`, and `/lms/:courseId` with seeded accounts |
 | QA Automation | In progress | Reliable regression protection | Playwright E2E coverage now exists for Auth, Dashboard, Employees, and KPI on the live non-LMS shell; LMS/TNA E2E suites still pending | High | Team | Keep non-LMS E2E green in staging and add LMS/TNA end-to-end coverage next |
 | Bundle Optimization | Completed | gzipped JS < 200kb | Achieved via Vite chunking and gzip compression | Medium | — | Monitor bundle size on future changes |
 
@@ -90,8 +90,9 @@ Data foundation note:
 - Legacy MySQL runtime path remains temporary compatibility code until domain query cutover is completed.
 
 Production deployment note:
-- Current release scope for public deployment is intentionally limited to React shell + Supabase-backed auth/dashboard.
-- LMS/TNA React routes are feature-flagged and not marked live until their backend paths are Supabase-ready.
+- Current release scope for public deployment is intentionally limited to React shell + Supabase-backed auth plus shipped read-first management routes.
+- LMS React routes are now enabled in the shell for catalog, my-courses, and detail workflows using Supabase-backed reads and parity-verified enrollment mutations.
+- TNA React routes remain feature-flagged off until their backend paths are Supabase-ready.
 - React dashboard now preserves management workflow patterns (without visual cloning):
   - filter bar (`department`, `manager`, `period`, clear/apply)
   - KPI Summary vs Assessment Summary tabs
@@ -115,6 +116,17 @@ Production deployment note:
   - `tests/e2e/kpi.spec.ts`
   - shared auth-state bootstrap via `tests/e2e/helpers/auth.ts` and `tests/e2e/global.setup.ts`
   - `npm run qa:e2e` currently passes locally against the backend-served React shell (`E2E_BASE_URL=http://127.0.0.1:3000`)
+- React LMS routes enabled in shell (2026-04-05):
+  - `/lms`: catalog filters (`category`, `status`, `search`) + enroll-and-start CTA
+  - `/lms/my-courses`: progress cards with status badge and continue CTA
+  - `/lms/:courseId`: section/lesson progress visibility + `Mark Complete`
+  - explicit deferred copy retained only for quiz submission and certificate verification states
+  - prerequisite gates pass:
+    - `npm run qa:lms:cutover`
+    - `npm run qa:lms:workflow`
+    - `npm run qa:contracts` (72/72)
+    - `npm run build --prefix apps/web-react`
+  - local browser smoke passes against backend-served shell (`http://127.0.0.1:3000`) for `/lms`, `/lms/my-courses`, and a real detail route
 
 Cutover note:
 - First Supabase backend domain slice is complete for `modules/*` read endpoints (`list`, `get`, `by-category`, `active`) using `MODULES_READ_SOURCE` switch.
