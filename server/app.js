@@ -18,6 +18,7 @@ import { isFeatureEnabled } from './features.js';
 import { isTnaEnabled, handleTnaAction } from './modules/tna.js';
 import { handleLmsAction } from './modules/lms.js';
 import { handleEmployeesAction } from './modules/employees.js';
+import { handleKpiAction } from './modules/kpi.js';
 import {
     getAllModules,
     getModule,
@@ -1099,7 +1100,15 @@ app.all('/api', async (req, res, next) => {
             return;
         }
 
-        if (action.startsWith('kpi/') || action.startsWith('probation/') || action.startsWith('pip/')) {
+        if (action.startsWith('kpi/')) {
+            if (!isFeatureEnabled('KPI')) {
+                throw new ApiError(404, 'KPI module is not enabled.', 'MODULE_DISABLED');
+            }
+            await handleKpiAction(req, res, action);
+            return;
+        }
+
+        if (action.startsWith('probation/') || action.startsWith('pip/')) {
             const feature = action.split('/')[0].toUpperCase();
             if (!isFeatureEnabled(feature)) {
                 throw new ApiError(404, `${feature} module is not enabled.`, 'MODULE_DISABLED');

@@ -1,7 +1,9 @@
 // server/modules/kpi.js
+import crypto from 'node:crypto';
+
 import { queryRows } from '../app.js';
-import { pool } from '../pool.js';
 import { fetchKpiReportingSummaryFromSupabase, resolveKpiReadSource } from '../compat/supabaseKpiRead.js';
+import { supabaseTableRequest } from '../compat/supabaseAdmin.js';
 
 function requireAuth(req) {
     if (!req.currentUser) {
@@ -12,6 +14,16 @@ function requireAuth(req) {
     return req.currentUser;
 }
 
+function requireRole(req, roles = []) {
+    const user = requireAuth(req);
+    if (!roles.includes(String(user.role || '').toLowerCase())) {
+        const err = new Error('Access denied.');
+        err.status = 403; err.code = 'FORBIDDEN';
+        throw err;
+    }
+    return user;
+}
+
 function getInput(req, key, defaultValue = '') {
     const bv = req.body?.[key];
     if (bv !== undefined && bv !== null && bv !== '') return bv;
@@ -20,9 +32,14 @@ function getInput(req, key, defaultValue = '') {
     return defaultValue;
 }
 
-/**
- * Parse target_snapshot — may be number, JSON string, or plain number string.
- */
+function assert(condition, message, status = 400, code = 'INVALID_INPUT') {
+    if (condition) return;
+    const err = new Error(message);
+    err.status = status;
+    err.code = code;
+    throw err;
+}
+
 function parseTargetSnapshot(raw) {
     if (raw === null || raw === undefined) return null;
     if (typeof raw === 'number') return raw;
@@ -36,7 +53,9 @@ function parseTargetSnapshot(raw) {
                 const v = Number(parsed.target_value ?? parsed.target ?? parsed.value ?? null);
                 return Number.isFinite(v) ? v : null;
             }
-        } catch { return null; }
+        } catch {
+            return null;
+        }
     }
     if (typeof raw === 'object' && raw !== null) {
         const v = Number(raw.target_value ?? raw.target ?? raw.value ?? null);
@@ -45,9 +64,6 @@ function parseTargetSnapshot(raw) {
     return null;
 }
 
-/**
- * Build grouped summary from raw legacy MySQL KPI and employee rows.
- */
 function buildGroupedSummaryFromLegacy(kpiRows, empRows, { department, managerId } = {}) {
     const empById = new Map();
     for (const e of empRows) empById.set(String(e.employee_id), e);
@@ -130,7 +146,150 @@ async function fetchKpiReportingSummaryFromLegacy({ department, period, managerI
     return buildGroupedSummaryFromLegacy(kpiRows || [], empRows || [], { department, managerId });
 }
 
-// ─── Handler ─────────────────────────────────────────────────────────────────
+async function resolveEmployeeAndKpi(employeeId, requestedKpiId = '') {
+    const [employeeRows, assignedTargets, activeDefinitions] = await Promise.all([
+        supabaseTableRequest({
+            table: 'employees',
+            method: 'GET',
+            select: 'employee_id,department,position',
+            filters: { employee_id: { type: 'eq', value: employeeId } },
+            limit: 1,
+        }),
+        supabaseTableRequest({
+            table: 'employee_kpi_targets',
+            method: 'GET',
+            select: 'kpi_id,target_value',
+            filters: { employee_id: { type: 'eq', value: employeeId }, status: { type: 'eq', value: 'active' } },
+            limit: 50,
+        }).catch(() => []),
+        supabaseTableRequest({
+            table: 'kpi_definitions',
+            method: 'GET',
+            select: 'id,name,category,unit',
+            filters: { status: { type: 'eq', value: 'active' } },
+            order: 'created_at.asc',
+            limit: 50,
+        }),
+    ]);
+
+    const employee = employeeRows[0] || null;
+    assert(Boolean(employee), 'Employee not found.', 404, 'NOT_FOUND');
+
+    const assigned = Array.isArray(assignedTargets) ? assignedTargets : [];
+    const definitions = Array.isArray(activeDefinitions) ? activeDefinitions : [];
+
+    const assignedTarget = requestedKpiId
+        ? assigned.find(row => String(row.kpi_id || '') === String(requestedKpiId)) || null
+        : assigned[0] || null;
+
+    const definition = requestedKpiId
+        ? definitions.find(row => String(row.id || '') === String(requestedKpiId)) || null
+        : (assignedTarget ? definitions.find(row => String(row.id || '') === String(assignedTarget.kpi_id || '')) || null : definitions[0] || null);
+
+    assert(Boolean(definition), 'No active KPI definition is available for this employee.', 400, 'KPI_DEFINITION_MISSING');
+
+    return {
+        employee,
+        definition,
+        assignedTarget,
+    };
+}
+
+async function createKpiRecord(req, res) {
+    const user = requireRole(req, ['superadmin', 'hr']);
+    const employeeId = String(req.body?.employee_id || '').trim();
+    const period = String(req.body?.period || '').trim();
+    const notes = String(req.body?.notes || '').trim() || null;
+    const requestedKpiId = String(req.body?.kpi_id || '').trim();
+    const actualValue = Number(req.body?.actual_value ?? req.body?.score ?? null);
+    const targetValue = Number(req.body?.target_value ?? null);
+
+    assert(employeeId, 'employee_id is required.');
+    assert(/^\d{4}-\d{2}$/.test(period), 'period must use YYYY-MM format.');
+    assert(Number.isFinite(actualValue), 'score or actual_value is required.');
+
+    const { definition, assignedTarget } = await resolveEmployeeAndKpi(employeeId, requestedKpiId);
+    const recordId = crypto.randomUUID();
+    const effectiveTarget = Number.isFinite(targetValue)
+        ? targetValue
+        : Number(assignedTarget?.target_value ?? null);
+
+    const rows = await supabaseTableRequest({
+        table: 'kpi_records',
+        method: 'POST',
+        body: [{
+            id: recordId,
+            employee_id: employeeId,
+            kpi_id: definition.id,
+            period,
+            value: actualValue,
+            notes,
+            submitted_by: user.employee_id,
+            submitted_at: new Date().toISOString(),
+            target_snapshot: Number.isFinite(effectiveTarget) ? { target_value: effectiveTarget } : null,
+            kpi_name_snapshot: definition.name || null,
+            kpi_unit_snapshot: definition.unit || null,
+            kpi_category_snapshot: definition.category || null,
+        }],
+        prefer: 'return=representation',
+    });
+
+    return res.json({ success: true, record: rows[0] || null });
+}
+
+async function updateKpiRecord(req, res) {
+    const user = requireRole(req, ['superadmin', 'hr']);
+    const recordId = String(req.body?.record_id || '').trim();
+    assert(recordId, 'record_id is required.');
+
+    const existingRows = await supabaseTableRequest({
+        table: 'kpi_records',
+        method: 'GET',
+        select: '*',
+        filters: { id: { type: 'eq', value: recordId } },
+        limit: 1,
+    });
+    const existing = existingRows[0] || null;
+    assert(Boolean(existing), 'KPI record not found.', 404, 'NOT_FOUND');
+
+    const patch = {};
+    if (req.body?.period !== undefined) {
+        const period = String(req.body.period || '').trim();
+        assert(/^\d{4}-\d{2}$/.test(period), 'period must use YYYY-MM format.');
+        patch.period = period;
+    }
+    if (req.body?.notes !== undefined) patch.notes = String(req.body.notes || '').trim() || null;
+    if (req.body?.score !== undefined || req.body?.actual_value !== undefined) {
+        const actualValue = Number(req.body?.actual_value ?? req.body?.score ?? null);
+        assert(Number.isFinite(actualValue), 'score or actual_value must be numeric.');
+        patch.value = actualValue;
+    }
+    if (req.body?.target_value !== undefined) {
+        const targetValue = Number(req.body.target_value);
+        assert(Number.isFinite(targetValue), 'target_value must be numeric.');
+        patch.target_snapshot = { target_value: targetValue };
+    }
+    if (req.body?.kpi_id !== undefined) {
+        const requestedKpiId = String(req.body.kpi_id || '').trim();
+        const { definition } = await resolveEmployeeAndKpi(String(existing.employee_id || ''), requestedKpiId);
+        patch.kpi_id = definition.id;
+        patch.kpi_name_snapshot = definition.name || null;
+        patch.kpi_unit_snapshot = definition.unit || null;
+        patch.kpi_category_snapshot = definition.category || null;
+    }
+
+    patch.updated_by = user.employee_id;
+
+    const rows = await supabaseTableRequest({
+        table: 'kpi_records',
+        method: 'PATCH',
+        filters: { id: { type: 'eq', value: recordId } },
+        body: patch,
+        prefer: 'return=representation',
+    });
+
+    return res.json({ success: true, record: rows[0] || null });
+}
 
 export async function handleKpiAction(req, res, action) {
     const user = requireAuth(req);
@@ -138,7 +297,6 @@ export async function handleKpiAction(req, res, action) {
     if (action === 'kpi/reporting-summary') {
         const role = String(user.role || '').toLowerCase();
 
-        // access guard: employee → 403
         if (role === 'employee') {
             const err = new Error('KPI reporting summary is not available for the employee role.');
             err.status = 403; err.code = 'FORBIDDEN';
@@ -148,7 +306,6 @@ export async function handleKpiAction(req, res, action) {
         const department = String(getInput(req, 'department', '')).trim();
         const period = String(getInput(req, 'period', '')).trim();
 
-        // Manager scope: force to own department only
         const effectiveDepartment = role === 'manager'
             ? String(user.department || department || '').trim()
             : department;
@@ -188,6 +345,14 @@ export async function handleKpiAction(req, res, action) {
             department: effectiveDepartment || null,
             rows,
         });
+    }
+
+    if (action === 'kpi/record/create') {
+        return createKpiRecord(req, res);
+    }
+
+    if (action === 'kpi/record/update') {
+        return updateKpiRecord(req, res);
     }
 
     const err = new Error(`Unknown KPI action: ${action}`);
