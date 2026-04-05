@@ -8,6 +8,11 @@ import {
     fetchTnaSummaryFromSupabase,
     resolveTnaReadSource,
 } from '../compat/supabaseTnaRead.js';
+import {
+    createTrainingPlanInSupabase,
+    enrollInTrainingInSupabase,
+    resolveTnaMutationSource,
+} from '../compat/supabaseTnaMutation.js';
 
 export function isTnaEnabled() {
     return isFeatureEnabled('TNA');
@@ -312,11 +317,32 @@ export async function handleTnaAction(req, res, action) {
         const employeeId = String(req.body?.employee_id || '').trim();
         const planName = String(req.body?.plan_name || '').trim();
         const period = String(req.body?.period || '').trim();
+        const items = req.body?.items || [];
 
         if (!employeeId || !planName || !period) {
             throw { status: 400, message: 'Employee ID, plan name, and period are required', code: 'INVALID_INPUT' };
         }
 
+        const mutationState = resolveTnaMutationSource();
+
+        if (mutationState.source === 'supabase') {
+            const result = await createTrainingPlanInSupabase({
+                employeeId,
+                planName,
+                period,
+                items,
+                actorUser: req.currentUser,
+                idFactory: generateUuid,
+            });
+
+            if (result.error) {
+                throw { status: result.error.status, message: result.error.message, code: 'PLAN_CREATE_ERROR' };
+            }
+
+            return res.json({ data: result.plan });
+        }
+
+        // Legacy path
         const id = generateUuid();
         const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
@@ -569,6 +595,24 @@ export async function handleTnaAction(req, res, action) {
             throw { status: 400, message: 'Employee ID and Course ID are required', code: 'INVALID_INPUT' };
         }
 
+        const mutationState = resolveTnaMutationSource();
+
+        if (mutationState.source === 'supabase') {
+            const result = await enrollInTrainingInSupabase({
+                employeeId,
+                courseId,
+                actorUser: req.currentUser,
+                idFactory: generateUuid,
+            });
+
+            if (result.error) {
+                throw { status: result.error.status, message: result.error.message, code: 'ENROLL_ERROR' };
+            }
+
+            return res.json({ data: result.enrollment });
+        }
+
+        // Legacy path
         const id = generateUuid();
         const now = new Date().toISOString().slice(0, 10);
 
