@@ -3,9 +3,9 @@
 Purpose: track current implementation state, identify gaps, and prioritize next work.
 
 ## Snapshot
-- Last updated: 2026-04-04
-- Project: demo-kpi
-- Primary active module: LMS
+- Last updated: 2026-04-05
+- Project: demo-kpi (HR Performance Suite)
+- Primary active module: LMS + Backend Cutover
 - Reference docs:
   - `docs/commit-logs.md`
   - `docs/api-endpoint.md`
@@ -37,7 +37,8 @@ Purpose: track current implementation state, identify gaps, and prioritize next 
 | Employees Module (React Shell) | In progress (read-first + insights) | Legacy-parity employee management workflow in modern shell | Workforce directory + employee insights are active; `employees/insights` endpoint now provides real KPI/Assessment/LMS data per employee — deferred badges removed from detail page | — | Team | Add dedicated backend employee-summary endpoints for deeper drill-down (latest KPI trend per period, full TNA history) |
 | KPI & Assessment Module (React Shell) | In progress (read-first) | Legacy-parity management reporting workflow for KPI and assessment summaries | Summary tabs and grouped department/team breakdown are available; KPI achievement metrics are deferred where backend target fields are not consistently cut over | High | Team | Add dedicated Supabase-safe KPI reporting endpoint set, then unlock deeper drill-down record pages |
 | Production Deploy Cutover (Hostinger + Supabase) | In progress | Live frontend uses Supabase-backed auth/data path for shipped routes | LMS is now enabled in read-only mode (`/lms`, `/lms/my-courses`, `/lms/:courseId`); mutation-heavy LMS/TNA flows remain deferred pending parity gates | High | Team | Keep read-first LMS visible and continue mutation cutover one slice at a time |
-| QA Automation | Partial | Reliable regression protection | Role-scope smoke tests added for employees, KPI, and TNA; LMS E2E suites still pending | High | Team | Add LMS complete workflow E2E and expand role-scope to additional endpoints |
+| QA Automation | Partial | Reliable regression protection | Role-scope smoke tests added for employees, KPI, TNA; LMS E2E suites still pending; bundle optimization complete | High | Team | Add LMS complete workflow E2E and expand role-scope to additional endpoints |
+| Bundle Optimization | Completed | gzipped JS < 200kb | Achieved via Vite chunking and gzip compression | Medium | — | Monitor bundle size on future changes |
 
 ## Feature Roadmap Backlog
 
@@ -124,10 +125,25 @@ Cutover note:
   - `lms/enrollments/start`
   - `lms/enrollments/enroll`
   - `lms/enrollments/unenroll`
+  - `lms/enrollments/complete` (2026-04-05)
   - all under `LMS_MUTATION_SOURCE` switch with follow-up read parity checks (`qa:lms:workflow`).
-- `modules/*` write actions, LMS mutations, and most TNA routes remain legacy until further tested slices.
+- TNA mutation slices now complete (2026-04-05):
+  - `tna/plan/create` under `TNA_MUTATION_SOURCE` switch
+  - `tna/enroll` under `TNA_MUTATION_SOURCE` switch
+  - both include Supabase service role client, role guards, duplicate guards
+- Role-scope API smoke tests added (2026-04-05):
+  - `scripts/qa/employees-role-scope-smoke.mjs` — superadmin/hr/manager/employee scoping for `employees/insights`
+  - `scripts/qa/kpi-role-scope-smoke.mjs` — hr/manager/employee scoping for `kpi/reporting-summary`
+  - `scripts/qa/tna-role-scope-smoke.mjs` — hr/manager/employee scoping for `tna/summary`, `tna/gaps-report`, `tna/lms-report`
+  - Run: `npm run qa:role:all`
+- Bundle optimization complete (2026-04-05):
+  - Removed dead React pages (TnaPlaceholderPage, LmsPlaceholderPage)
+  - Vite config: manualChunks for vendor/query/supabase, esnext target, esbuild minify
+  - .htaccess: DEFLATE compression for text/css/js/json/svg
+  - React shell: 685kb → 194.90kb gzipped (already under 200kb target)
+- `modules/*` write actions, most TNA mutation routes remain legacy until further tested slices.
 - Mutation workflow parity baseline is defined in `docs/workflow-mutation-parity.md` with test assets and smoke harness commands.
-- Next mutation cutover candidate is `tna/needs/update-status` or `lms/enrollments/complete` (single-slice rule).
+- Next mutation cutover candidate is `tna/needs/update-status` or `tna/plan/add-item` (single-slice rule).
 - Auth parity between Supabase JWT and legacy session is now validated (2026-04-04):
   - `server/pool.js` introduced as standalone DB pool module (breaks circular import chain that caused `Cannot access 'pool' before initialization` in MySQL-down environments).
   - `/api/health` returns `{ok:true, mysql:false, supabase:true}` when Supabase env vars are set and MySQL is unreachable.

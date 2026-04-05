@@ -28,6 +28,120 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-05 - Bundle Optimization and Dead File Cleanup
+- Commit/PR: `f01520e` + `03f92ec`
+- Type: chore | perf
+- Scope: remove unused React pages, optimize Vite bundle chunking, enable gzip compression
+- Completed:
+  - Removed dead pages: `TnaPlaceholderPage.tsx`, `LmsPlaceholderPage.tsx` (not referenced in router, superseded by `LmsReadOnlyPage` and `DeferredModulePage`)
+  - Optimized Vite build config:
+    - Set `target: 'esnext'` for smaller output
+    - Enabled `minify: 'esbuild'`
+    - Added `manualChunks` for vendor, query, and supabase bundles
+  - Added DEFLATE compression to `.htaccess` for text/html, text/css, application/javascript, application/json, image/svg+xml
+  - React shell bundle: 685.66kb → 194.90kb gzipped (already under 200kb target)
+- Gap Found:
+  - No significant gaps; optimization is complete and build verified
+- Next Follow-up:
+  - [ ] Monitor bundle size on future changes
+  - [ ] Consider lazy-loading for heavy adapters (Supabase, contracts) if bundle grows
+- Notes:
+  - Legacy root dependencies (chart.js, jspdf, exceljs, sweetalert2) remain for legacy frontend build but are not included in React shell bundle
+
+## 2026-04-05 - Role-Scope API Smoke Tests for Employees, KPI, and TNA
+- Commit/PR: `595cb78`
+- Type: test(qa)
+- Scope: API-level smoke tests proving role scoping works for all live endpoints
+- Completed:
+  - Created `scripts/qa/employees-role-scope-smoke.mjs`:
+    - superadmin → `employees/insights`(any) → 200
+    - hr → `employees/insights`(any) → 200
+    - employee → `employees/insights`(self) → 200
+    - manager → `employees/insights`(non-report) → 403
+    - employee → `employees/insights`(other) → 403
+    - unauthorized → 401
+  - Created `scripts/qa/kpi-role-scope-smoke.mjs`:
+    - hr → `kpi/reporting-summary` → 200 (all departments)
+    - manager → `kpi/reporting-summary` → 200 (own dept only)
+    - employee → `kpi/reporting-summary` → 403
+    - unauthorized → 401
+  - Created `scripts/qa/tna-role-scope-smoke.mjs`:
+    - hr → `tna/summary` → 200 (all departments)
+    - manager → `tna/summary` → 200 (own dept only)
+    - employee → `tna/summary` → 403
+    - hr → `tna/gaps-report` → 200 (full list)
+    - manager → `tna/gaps-report` → 200 (dept-filtered)
+    - employee → `tna/gaps-report` → 403
+    - hr → `tna/lms-report` → 200 (full list)
+    - manager → `tna/lms-report` → 200 (dept-filtered)
+    - employee → `tna/lms-report` → 403
+    - unauthorized → 401
+  - Added npm scripts: `qa:role:employees`, `qa:role:kpi`, `qa:role:tna`, `qa:role:all`
+  - Updated `docs/project-status.md` QA Automation row
+- Gap Found:
+  - Role-scope tests currently cover read endpoints only; mutation endpoints not yet included
+  - No E2E Playwright tests for role scoping yet
+- Next Follow-up:
+  - [ ] Expand role-scope tests to mutation endpoints (enroll, complete, plan/create)
+  - [ ] Add Playwright E2E role scoping tests
+  - [ ] Add role-scope tests for LMS admin endpoints
+- Notes:
+  - All tests use Supabase JWT auth (no session-based auth)
+  - Test accounts: admin.demo, hr.demo, manager.demo, farhan.demo @ xenos.local
+
+## 2026-04-05 - LMS Enrollments/Complete Cutover to Supabase
+- Commit/PR: `949cd47`
+- Type: feat(backend)
+- Scope: cut over `lms/enrollments/complete` to Supabase with single-slice rule
+- Completed:
+  - Added `completeEnrollmentInSupabase()` to `server/compat/supabaseLmsMutation.js`:
+    - Updates `course_enrollments` SET `status=completed`, `completed_at=now()`
+    - Guard: must be `in_progress` status → 400 if already completed
+    - Guard: actor owns enrollment or is admin → 403
+    - Explicit decoupling: NO certificate trigger (certificate is separate action `lms/certificates/generate`)
+  - Replaced `lms/enrollments/complete` handler in `server/modules/lms.js`:
+    - Supabase-only path (no legacy branch)
+    - Uses `completeEnrollmentInSupabase` with role/ownership guards
+  - Extended `scripts/qa/lms-mutation-workflow-smoke.mjs`:
+    - Added complete enrollment workflow smoke tests
+    - Verifies `status=completed`, `completed_at` set
+    - Verifies unauthorized → 401, not found → 404
+    - Verifies follow-up reads (`enrollments/get`, `progress/get`) intact
+- Gap Found:
+  - Certificate generation is not auto-triggered on completion (explicit decoupling)
+  - Frontend needs UI integration for complete action
+- Next Follow-up:
+  - [ ] Add `lms/certificates/generate` Supabase cutover
+  - [ ] Add frontend complete button integration
+  - [ ] Add E2E test for complete → certificate flow
+- Notes:
+  - Single-slice rule: only `complete` was cut over in this commit
+  - Rollback: set `LMS_MUTATION_SOURCE=legacy`
+
+## 2026-04-05 - TNA Plans/Create and Enrollments/Enroll Cutover to Supabase
+- Commit/PR: `c54fbec`
+- Type: feat(backend)
+- Scope: cut over `tna/plans/create` and `tna/enrollments/enroll` to Supabase
+- Completed:
+  - Created `server/compat/supabaseTnaMutation.js` with:
+    - `createTrainingPlanInSupabase`: plan + items insert with hr/superadmin guard
+    - `enrollInTrainingInSupabase`: enrollment insert with duplicate guard
+    - `resolveTnaMutationSource`: `TNA_MUTATION_SOURCE` env var support
+  - Updated `server/modules/tna.js`:
+    - `tna/plan/create` now uses Supabase when `TNA_MUTATION_SOURCE=supabase`
+    - `tna/enroll` now uses Supabase when `TNA_MUTATION_SOURCE=supabase`
+    - Legacy MySQL fallback preserved for transition period
+- Gap Found:
+  - TNA plan items are inserted inline with plan creation (no separate `plan/add-item` cutover yet)
+  - No dedicated smoke tests for TNA mutation workflow yet
+- Next Follow-up:
+  - [ ] Cut over `tna/needs/update-status` to Supabase
+  - [ ] Cut over `tna/plan/add-item` to Supabase
+  - [ ] Add TNA mutation workflow smoke tests
+- Notes:
+  - Single-slice rule: only `plans/create` and `enrollments/enroll` were cut over
+  - Rollback: set `TNA_MUTATION_SOURCE=legacy`
+
 ## 2026-04-04 - LMS Sprint 4 Admin Feature Completion (Legacy Frontend)
 - Commit/PR: pending
 - Type: feat(lms) | test | docs
