@@ -15,6 +15,7 @@ import { KpiManagementPage } from '@/pages/KpiManagementPage';
 import { LmsCourseDetailPage } from '@/pages/LmsCourseDetailPage';
 import { LmsReadOnlyPage } from '@/pages/LmsReadOnlyPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { TnaAssessmentPage } from '@/pages/TnaAssessmentPage';
 import { RouteGuard } from '@/components/RouteGuard';
 import { env } from '@/lib/env';
 
@@ -107,11 +108,15 @@ export const router = createBrowserRouter([
                 path: 'assessment/start',
                 element: (
                     <RoleGate allow={[...ADMIN_HR_MANAGER]}>
-                        <DeferredModulePage
-                            title="Start Assessment"
-                            description="Assessment initiation mutations are kept out of shell until mutation parity is fully verified."
-                            boundaries={['Read-first rollout', 'Assessment mutation endpoints not fully migrated']}
-                        />
+                        <TnaAssessmentPage />
+                    </RoleGate>
+                ),
+            },
+            {
+                path: 'assessment/start/:employeeId',
+                element: (
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]}>
+                        <TnaAssessmentPage />
                     </RoleGate>
                 ),
             },

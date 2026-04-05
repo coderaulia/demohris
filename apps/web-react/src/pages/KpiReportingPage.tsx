@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, BarChart3, ClipboardList, Filter, Target } from 'lucide-react';
+import { ArrowUpRight, BarChart3, ClipboardList, Filter, Target, Plus, Eye, History } from 'lucide-react';
 
-import { kpiAdapter } from '@/adapters';
+import { kpiAdapter, tnaAdapter } from '@/adapters';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { SelectField } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/providers/AuthProvider';
+import type { TnaAssessmentListResponse } from '@demo-kpi/contracts';
 
 type Mode = 'kpi' | 'assessment';
 
@@ -44,6 +45,90 @@ function CardGrid({
                         {card.deferred ? <Badge variant="outline" className="mt-2">Deferred</Badge> : null}
                     </div>
                 ))}
+            </CardContent>
+        </Card>
+    );
+}
+
+function AssessmentRecordsTable({ filters }: { filters: Filters }) {
+    const recordsQuery = useQuery<TnaAssessmentListResponse>({
+        queryKey: ['tna', 'assessments', 'list', filters],
+        queryFn: () => tnaAdapter.listAssessments({
+            department: filters.department || undefined,
+            period: filters.period || undefined
+        }),
+    });
+
+    const assessments = recordsQuery.data?.assessments || [];
+
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <div>
+                    <CardTitle className="text-lg">Assessment Records</CardTitle>
+                    <CardDescription>
+                        Employee competency evaluations grouped by period.
+                    </CardDescription>
+                </div>
+                <Link to="/assessment/start">
+                    <Button size="sm" className="h-8 gap-1.5 shadow-sm">
+                        <Plus className="size-4" />
+                        Assess Competencies
+                    </Button>
+                </Link>
+            </CardHeader>
+            <CardContent>
+                {recordsQuery.isLoading ? (
+                    <div className="py-8 text-center text-sm text-muted-foreground">Loading assessment records...</div>
+                ) : assessments.length === 0 ? (
+                    <div className="py-8 text-center text-sm text-muted-foreground border border-dashed rounded-lg">
+                        No assessment records found for current filters.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto rounded-xl border">
+                        <table className="min-w-full border-collapse text-sm">
+                            <thead className="bg-muted/50">
+                                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                                    <th className="px-4 py-3 font-medium">Employee</th>
+                                    <th className="px-4 py-3 font-medium">Period</th>
+                                    <th className="px-4 py-3 font-medium text-center">Competencies</th>
+                                    <th className="px-4 py-3 font-medium text-center">Avg Gap</th>
+                                    <th className="px-4 py-3 font-medium">Status</th>
+                                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {assessments.map((row: TnaAssessmentListResponse['assessments'][number]) => (
+                                    <tr key={`${row.employee_id}-${row.period}`} className="border-t hover:bg-accent/30 transition-colors">
+                                        <td className="px-4 py-3 font-medium">{row.employee_name}</td>
+                                        <td className="px-4 py-3">{row.period || '-'}</td>
+                                        <td className="px-4 py-3 text-center">{row.competency_count}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            <span className={row.total_gap > 0 ? "text-amber-600 font-semibold" : "text-green-600"}>
+                                                {row.avg_gap}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 capitalize">
+                                            <Badge variant={row.status === 'identified' ? 'default' : 'secondary'}>
+                                                {row.status}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-4 py-3 text-right flex justify-end gap-2">
+                                            <Button size="icon" variant="ghost" className="size-8">
+                                                <Eye className="size-4" />
+                                            </Button>
+                                            <Link to={`/assessment/start/${row.employee_id}?period=${row.period}`}>
+                                                <Button size="icon" variant="ghost" className="size-8">
+                                                    <History className="size-4" />
+                                                </Button>
+                                            </Link>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );
@@ -269,6 +354,10 @@ export function KpiReportingPage({ initialMode = 'kpi' }: KpiReportingPageProps)
                         )}
                     </CardContent>
                 </Card>
+            ) : null}
+
+            {mode === 'assessment' && !overviewQuery.isLoading && !overviewQuery.isError ? (
+                <AssessmentRecordsTable filters={filters} />
             ) : null}
 
             {!overviewQuery.isLoading && !overviewQuery.isError ? (

@@ -1,10 +1,10 @@
 # E2E Regression Tests
 
-This folder contains Playwright smoke/regression tests for Sprint 6 hardening:
+This folder contains Playwright smoke/regression tests for Phase A/B hardening:
 
-- KPI definition save flow
-- KPI input flow
-- Probation export action reachability (PDF/Excel)
+- **Management Workflows**: Employee creation, KPI definition, and KPI achievement input (hr/superadmin).
+- **KPI Dashboards**: Manager drill-down and department summary views.
+- **Probation**: Export action reachability (PDF/Excel).
 
 ## Run
 
@@ -12,10 +12,10 @@ This folder contains Playwright smoke/regression tests for Sprint 6 hardening:
 npm run qa:e2e
 ```
 
-## Required env vars
+## Required credentials
+Tests use `tests/e2e/helpers/auth.ts` to provision state. Ensure one of the following is available or already cached in `.auth/`:
+- `hr`: `E2E_HR_EMAIL` / `E2E_HR_PASSWORD`
+- `manager`: `E2E_MANAGER_EMAIL` / `E2E_MANAGER_PASSWORD`
+- `employee`: `E2E_EMPLOYEE_EMAIL` / `E2E_EMPLOYEE_PASSWORD`
 
-- `E2E_BASE_URL` (optional; defaults to `http://127.0.0.1:5173`)
-- `E2E_MANAGER_EMAIL`
-- `E2E_MANAGER_PASSWORD`
-
-If credentials are missing, tests are skipped.
+If specific credentials for a role are missing, the corresponding suite will skip.

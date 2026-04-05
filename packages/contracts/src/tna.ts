@@ -93,3 +93,79 @@ export type TnaLmsReportRequest = z.infer<typeof TnaLmsReportRequestSchema>;
 export type TnaLmsReportResponse = z.infer<typeof TnaLmsReportResponseSchema>;
 export type TnaNeedCreateInput = z.infer<typeof TnaNeedCreateSchema>;
 export type TnaNeedMutationResponse = z.infer<typeof TnaNeedMutationResponseSchema>;
+
+export const TnaCompetenciesListRequestSchema = z.object({
+    position_name: z.string().trim().min(1),
+});
+export const TnaCompetenciesListResponseSchema = z.object({
+    success: z.literal(true),
+    competencies: z.array(z.unknown()),
+});
+
+export const TnaAssessmentCreateRequestSchema = z.object({
+    employee_id: z.string().trim().min(1),
+    period: z.string().trim().min(1),
+    assessments: z.array(z.object({
+        competency_name: z.string().trim().min(1),
+        manager_score: z.number().min(0).max(5),
+        required_level: z.number().min(0).max(5).optional(),
+        notes: z.string().trim().optional(),
+    })),
+});
+export const TnaAssessmentCreateResponseSchema = z.object({
+    success: z.literal(true),
+    needs: z.array(z.unknown()),
+});
+
+export const TnaAssessmentSelfSubmitRequestSchema = z.object({
+    employee_id: z.string().trim().min(1),
+    period: z.string().trim().min(1),
+    self_assessments: z.array(z.object({
+        need_id: z.string().trim().min(1),
+        self_assessment_score: z.number().min(0).max(5),
+        self_assessment_notes: z.string().trim().optional(),
+    })),
+});
+
+export const TnaAssessmentGetRequestSchema = z.object({
+    employee_id: z.string().trim().min(1),
+    period: z.string().trim().min(1),
+});
+export const TnaAssessmentGetResponseSchema = z.object({
+    success: z.literal(true),
+    assessment: z.object({
+        employee: z.unknown(),
+        period: z.string(),
+        competencies: z.array(z.unknown()),
+    }),
+});
+
+export const TnaAssessmentListRequestSchema = z.object({
+    department: z.string().trim().optional(),
+    employee_id: z.string().trim().optional(),
+    period: z.string().trim().optional(),
+    status: z.string().trim().optional(),
+});
+export const TnaAssessmentListResponseSchema = z.object({
+    success: z.literal(true),
+    assessments: z.array(z.object({
+        employee_id: z.string(),
+        employee_name: z.string(),
+        period: z.string().nullable(),
+        competency_count: z.number(),
+        total_gap: z.number(),
+        avg_gap: z.number(),
+        status: z.string(),
+        assessed_at: z.string().nullable(),
+    })),
+});
+
+export type TnaCompetenciesListRequest = z.infer<typeof TnaCompetenciesListRequestSchema>;
+export type TnaCompetenciesListResponse = z.infer<typeof TnaCompetenciesListResponseSchema>;
+export type TnaAssessmentCreateRequest = z.infer<typeof TnaAssessmentCreateRequestSchema>;
+export type TnaAssessmentCreateResponse = z.infer<typeof TnaAssessmentCreateResponseSchema>;
+export type TnaAssessmentSelfSubmitRequest = z.infer<typeof TnaAssessmentSelfSubmitRequestSchema>;
+export type TnaAssessmentGetRequest = z.infer<typeof TnaAssessmentGetRequestSchema>;
+export type TnaAssessmentGetResponse = z.infer<typeof TnaAssessmentGetResponseSchema>;
+export type TnaAssessmentListRequest = z.infer<typeof TnaAssessmentListRequestSchema>;
+export type TnaAssessmentListResponse = z.infer<typeof TnaAssessmentListResponseSchema>;

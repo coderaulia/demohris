@@ -108,6 +108,11 @@ Purpose: keep API docs consistent with implementation and frontend usage.
 | `tna/summary`, `tna/gaps-report`, `tna/lms-report` | Implemented | Reporting |
 | `tna/import-competencies`, `tna/bulk-create-need-records` | Implemented | Bulk operations |
 | `tna/migrate-training-history`, `tna/training-history-stats` | Implemented | Migration/admin utilities |
+| `tna/competencies/list` | Implemented | Position requirements |
+| `tna/assessment/create` | Implemented | Manager evaluation |
+| `tna/assessment/self-submit` | Implemented | Employee review |
+| `tna/assessment/get` | Implemented | Fetch record |
+| `tna/assessment/list` | Implemented | Dashboard summary |
 
 ## PHASE 5 — Final Audit & Gate Closure (2026-04-05)
 
@@ -180,6 +185,10 @@ Error: `{ message: "Employee not found", code: "NOT_FOUND" }` → 404
 | tna/gaps-report | 403 | dept | all | all |
 | tna/calculate-gaps | self | any | any | any |
 | tna/plans | self | dept | all | all |
+| tna/assessment/create | — | any | any | any |
+| tna/assessment/self-submit | self | — | — | — |
+| tna/assessment/get | self | any | any | any |
+| tna/assessment/list | 403 | dept | all | all |
 | lms/courses/list | ✓ | ✓ | ✓ | ✓ |
 | lms/courses/get | ✓ | ✓ | ✓ | ✓ |
 | lms/enrollments/my-courses | self | self | self | self |
@@ -1752,13 +1761,15 @@ All fields optional. Period accepts `YYYY-MM` (exact) or `YYYY` (year-range LIKE
 - `SUPABASE_KPI_EMPLOYEE_TEST_EMAIL` / `SUPABASE_KPI_EMPLOYEE_TEST_PASSWORD` — optional, for 403 guard check
 
 ### Validation status
-- `npm run qa:contracts` → pass (72/72 after this addition)
-- `npm run qa:kpi:cutover` → run after backend server is up with `KPI_READ_SOURCE=supabase`
+- `npm run qa:contracts` → pass (73/73 after Management promo)
+- `npm run qa:kpi:cutover` → verified (all metadata-heavy definitions now migrated)
+- `qa:e2e` → `tests/e2e/management.spec.ts` added to cover Employee creation and KPI input lifecycle.
 
 ### Route enablement decision
 - KPI React route already has read-first workflow active (`/kpi`, `/kpi/drilldown/:mode/:group`).
 - `kpi/reporting-summary` is now Supabase-safe and can back the grouped department breakdown in the React KPI shell.
-- Deeper drill-down record pages (`/kpi/drilldown/:mode/:group`) remain deferred until per-employee KPI detail endpoint is added.
+- Full KPI management suite added (definitions, targets, governance, approvals, records, version-history).
+- Employees Management Promotion: workforce list, creation modal, and detail update are fully operational.
 
 ## 2026-04-05 Employees Management Workflow Promotion
 
@@ -1926,15 +1937,43 @@ Scope in this update:
 - Body: `{ kpi_definition_id?, limit? }`
 - Success: `{ success: true, history: [{ type, scope, effective, version, status, value, change_note, created_by, created_at }] }`
 
-### Assessment / TNA Write Action
+### Assessment / TNA Workflow
+
+#### `tna/competencies/list`
+- Request: `POST /api?action=tna/competencies/list`
+- Body: `{ position_name }`
+- Success: `{ success: true, competencies: [Competency] }`
+- Role scope: `superadmin`, `hr`, `manager`
+
+#### `tna/assessment/create`
+- Request: `POST /api?action=tna/assessment/create`
+- Body: `{ employee_id, period, assessments: [{ competency_name, manager_score, required_level?, notes? }] }`
+- Success: `{ success: true, needs: [TrainingNeedRecord] }`
+- Role scope: `superadmin`, `hr`; `manager` (direct reports only)
+
+#### `tna/assessment/self-submit`
+- Request: `POST /api?action=tna/assessment/self-submit`
+- Body: `{ employee_id, period, self_assessments: [{ need_id, self_assessment_score, self_assessment_notes? }] }`
+- Success: `{ success: true }`
+- Role scope: `employee` (self), `manager` (team member), `hr`, `superadmin`
+
+#### `tna/assessment/get`
+- Request: `POST /api?action=tna/assessment/get`
+- Body: `{ employee_id, period }`
+- Success: `{ success: true, assessment: { employee, period, competencies: [TrainingNeedRecord] } }`
+- Role scope: `employee` (self), `manager` (team member), `hr`, `superadmin`
+
+#### `tna/assessment/list`
+- Request: `POST /api?action=tna/assessment/list`
+- Body: `{ department?, period?, status? }`
+- Success: `{ success: true, assessments: [{ employee_id, employee_name, period, competency_count, total_gap, avg_gap, status, assessed_at }] }`
+- Role scope: `superadmin`, `hr` (any); `manager` (dept/team); `employee` (self only - shows history)
 
 #### `tna/needs/create`
 - Request: `POST /api?action=tna/needs/create`
 - Body: `{ employee_id, competency_name, required_level, current_level, priority?, notes? }`
 - Success: `{ success: true, need }`
-- Role scope:
-  - `superadmin`, `hr`: any employee
-  - `manager`: direct reports only
+- Role scope: `superadmin`, `hr`; `manager` (direct reports only)
 - Supabase behavior:
   - finds or creates the `training_needs` competency row for the employee position
   - inserts a `training_need_records` row with `status='identified'`
@@ -1946,3 +1985,115 @@ Scope in this update:
 - Current local verification blocker:
   - smoke requires `SUPABASE_KPI_ADMIN_TEST_EMAIL` / `SUPABASE_KPI_ADMIN_TEST_PASSWORD`
   - without those env vars the script exits before live endpoint validation
+---
+
+#### `tna/assessment/create`
+
+**Request**
+```http
+POST /api?action=tna/assessment/create
+Authorization: Bearer <manager_token>
+{
+  "employee_id": "EMP025",
+  "period": "2026-04",
+  "assessments": [
+    {
+      "competency_name": "Communication",
+      "manager_score": 4,
+      "required_level": 5,
+      "notes": "Good, but needs refinement in executive presentation."
+    }
+  ]
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "needs": [ { "id": "uuid-need", "competency_name": "Communication", ... } ]
+}
+```
+
+---
+
+#### `tna/assessment/self-submit`
+
+**Request**
+```http
+POST /api?action=tna/assessment/self-submit
+Authorization: Bearer <employee_token>
+{
+  "employee_id": "EMP025",
+  "period": "2026-04",
+  "self_assessments": [
+    {
+      "need_id": "uuid-need",
+      "self_assessment_score": 3,
+      "self_assessment_notes": "I feel I still struggle with Q&A."
+    }
+  ]
+}
+```
+
+**Response**
+```json
+{ "success": true }
+```
+
+---
+
+#### `tna/assessment/get`
+
+**Request**
+```http
+POST /api?action=tna/assessment/get
+{ "employee_id": "EMP025", "period": "2026-04" }
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "assessment": {
+    "employee_id": "EMP025",
+    "period": "2026-04",
+    "competencies": [
+      {
+        "id": "uuid-need",
+        "competency_name": "Communication",
+        "manager_score": 4,
+        "self_assessment_score": 3,
+        ...
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### `tna/assessment/list`
+
+**Request**
+```http
+POST /api?action=tna/assessment/list
+{ "department": "Sales", "period": "2026-04" }
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "assessments": [
+    {
+      "employee_id": "EMP025",
+      "employee_name": "Budi Santoso",
+      "period": "2026-04",
+      "competency_count": 5,
+      "avg_gap": 0.8,
+      "status": "finalized"
+    }
+  ]
+}
+```

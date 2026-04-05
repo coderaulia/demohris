@@ -1,0 +1,20 @@
+{
+    "id": "kpi/definitions/create",
+    "route": "/api?action=kpi/definitions/create",
+    "method": "POST",
+    "request": {
+        "name": "string",
+        "effective_date": "YYYY-MM-DD",
+        "unit": "string",
+        "target_value": "number",
+        "kpi_type": "direct | ratio"
+    },
+    "response": {
+        "success": true,
+        "definition": {
+            "id": "uuid",
+            "name": "string",
+            "status": "approved | pending"
+        }
+    }
+}

@@ -375,7 +375,14 @@ export function EmployeeDetailPage() {
                         </CardHeader>
                         <CardContent className="flex flex-wrap gap-2">
                             {canAddKpi ? <Button type="button" onClick={() => setKpiOpen(true)}>Add KPI Record</Button> : null}
-                            {canAddNeed ? <Button type="button" variant="outline" onClick={() => setNeedOpen(true)}>Add Assessment Need</Button> : null}
+                            {canAddNeed ? (
+                                <Link to={`/assessment/start/${decodedEmployeeId}`}>
+                                    <Button type="button" variant="default" className="bg-indigo-600 hover:bg-indigo-700">
+                                        Assess Competencies
+                                    </Button>
+                                </Link>
+                            ) : null}
+                            {canAddNeed ? <Button type="button" variant="outline" onClick={() => setNeedOpen(true)}>Add One-off Need</Button> : null}
                             <Link to="/dashboard"><Button type="button" variant="outline">Open Dashboard</Button></Link>
                         </CardContent>
                     </Card>

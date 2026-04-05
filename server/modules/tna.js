@@ -1170,6 +1170,22 @@ export async function handleTnaAction(req, res, action) {
         });
     }
 
+    if (action === 'tna/competencies/list') {
+        return listPositionCompetencies(req, res);
+    }
+    if (action === 'tna/assessment/create') {
+        return createAssessment(req, res);
+    }
+    if (action === 'tna/assessment/self-submit') {
+        return selfSubmitAssessment(req, res);
+    }
+    if (action === 'tna/assessment/get') {
+        return getAssessment(req, res);
+    }
+    if (action === 'tna/assessment/list') {
+        return listAssessments(req, res);
+    }
+
     throw { status: 404, message: `Unknown TNA action: ${action}`, code: 'NOT_FOUND' };
 }
 
@@ -1179,4 +1195,235 @@ async function updatePlanTotalCost(planId) {
         [planId, planId]
     );
     return result;
+}
+
+/* --- Assessment handlers --- */
+
+async function listPositionCompetencies(req, res) {
+    const position = String(getInput(req, 'position', req.body?.position_name || '')).trim();
+    if (!position) {
+        throw { status: 400, message: 'position is required', code: 'INVALID_INPUT' };
+    }
+    const config = await getCompetencyConfig(position);
+    let competencies = config?.competencies || [];
+    if (typeof competencies === 'string') {
+        try { competencies = JSON.parse(competencies); } catch { competencies = []; }
+    }
+    return res.json({ success: true, competencies });
+}
+
+async function createAssessment(req, res) {
+    const actor = requireRole(req, ['superadmin', 'manager', 'hr']);
+    const employeeId = String(req.body?.employee_id || '').trim();
+    const period = String(req.body?.period || '').trim();
+    const assessments = req.body?.assessments || [];
+
+    if (!employeeId || !period || !Array.isArray(assessments)) {
+        throw { status: 400, message: 'employee_id, period, and assessments are required', code: 'INVALID_INPUT' };
+    }
+
+    const employeeRows = await supabaseTableRequest({
+        table: 'employees',
+        method: 'GET',
+        filters: { employee_id: { type: 'eq', value: employeeId } },
+        limit: 1
+    });
+    const employee = employeeRows[0];
+    if (!employee) throw { status: 404, message: 'Employee not found', code: 'NOT_FOUND' };
+    if (actor.role === 'manager' && String(employee.manager_id) !== String(actor.employee_id)) {
+        throw { status: 403, message: 'Managers can only assess their own team', code: 'FORBIDDEN' };
+    }
+
+    const createdNeeds = [];
+    for (const item of assessments) {
+        const competencyName = String(item.competency_id || item.competency_name || '').trim();
+        if (!competencyName) continue;
+
+        const tnRefs = await supabaseTableRequest({
+            table: 'training_needs',
+            method: 'POST',
+            body: [{
+                id: generateUuid(),
+                position_name: employee.position,
+                competency_name: competencyName,
+                required_level: Number(item.required_level || 3)
+            }],
+            prefer: 'resolution=merge-duplicates,return=representation'
+        });
+        const tnRef = tnRefs[0];
+
+        const managerScore = Number(item.manager_score ?? 0);
+        const requiredLevel = Number(item.required_level || tnRef?.required_level || 3);
+        const gapLevel = requiredLevel - managerScore;
+        const priority = item.priority || (gapLevel >= 2 ? 'critical' : (gapLevel >= 1 ? 'high' : 'medium'));
+
+        const recordRows = await supabaseTableRequest({
+            table: 'training_need_records',
+            method: 'POST',
+            body: [{
+                id: generateUuid(),
+                employee_id: employeeId,
+                training_need_id: tnRef?.id,
+                current_level: managerScore,
+                manager_score: managerScore,
+                gap_level: gapLevel,
+                priority,
+                status: 'identified',
+                identified_by: actor.employee_id,
+                identified_at: new Date().toISOString(),
+                notes: item.notes || null,
+                competency: competencyName,
+                assessment_period: period
+            }],
+            prefer: 'return=representation'
+        });
+        if (recordRows[0]) createdNeeds.push(recordRows[0]);
+    }
+    return res.json({ success: true, needs: createdNeeds });
+}
+
+async function selfSubmitAssessment(req, res) {
+    const actor = requireAuth(req);
+    const employeeId = String(req.body?.employee_id || '').trim();
+    const period = String(req.body?.period || '').trim();
+    const selfAssessments = req.body?.self_assessments || [];
+
+    if (!employeeId || !period || !Array.isArray(selfAssessments)) {
+        throw { status: 400, message: 'employee_id, period, and self_assessments are required', code: 'INVALID_INPUT' };
+    }
+
+    if (actor.role === 'employee' && String(actor.employee_id) !== employeeId) {
+        throw { status: 403, message: 'Access denied', code: 'FORBIDDEN' };
+    }
+
+    const now = new Date().toISOString();
+    for (const item of selfAssessments) {
+        const needId = String(item.need_id || '').trim();
+        if (!needId) continue;
+
+        await supabaseTableRequest({
+            table: 'training_need_records',
+            method: 'PATCH',
+            filters: { id: { type: 'eq', value: needId } },
+            body: {
+                self_assessment_score: Number(item.self_assessment_score || 0),
+                self_assessment_notes: item.self_assessment_notes || null,
+                self_assessed_at: now
+            }
+        });
+    }
+    return res.json({ success: true });
+}
+
+async function getAssessment(req, res) {
+    const employeeId = String(getInput(req, 'employee_id', '')).trim();
+    const period = String(getInput(req, 'period', '')).trim();
+
+    if (!employeeId || !period) {
+        throw { status: 400, message: 'employee_id and period are required', code: 'INVALID_INPUT' };
+    }
+
+    const employeeRows = await supabaseTableRequest({
+        table: 'employees',
+        method: 'GET',
+        filters: { employee_id: { type: 'eq', value: employeeId } },
+        limit: 1
+    });
+
+    const records = await supabaseTableRequest({
+        table: 'training_need_records',
+        method: 'GET',
+        filters: {
+            employee_id: { type: 'eq', value: employeeId },
+            assessment_period: { type: 'eq', value: period }
+        }
+    });
+
+    return res.json({
+        success: true,
+        assessment: {
+            employee: employeeRows[0] || null,
+            period,
+            competencies: records
+        }
+    });
+}
+
+async function listAssessments(req, res) {
+    const actor = requireAuth(req);
+    const department = String(getInput(req, 'department', '')).trim();
+    const employeeId = String(getInput(req, 'employee_id', '')).trim();
+    const period = String(getInput(req, 'period', '')).trim();
+    const status = String(getInput(req, 'status', '')).trim();
+
+    let employeeIds = [];
+    if (department || actor.role === 'manager') {
+        const filters = {};
+        if (department) filters.department = { type: 'eq', value: department };
+        if (actor.role === 'manager') filters.manager_id = { type: 'eq', value: actor.employee_id };
+        
+        const employees = await supabaseTableRequest({
+            table: 'employees',
+            method: 'GET',
+            select: 'employee_id',
+            filters
+        });
+        employeeIds = employees.map(e => e.employee_id);
+        if (actor.role === 'manager') {
+            if (!employeeIds.includes(actor.employee_id)) employeeIds.push(actor.employee_id);
+        }
+    }
+
+    const filters = {};
+    if (employeeId) {
+        filters.employee_id = { type: 'eq', value: employeeId };
+    } else if (employeeIds.length > 0) {
+        filters.employee_id = { type: 'in', value: employeeIds };
+    } else if (actor.role === 'employee') {
+        filters.employee_id = { type: 'eq', value: actor.employee_id };
+    }
+
+    if (period) filters.assessment_period = { type: 'eq', value: period };
+    if (status) filters.status = { type: 'eq', value: status };
+
+    const records = await supabaseTableRequest({
+        table: 'training_need_records',
+        method: 'GET',
+        filters
+    });
+
+    const groups = new Map();
+    for (const rec of records) {
+        const key = `${rec.employee_id}::${rec.assessment_period || 'unset'}`;
+        if (!groups.has(key)) {
+            groups.set(key, {
+                employee_id: rec.employee_id,
+                period: rec.assessment_period || null,
+                competency_count: 0,
+                total_gap: 0,
+                status: rec.status,
+                assessed_at: rec.identified_at
+            });
+        }
+        const g = groups.get(key);
+        g.competency_count++;
+        g.total_gap += Number(rec.gap_level || 0);
+    }
+
+    const finalEmployeeIds = [...new Set([...groups.values()].map(g => g.employee_id))];
+    const employees = finalEmployeeIds.length > 0 ? await supabaseTableRequest({
+        table: 'employees',
+        method: 'GET',
+        select: 'employee_id,name',
+        filters: { employee_id: { type: 'in', value: finalEmployeeIds } }
+    }) : [];
+    const nameMap = new Map(employees.map(e => [e.employee_id, e.name]));
+
+    const assessments = [...groups.values()].map(g => ({
+        ...g,
+        employee_name: nameMap.get(g.employee_id) || 'Unknown',
+        avg_gap: g.competency_count > 0 ? g.total_gap / g.competency_count : 0
+    }));
+
+    return res.json({ success: true, assessments });
 }

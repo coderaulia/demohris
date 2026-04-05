@@ -1,0 +1,20 @@
+{
+    "id": "employees/create",
+    "route": "/api?action=employees/create",
+    "method": "POST",
+    "request": {
+        "name": "string",
+        "email": "string",
+        "department": "string",
+        "position": "string",
+        "role": "employee | manager | hr | director | superadmin"
+    },
+    "response": {
+        "success": true,
+        "employee": {
+            "employee_id": "EMP###",
+            "name": "string",
+            "auth_id": "uuid"
+        }
+    }
+}
