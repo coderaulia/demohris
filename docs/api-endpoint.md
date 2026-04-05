@@ -15,7 +15,7 @@ Purpose: keep API docs consistent with implementation and frontend usage.
 ### Route Patterns In Code
 - `GET /api/health`
 - `ALL /api/modules?action=<list|get|update|toggle|activity|by-category|active>`
-- `ALL /api?action=<auth/*|db/query|tna/*|lms/*>`
+- `ALL /api?action=<auth/*|db/query|employees/*|kpi/*|tna/*|lms/*>`
 
 ### Frontend Usage Patterns
 - Generic API caller: `src/lib/supabase.js` -> `/api?action=<...>`
@@ -1742,3 +1742,115 @@ All fields optional. Period accepts `YYYY-MM` (exact) or `YYYY` (year-range LIKE
 - KPI React route already has read-first workflow active (`/kpi`, `/kpi/drilldown/:mode/:group`).
 - `kpi/reporting-summary` is now Supabase-safe and can back the grouped department breakdown in the React KPI shell.
 - Deeper drill-down record pages (`/kpi/drilldown/:mode/:group`) remain deferred until per-employee KPI detail endpoint is added.
+
+## 2026-04-05 Employees Management Workflow Promotion
+
+Scope in this update:
+- `employees/list`
+- `employees/get`
+- `employees/create`
+- `employees/update`
+- `employees/toggle-status`
+- `kpi/record/create`
+- `kpi/record/update`
+- `tna/needs/create` (Supabase-backed record creation)
+- `kpi/*` route wiring in `server/app.js`
+
+### Employees Actions
+
+#### `employees/list`
+- Request: `POST /api?action=employees/list`
+- Body: `{ search?, department?, role?, manager_id?, status?, page?, limit? }`
+- Success: `{ success: true, source: "supabase", employees: [], total: number, page: number }`
+- Role scope:
+  - `superadmin`, `hr`: full workforce
+  - `manager`: direct reports only (`manager_id = current_user.employee_id`)
+  - `employee`: `403`
+- Notes:
+  - search matches `name`, `email`, `auth_email`, `department`, `position`
+  - `status` now refers to operational employee status (`active|inactive`)
+
+#### `employees/get`
+- Request: `POST /api?action=employees/get`
+- Body: `{ employee_id: string }`
+- Success: `{ success: true, employee: { ...all fields } }`
+- Role scope:
+  - `superadmin`, `hr`, `director`: any employee
+  - `manager`: direct reports only
+  - `employee`: self only
+
+#### `employees/create`
+- Request: `POST /api?action=employees/create`
+- Body: `{ name, email, department, position, role, manager_id?, join_date? }`
+- Success: `{ success: true, employee }`
+- Role scope:
+  - `superadmin`, `hr` only
+- Supabase behavior:
+  - creates auth user through `auth/v1/admin/users`
+  - inserts `employees` row with `status='active'`
+  - upserts `profiles` row metadata
+  - rolls back auth user if employee/profile write fails
+- Notes:
+  - employee IDs are generated server-side (`EMP###` style)
+  - a temporary password is provisioned server-side; user follow-up/reset flow remains operational work
+
+#### `employees/update`
+- Request: `POST /api?action=employees/update`
+- Body: `{ employee_id, ...fields }`
+- Success: `{ success: true, employee }`
+- Role scope:
+  - `superadmin`, `hr`: can update `name`, `email`, `department`, `position`, `role`, `manager_id`, `join_date`
+  - `manager`: can update `department`, `position` for direct reports only
+- Notes:
+  - email/role changes sync the mapped Supabase auth user and `profiles` row when `auth_id` exists
+
+#### `employees/toggle-status`
+- Request: `POST /api?action=employees/toggle-status`
+- Body: `{ employee_id, status: "active"|"inactive" }`
+- Success: `{ success: true, employee }`
+- Role scope:
+  - `superadmin`, `hr` only
+- Notes:
+  - updates `employees.status`
+  - does not delete or disable the Supabase auth user
+
+### KPI Write Actions
+
+#### `kpi/record/create`
+- Request: `POST /api?action=kpi/record/create`
+- Body: `{ employee_id, period, score|actual_value, target_value?, notes?, kpi_id? }`
+- Success: `{ success: true, record }`
+- Role scope:
+  - `superadmin`, `hr` only
+- Notes:
+  - handler resolves an active KPI definition (or uses provided `kpi_id`)
+  - stores score as `kpi_records.value`
+  - persists `target_snapshot` when `target_value` is supplied or an active target exists
+
+#### `kpi/record/update`
+- Request: `POST /api?action=kpi/record/update`
+- Body: `{ record_id, period?, score?, actual_value?, target_value?, notes?, kpi_id? }`
+- Success: `{ success: true, record }`
+- Role scope:
+  - `superadmin`, `hr` only
+
+### Assessment / TNA Write Action
+
+#### `tna/needs/create`
+- Request: `POST /api?action=tna/needs/create`
+- Body: `{ employee_id, competency_name, required_level, current_level, priority?, notes? }`
+- Success: `{ success: true, need }`
+- Role scope:
+  - `superadmin`, `hr`: any employee
+  - `manager`: direct reports only
+- Supabase behavior:
+  - finds or creates the `training_needs` competency row for the employee position
+  - inserts a `training_need_records` row with `status='identified'`
+  - calculates `gap_level = required_level - current_level`
+
+### Routing Fix
+- `server/app.js` now dispatches `kpi/*` actions to `handleKpiAction` before the generic feature-flag check.
+- `npm run qa:kpi:cutover` is now a declared npm script (`scripts/qa/kpi-read-cutover-smoke.mjs`).
+- Current local verification blocker:
+  - smoke requires `SUPABASE_KPI_ADMIN_TEST_EMAIL` / `SUPABASE_KPI_ADMIN_TEST_PASSWORD`
+  - without those env vars the script exits before live endpoint validation

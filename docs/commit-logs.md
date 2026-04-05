@@ -919,3 +919,85 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
   - [ ] Validate and finalize endpoint-level status in `docs/api-endpoint.md`.
 - Notes:
   - Existing progress references were originally tracked in LMS progress docs.
+
+## 2026-04-05 - Employees Full CRUD and Inline React Workflow
+- Commit/PR: `78260f1`
+- Type: feat(employees) | docs
+- Scope: Supabase-backed employee management in backend and React shell
+- Completed:
+  - Added Supabase admin helper for employee/auth/profile orchestration:
+    - `server/compat/supabaseAdmin.js`
+  - Added employee status migration:
+    - `supabase/migrations/0010_employees_status_column.sql`
+  - Expanded `server/modules/employees.js` with:
+    - `employees/list`
+    - `employees/get`
+    - `employees/create`
+    - `employees/update`
+    - `employees/toggle-status`
+    - retained `employees/insights`
+  - Replaced React employee read-first handoff with management workflow:
+    - `EmployeesPage` now has Add Employee modal
+    - `EmployeeDetailPage` now has inline edit and active/inactive toggle
+    - employee detail routes now allow self-view while list route remains manager/hr/superadmin only
+  - Updated employee contracts and adapter transport for the new action set.
+  - Validation:
+    - `npm run typecheck --prefix apps/web-react` -> pass
+    - `npm run qa:contracts` -> pass
+    - `npm run build --prefix apps/web-react` -> pass
+- Gap Found:
+  - The new employee status column still needs to be applied in each target Supabase environment before runtime use.
+  - Live employee create/update smoke has not been run against seeded staging users yet.
+- Next Follow-up:
+  - [ ] Apply migration `0010_employees_status_column.sql` to staging/production Supabase.
+  - [ ] Run staged HR/superadmin CRUD smoke once the migration is live.
+  - [ ] Decide whether the employee list route should eventually allow self-only directory access instead of direct-detail access only.
+- Notes:
+  - Employee creation provisions a Supabase auth user and profile row, then rolls back auth if employee/profile persistence fails.
+
+## 2026-04-05 - KPI Record Write Endpoints and Route Wiring
+- Commit/PR: `b13e6af`
+- Type: feat(kpi) | fix(api) | docs
+- Scope: KPI write path enablement for employee management workflow
+- Completed:
+  - Fixed `kpi/*` dispatch in `server/app.js`.
+  - Added `kpi/record/create` and `kpi/record/update` in `server/modules/kpi.js`.
+  - Added KPI mutation contracts in `packages/contracts/src/kpi.ts`.
+  - Added frontend adapter support in `apps/web-react/src/adapters/kpiAdapter.ts`.
+  - Added npm script alias:
+    - `npm run qa:kpi:cutover`
+  - Validation:
+    - `npm run qa:contracts` -> pass
+    - `npm run build --prefix apps/web-react` -> pass
+- Gap Found:
+  - Live KPI smoke is currently blocked locally because `SUPABASE_KPI_ADMIN_TEST_EMAIL` is not configured.
+  - KPI record creation still depends on active KPI definition data in the target environment.
+- Next Follow-up:
+  - [ ] Set KPI smoke env vars and rerun `npm run qa:kpi:cutover`.
+  - [ ] Add focused workflow smoke for create/update record writes with seeded employee data.
+  - [ ] Consider exposing KPI record update UI after the write path is stage-verified.
+- Notes:
+  - The write handlers preserve the existing reporting-summary route and add mutation-only Supabase writes on top.
+
+## 2026-04-05 - Assessment Need Creation in React Employee Detail Workflow
+- Commit/PR: pending (to be created in this docs/update slice)
+- Type: feat(assessment) | docs
+- Scope: TNA need creation from employee management flow
+- Completed:
+  - Reworked `tna/needs/create` in `server/modules/tna.js` to create Supabase-backed needs using `{ employee_id, competency_name, required_level, current_level, priority?, notes? }`.
+  - Added TNA need creation contracts in `packages/contracts/src/tna.ts` and adapter support in `apps/web-react/src/adapters/tnaAdapter.ts`.
+  - Added React Assessment Need modal on `EmployeeDetailPage` for HR/superadmin/manager flows.
+  - Updated docs to record the new action and scope rules.
+  - Validation:
+    - `npm run typecheck --prefix apps/web-react` -> pass
+    - `npm run qa:contracts` -> pass
+    - `npm run build --prefix apps/web-react` -> pass
+- Gap Found:
+  - No dedicated live smoke exists yet for the new assessment-need creation path.
+  - TNA mutation verification remains narrower than LMS mutation coverage today.
+- Next Follow-up:
+  - [ ] Add a targeted TNA need-creation smoke script with manager and HR role coverage.
+  - [ ] Validate the new `training_needs` create-or-update flow against staging seeded positions.
+  - [ ] Consider adding assessment-need editing/status management after runtime verification.
+- Notes:
+  - Manager scope is limited to direct reports in the new Supabase-backed `tna/needs/create` flow.

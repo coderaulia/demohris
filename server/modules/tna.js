@@ -13,6 +13,7 @@ import {
     enrollInTrainingInSupabase,
     resolveTnaMutationSource,
 } from '../compat/supabaseTnaMutation.js';
+import { supabaseTableRequest } from '../compat/supabaseAdmin.js';
 
 export function isTnaEnabled() {
     return isFeatureEnabled('TNA');
@@ -216,50 +217,107 @@ export async function handleTnaAction(req, res, action) {
 
     if (action === 'tna/needs/create') {
         requireTna(req);
-        requireRole(req, ['superadmin', 'manager', 'hr']);
-
+        const actor = requireRole(req, ['superadmin', 'manager', 'hr']);
         const employeeId = String(req.body?.employee_id || '').trim();
-        const needId = String(req.body?.training_need_id || '').trim();
-        const currentLevel = Number(req.body?.current_level || 0);
-        const priority = String(req.body?.priority || 'medium').toLowerCase();
-        const notes = String(req.body?.notes || '').trim();
+        const competencyName = String(req.body?.competency_name || '').trim();
+        const requiredLevel = Number(req.body?.required_level ?? null);
+        const currentLevel = Number(req.body?.current_level ?? null);
+        const priority = String(req.body?.priority || 'medium').trim().toLowerCase();
+        const notes = String(req.body?.notes || '').trim() || null;
 
-        if (!employeeId || !needId) {
-            throw { status: 400, message: 'Employee ID and Training Need ID are required', code: 'INVALID_INPUT' };
+        if (!employeeId || !competencyName) {
+            throw { status: 400, message: 'employee_id and competency_name are required', code: 'INVALID_INPUT' };
+        }
+        if (!Number.isFinite(requiredLevel) || !Number.isFinite(currentLevel)) {
+            throw { status: 400, message: 'required_level and current_level must be numeric', code: 'INVALID_INPUT' };
         }
 
-        const needRows = await queryRows('training_needs', {
-            filters: [{ op: 'eq', column: 'id', value: needId }],
+        const employeeRows = await supabaseTableRequest({
+            table: 'employees',
+            method: 'GET',
+            select: 'employee_id,position,manager_id',
+            filters: {
+                employee_id: { type: 'eq', value: employeeId },
+            },
             limit: 1,
         });
-        const need = needRows[0];
+        const employee = employeeRows[0] || null;
+        if (!employee) {
+            throw { status: 404, message: 'Employee not found', code: 'NOT_FOUND' };
+        }
+        if (String(actor.role || '').toLowerCase() === 'manager' && String(employee.manager_id || '') !== String(actor.employee_id || '')) {
+            throw { status: 403, message: 'Managers can only create needs for their own team', code: 'FORBIDDEN' };
+        }
+
+        const needRows = await supabaseTableRequest({
+            table: 'training_needs',
+            method: 'GET',
+            select: '*',
+            filters: {
+                position_name: { type: 'eq', value: String(employee.position || '') },
+                competency_name: { type: 'eq', value: competencyName },
+            },
+            limit: 1,
+        });
+
+        let need = needRows[0] || null;
         if (!need) {
-            throw { status: 404, message: 'Training need not found', code: 'NOT_FOUND' };
+            const createdNeeds = await supabaseTableRequest({
+                table: 'training_needs',
+                method: 'POST',
+                body: [{
+                    id: generateUuid(),
+                    position_name: String(employee.position || ''),
+                    competency_name: competencyName,
+                    required_level: requiredLevel,
+                }],
+                prefer: 'return=representation',
+            });
+            need = createdNeeds[0] || null;
+        } else if (Number(need.required_level) !== requiredLevel) {
+            const updatedNeeds = await supabaseTableRequest({
+                table: 'training_needs',
+                method: 'PATCH',
+                filters: {
+                    id: { type: 'eq', value: need.id },
+                },
+                body: {
+                    required_level: requiredLevel,
+                },
+                prefer: 'return=representation',
+            });
+            need = updatedNeeds[0] || need;
         }
 
-        const gapLevel = (need.required_level || 3) - currentLevel;
-
-        const id = generateUuid();
-        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-
-        await pool.query(
-            `INSERT INTO training_need_records 
-             (id, employee_id, training_need_id, current_level, gap_level, priority, status, identified_by, identified_at, notes)
-             VALUES (?, ?, ?, ?, ?, ?, 'identified', ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-             current_level = VALUES(current_level),
-             gap_level = VALUES(gap_level),
-             priority = VALUES(priority),
-             notes = VALUES(notes)`,
-            [id, employeeId, needId, currentLevel, gapLevel, priority, req.currentUser.employee_id, now, notes]
-        );
-
-        const saved = await queryRows('training_need_records', {
-            filters: [{ op: 'eq', column: 'id', value: id }],
-            limit: 1,
+        const gapLevel = requiredLevel - currentLevel;
+        const now = new Date().toISOString();
+        const createdRows = await supabaseTableRequest({
+            table: 'training_need_records',
+            method: 'POST',
+            body: [{
+                id: generateUuid(),
+                employee_id: employeeId,
+                training_need_id: need.id,
+                current_level: currentLevel,
+                gap_level: gapLevel,
+                priority,
+                status: 'identified',
+                identified_by: actor.employee_id,
+                identified_at: now,
+                notes,
+                competency: competencyName,
+            }],
+            prefer: 'return=representation',
         });
 
-        return res.json({ data: saved[0] });
+        return res.json({
+            success: true,
+            need: {
+                ...(createdRows[0] || null),
+                competency_name: competencyName,
+                required_level: requiredLevel,
+            },
+        });
     }
 
     if (action === 'tna/needs/update-status') {
