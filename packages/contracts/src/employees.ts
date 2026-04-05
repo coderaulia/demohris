@@ -28,11 +28,13 @@ const BooleanLikeSchema = z
     });
 
 export const EmployeeStatusSchema = z.enum(['assessed', 'pending']);
+export const EmployeeDirectoryStatusSchema = z.enum(['active', 'inactive']);
 
 export const EmployeeRecordSchema = z
     .object({
         employee_id: z.union([z.string(), z.number()]).transform((value: string | number) => String(value)),
         name: z.string().trim().default(''),
+        email: NullableStringSchema,
         position: NullableStringSchema,
         seniority: NullableStringSchema,
         join_date: NullableStringSchema,
@@ -40,15 +42,49 @@ export const EmployeeRecordSchema = z
         manager_id: NullableStringSchema,
         auth_email: NullableStringSchema,
         role: EmployeeRoleSchema.catch('employee'),
+        status: EmployeeDirectoryStatusSchema.catch('active'),
         percentage: NullableNumberSchema,
         self_percentage: NullableNumberSchema,
         must_change_password: BooleanLikeSchema.default(false),
     })
     .passthrough();
 
+export const EmployeeCreateSchema = z.object({
+    name: z.string().trim().min(1),
+    email: z.string().email(),
+    department: z.string().trim().min(1),
+    position: z.string().trim().min(1),
+    role: EmployeeRoleSchema,
+    manager_id: z.string().trim().optional().nullable(),
+    join_date: z.string().trim().optional().nullable(),
+});
+
+export const EmployeeUpdateSchema = z.object({
+    employee_id: z.string().trim().min(1),
+    name: z.string().trim().min(1).optional(),
+    email: z.string().email().optional(),
+    department: z.string().trim().min(1).optional(),
+    position: z.string().trim().min(1).optional(),
+    role: EmployeeRoleSchema.optional(),
+    manager_id: z.string().trim().nullable().optional(),
+    join_date: z.string().trim().nullable().optional(),
+});
+
+export const EmployeeMutationResponseSchema = z
+    .object({
+        success: z.literal(true),
+        employee: EmployeeRecordSchema,
+    })
+    .passthrough();
+
 export const EmployeeListResponseSchema = z
     .object({
+        success: z.literal(true).optional(),
+        source: z.enum(['legacy', 'supabase']).optional(),
+        deferred: z.array(z.string()).default([]),
         employees: z.array(EmployeeRecordSchema),
+        total: z.number().int().nonnegative().default(0),
+        page: z.number().int().positive().default(1),
     })
     .passthrough();
 
@@ -81,12 +117,14 @@ export const EmployeeDetailResponseSchema = z
 
 export type EmployeeRecord = z.infer<typeof EmployeeRecordSchema>;
 export type EmployeeStatus = z.infer<typeof EmployeeStatusSchema>;
+export type EmployeeDirectoryStatus = z.infer<typeof EmployeeDirectoryStatusSchema>;
+export type EmployeeCreateInput = z.infer<typeof EmployeeCreateSchema>;
+export type EmployeeUpdateInput = z.infer<typeof EmployeeUpdateSchema>;
+export type EmployeeMutationResponse = z.infer<typeof EmployeeMutationResponseSchema>;
 export type EmployeeListResponse = z.infer<typeof EmployeeListResponseSchema>;
 export type EmployeeSummaryCard = z.infer<typeof EmployeeSummaryCardSchema>;
 export type EmployeeDetailSummary = z.infer<typeof EmployeeDetailSummarySchema>;
 export type EmployeeDetailResponse = z.infer<typeof EmployeeDetailResponseSchema>;
-
-// ─── Employee Insights ───────────────────────────────────────────────────────
 
 export const EmployeeKpiInsightsSchema = z.object({
     latest_score: z.number().nullable(),

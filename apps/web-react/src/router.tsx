@@ -17,6 +17,7 @@ import { env } from '@/lib/env';
 
 const ADMIN_HR = ['superadmin', 'hr'] as const;
 const ADMIN_HR_MANAGER = ['superadmin', 'hr', 'manager'] as const;
+const EMPLOYEE_DETAIL_ACCESS = ['superadmin', 'hr', 'manager', 'employee'] as const;
 const LMS_ACCESS = ['superadmin', 'hr', 'manager', 'employee'] as const;
 
 export const router = createBrowserRouter([
@@ -61,7 +62,7 @@ export const router = createBrowserRouter([
             {
                 path: 'workforce/directory/:employeeId',
                 element: (
-                    <RoleGate allow={[...ADMIN_HR_MANAGER]} redirectTo="/dashboard">
+                    <RoleGate allow={[...EMPLOYEE_DETAIL_ACCESS]} redirectTo="/dashboard">
                         <EmployeeDetailPage />
                     </RoleGate>
                 ),
@@ -69,7 +70,7 @@ export const router = createBrowserRouter([
             {
                 path: 'employees/:employeeId',
                 element: (
-                    <RoleGate allow={[...ADMIN_HR_MANAGER]} redirectTo="/dashboard">
+                    <RoleGate allow={[...EMPLOYEE_DETAIL_ACCESS]} redirectTo="/dashboard">
                         <EmployeeDetailPage />
                     </RoleGate>
                 ),

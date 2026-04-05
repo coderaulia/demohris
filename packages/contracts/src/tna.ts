@@ -36,6 +36,15 @@ export const TnaLmsReportRequestSchema = z.object({
     department: z.string().trim().optional(),
 });
 
+export const TnaNeedCreateSchema = z.object({
+    employee_id: z.string().trim().min(1),
+    competency_name: z.string().trim().min(1),
+    required_level: z.number(),
+    current_level: z.number(),
+    priority: z.string().trim().optional(),
+    notes: z.string().trim().optional(),
+});
+
 export const TnaSummaryResponseSchema = z
     .object({
         data: z.object({
@@ -67,6 +76,13 @@ export const TnaLmsReportResponseSchema = z
     })
     .passthrough();
 
+export const TnaNeedMutationResponseSchema = z
+    .object({
+        success: z.literal(true),
+        need: z.unknown(),
+    })
+    .passthrough();
+
 export type TnaCalculateGapsRequest = z.infer<typeof TnaCalculateGapsRequestSchema>;
 export type TnaCalculateGapsResponse = z.infer<typeof TnaCalculateGapsResponseSchema>;
 export type TnaSummaryRequest = z.infer<typeof TnaSummaryRequestSchema>;
@@ -75,3 +91,5 @@ export type TnaGapsReportRequest = z.infer<typeof TnaGapsReportRequestSchema>;
 export type TnaGapsReportResponse = z.infer<typeof TnaGapsReportResponseSchema>;
 export type TnaLmsReportRequest = z.infer<typeof TnaLmsReportRequestSchema>;
 export type TnaLmsReportResponse = z.infer<typeof TnaLmsReportResponseSchema>;
+export type TnaNeedCreateInput = z.infer<typeof TnaNeedCreateSchema>;
+export type TnaNeedMutationResponse = z.infer<typeof TnaNeedMutationResponseSchema>;

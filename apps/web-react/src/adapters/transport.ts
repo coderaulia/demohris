@@ -41,7 +41,15 @@ const SUPABASE_ACTIONS = new Set<string>([
     // KPI read cutovers.
     'kpi/reporting-summary',
     // Employee insights cutover.
+    'employees/list',
+    'employees/get',
+    'employees/create',
+    'employees/update',
+    'employees/toggle-status',
     'employees/insights',
+    'kpi/record/create',
+    'kpi/record/update',
+    'tna/needs/create',
 ]);
 
 function buildActionUrl(action: string, domain: Domain): string {

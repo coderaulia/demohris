@@ -1,10 +1,16 @@
 import { z } from 'zod';
 import {
     AssessmentOverviewSchema,
+    KpiRecordCreateSchema,
+    KpiRecordMutationResponseSchema,
+    KpiRecordUpdateSchema,
     KpiOverviewSchema,
     type AssessmentOverview,
     type EmployeeRole,
+    type KpiRecordCreateInput,
+    type KpiRecordMutationResponse,
     type KpiOverview,
+    type KpiRecordUpdateInput,
 } from '@demo-kpi/contracts';
 
 import { env } from '@/lib/env';
@@ -129,6 +135,28 @@ async function fetchKpiReportingSummary(filters: ReportingFilters = {}) {
 }
 
 export const kpiAdapter = {
+    async createRecord(input: KpiRecordCreateInput): Promise<KpiRecordMutationResponse> {
+        const accessToken = await getAccessToken();
+        return transport.execute<KpiRecordMutationResponse>({
+            domain: 'kpi',
+            action: 'kpi/record/create',
+            payload: KpiRecordCreateSchema.parse(input),
+            schema: KpiRecordMutationResponseSchema,
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async updateRecord(input: KpiRecordUpdateInput): Promise<KpiRecordMutationResponse> {
+        const accessToken = await getAccessToken();
+        return transport.execute<KpiRecordMutationResponse>({
+            domain: 'kpi',
+            action: 'kpi/record/update',
+            payload: KpiRecordUpdateSchema.parse(input),
+            schema: KpiRecordMutationResponseSchema,
+            accessToken: accessToken || undefined,
+        });
+    },
+
     async getOverview(
         filters: ReportingFilters = {},
         context: { role: EmployeeRole | null; employeeId: string },
