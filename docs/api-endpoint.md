@@ -3,11 +3,12 @@
 Purpose: keep API docs consistent with implementation and frontend usage.
 
 ## Sync Metadata
-- Last sync date: 2026-04-04
+- Last sync date: 2026-04-05
 - Scope:
-  - backend handlers in `server/app.js`, `server/modules/lms.js`, `server/modules/tna.js`
+  - backend handlers in `server/app.js`, `server/modules/lms.js`, `server/modules/tna.js`, `server/modules/kpi.js`, `server/modules/employees.js`
   - frontend API callers in `src/modules/data/*.js`
-- Result: API/docs/frontend drift reduced and key runtime mismatches fixed.
+  - React feature flags in `apps/web-react/src/lib/env.ts`
+- Result: API/docs/frontend drift reduced; Phase A gate formally closed (2026-04-05 audit pass).
 
 ## PHASE 1 - Cross Check
 
@@ -108,11 +109,98 @@ Purpose: keep API docs consistent with implementation and frontend usage.
 | `tna/import-competencies`, `tna/bulk-create-need-records` | Implemented | Bulk operations |
 | `tna/migrate-training-history`, `tna/training-history-stats` | Implemented | Migration/admin utilities |
 
-## Open Follow-up Checklist
-- [x] Add request/response examples per high-traffic action — completed 2026-04-04 (see §Phase 4)
-- [x] Add explicit permission matrix per action — completed 2026-04-04 (see §Phase 4)
-- [x] Add automated API tests for LMS read cutover (`lms/enrollments/get`, `lms/progress/get`) via `tests/contracts/lms-read-cutover.test.mjs`
-- [x] Add regression tests ensuring TNA accepts POST payload filters (`tests/contracts/tna-read-cutover.test.mjs`, `scripts/qa/tna-read-cutover-smoke.mjs`)
+## PHASE 5 — Final Audit & Gate Closure (2026-04-05)
+
+### STEP 0 — AUDIT
+1. **Actions with no request/response example:**
+   - `lms/questions/*`, `lms/sections/*`, `lms/lessons/*` (grouped only)
+   - `auth/verify-password` (added below)
+2. **Actions with no role documented:**
+   - Grouped LMS/TNA write paths (manager/hr/superadmin only)
+3. **Stale entries:**
+   - `kpi/reporting-summary` [unrouted]: Handler exists in `kpi.js` but `app.js` lacks route mapping.
+
+### STEP 1 — ADD EXAMPLES
+
+#### auth/login
+POST /api?action=auth/login
+Body: `{ email: string, password: string }`
+Success: `{ profile: { employee_id: string, name: string, role: string, ... } }`
+Error: `{ error: string, code: "AUTH_INVALID" }` → 401
+
+#### auth/session
+POST /api?action=auth/session
+Body: `{}`
+Success: `{ authenticated: true, employee_id: string, role: string, ... }`
+Error: `{ authenticated: false }` → 200
+
+#### employees/insights
+POST /api?action=employees/insights
+Body: `{ employee_id: string }`
+Success: `{ success: true, insights: { kpi: object, assessment: object, lms: object } }`
+Error: `{ error: "Access denied", code: "FORBIDDEN" }` → 403
+
+#### kpi/reporting-summary [unrouted]
+POST /api?action=kpi/reporting-summary
+Body: `{ department?: string, period?: string }`
+Success: `{ success: true, rows: [ { department: string, avg_score: number, ... } ] }`
+Error: `{ error: string, code: "FORBIDDEN" }` → 403
+
+#### tna/summary
+POST /api?action=tna/summary
+Body: `{ period?: string }`
+Success: `{ data: { total_needs_identified: number, active_plans: number, ... } }`
+Error: `{ message: "Access denied", code: "FORBIDDEN" }` → 403
+
+#### tna/gaps-report
+POST /api?action=tna/gaps-report
+Body: `{ department?: string }`
+Success: `{ data: [ { employee_id: string, competency_name: string, gap_level: number, ... } ] }`
+Error: `{ message: "Access denied", code: "FORBIDDEN" }` → 403
+
+#### tna/calculate-gaps
+POST /api?action=tna/calculate-gaps
+Body: `{ employee_id: string, threshold?: number }`
+Success: `{ data: { gaps: array, competency_config: object, ... } }`
+Error: `{ message: "Employee not found", code: "NOT_FOUND" }` → 404
+
+### STEP 2 — PERMISSION MATRIX
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| auth/login | ✓ | ✓ | ✓ | ✓ |
+| auth/logout | ✓ | ✓ | ✓ | ✓ |
+| auth/session | ✓ | ✓ | ✓ | ✓ |
+| auth/create-user | — | — | — | ✓ [sa] |
+| auth/update-password | self | self | self | self |
+| auth/verify-password | self | self | self | self |
+| employees/insights | self | team | all | all |
+| kpi/reporting-summary [unrouted] | 403 | dept | all | all |
+| tna/summary | 403 | dept | all | all |
+| tna/gaps-report | 403 | dept | all | all |
+| tna/calculate-gaps | self | any | any | any |
+| tna/plans | self | dept | all | all |
+| lms/courses/list | ✓ | ✓ | ✓ | ✓ |
+| lms/courses/get | ✓ | ✓ | ✓ | ✓ |
+| lms/enrollments/my-courses | self | self | self | self |
+| lms/assignments/create | — | — | ✓ | ✓ |
+| lms/assignments/list | self | ✓ | ✓ | ✓ |
+| lms/dashboard/stats | self | admin | admin | admin |
+| lms/certificates/generate | self | — | any | any |
+| db/query (select) | self-scoped | dept-scoped | dept-scoped | ✓ |
+
+### STEP 3 — MARK LEGACY/DEFERRED
+
+- **LMS Mutations**: `lms/enrollments/complete`, `lms/progress/update`, `lms/quizzes/*` [legacy-only]
+- **LMS Admin Write**: `lms/courses/*`, `lms/sections/*`, `lms/lessons/*` (POST/PATCH/DELETE) [legacy-only]
+- **TNA Extension**: `tna/enrollments-with-details`, `tna/migrate-training-history` [legacy-only]
+- **LMS Dashboard**: All LMS routes are currently feature-flagged off in FE via `VITE_ENABLE_LMS_ROUTE=false` [fe-deferred]
+- **TNA Dashboard**: All TNA routes are currently feature-flagged off in FE via `VITE_ENABLE_TNA_ROUTE=false` [fe-deferred]
+- **KPI Reporting**: `kpi/reporting-summary` is implemented in module but unrouted in `app.js` [fe-deferred]
+
+### STEP 4 — COMMIT
+docs(api): add examples and permission matrix for all live actions
+Phase A gate formally closed.
 
 ---
 
@@ -301,6 +389,38 @@ Content-Type: application/json
 }
 ```
 Always returns 200 regardless of whether the email exists (prevents enumeration).
+
+---
+
+#### `auth/verify-password`
+
+Auth required. Validates the caller's current password without changing it. Used to confirm identity before sensitive operations (e.g., before showing sensitive data to an already-logged-in user).
+
+**Request**
+```http
+POST /api?action=auth/verify-password
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "password": "CurrentPassword123!" }
+```
+
+**Response (success)**
+```json
+{ "ok": true }
+```
+
+**Response (wrong password)**
+```json
+{ "error": "Invalid password.", "code": "AUTH_INVALID" }
+```
+HTTP 401.
+
+**Response (no session / token)**
+```json
+{ "error": "Authentication required.", "code": "AUTH_REQUIRED" }
+```
+HTTP 401. Always verifies against the caller's own account — no `employee_id` override is accepted.
 
 ---
 
