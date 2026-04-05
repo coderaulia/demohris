@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { BarChart3, Building2, Layers3, ListChecks, Target, Users } from 'lucide-react'
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { SelectField, type SelectOption } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { KpiDrillDownModal } from '@/components/KpiDrillDownModal'
 
 type DashboardMode = 'kpi' | 'assessment'
 
@@ -221,6 +222,7 @@ export function DashboardPage() {
     manager: '',
     period: normalizePeriod(),
   })
+  const [drillDownDepartment, setDrillDownDepartment] = useState<string | null>(null)
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard', 'overview', appliedFilters.department, appliedFilters.period],
@@ -491,13 +493,12 @@ export function DashboardPage() {
                 </div>
               </CardContent>
               <CardFooter>
-                <Link
-                  to={`/dashboard/drilldown/${mode}/${encodeURIComponent(card.department)}`}
-                  state={{ card }}
-                  className={cn(buttonVariants({ variant: 'default' }), 'w-full')}
+                <Button
+                  className="w-full"
+                  onClick={() => setDrillDownDepartment(card.department)}
                 >
                   Open Drill-down
-                </Link>
+                </Button>
               </CardFooter>
             </Card>
           ))}
@@ -521,6 +522,12 @@ export function DashboardPage() {
           </Badge>
         </CardContent>
       </Card>
+
+      <KpiDrillDownModal
+        department={drillDownDepartment || ''}
+        isOpen={drillDownDepartment !== null}
+        onClose={() => setDrillDownDepartment(null)}
+      />
     </div>
   )
 }

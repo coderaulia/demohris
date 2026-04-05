@@ -9,6 +9,9 @@ import { EmployeeDetailPage } from '@/pages/EmployeeDetailPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
 import { KpiDrilldownPage } from '@/pages/KpiDrilldownPage';
 import { KpiReportingPage } from '@/pages/KpiReportingPage';
+import { KpiRecordsPage } from '@/pages/KpiRecordsPage';
+import { KpiInputPage } from '@/pages/KpiInputPage';
+import { KpiManagementPage } from '@/pages/KpiManagementPage';
 import { LmsCourseDetailPage } from '@/pages/LmsCourseDetailPage';
 import { LmsReadOnlyPage } from '@/pages/LmsReadOnlyPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -146,13 +149,17 @@ export const router = createBrowserRouter([
 
             {
                 path: 'performance/kpi-records',
-                element: <Navigate to="/kpi" replace />,
+                element: (
+                    <RoleGate allow={[...ADMIN_HR_MANAGER]} redirectTo="/dashboard">
+                        <KpiRecordsPage />
+                    </RoleGate>
+                ),
             },
             {
                 path: 'kpi',
                 element: (
                     <RoleGate allow={[...ADMIN_HR_MANAGER]} redirectTo="/dashboard">
-                        <KpiReportingPage initialMode="kpi" />
+                        <KpiRecordsPage />
                     </RoleGate>
                 ),
             },
@@ -164,11 +171,7 @@ export const router = createBrowserRouter([
                 path: 'performance/kpi-input',
                 element: (
                     <RoleGate allow={[...ADMIN_HR_MANAGER]}>
-                        <DeferredModulePage
-                            title="KPI Input"
-                            description="KPI input mutations are temporarily deferred in shell to protect mutation parity rules."
-                            boundaries={['KPI mutation tools deferred', 'Use controlled legacy flow for input/edit']}
-                        />
+                        <KpiInputPage />
                     </RoleGate>
                 ),
             },
@@ -311,7 +314,7 @@ export const router = createBrowserRouter([
                 path: 'system/kpi-settings',
                 element: (
                     <RoleGate allow={[...ADMIN_HR]}>
-                        <DeferredModulePage title="KPI Settings" description="KPI setting mutations are deferred while KPI endpoint cutover continues." />
+                        <KpiManagementPage />
                     </RoleGate>
                 ),
             },

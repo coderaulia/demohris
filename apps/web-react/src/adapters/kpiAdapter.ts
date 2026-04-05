@@ -157,6 +157,258 @@ export const kpiAdapter = {
         });
     },
 
+    async listRecords(filters: { employee_id?: string; period?: string; kpi_definition_id?: string } = {}) {
+        const accessToken = await getAccessToken();
+        const KpiRecordsListResponseSchema = z.object({
+            success: z.literal(true),
+            records: z.array(z.object({
+                id: z.string(),
+                employee_id: z.string(),
+                employee_name: z.string(),
+                department: z.string(),
+                position: z.string(),
+                kpi_id: z.string(),
+                kpi_name: z.string(),
+                period: z.string(),
+                value: z.number(),
+                actual_value: z.number(),
+                target_value: z.number().nullable(),
+                achievement_pct: z.number().nullable(),
+                unit: z.string(),
+                notes: z.string().nullable().optional(),
+                updated_by: z.string().nullable().optional(),
+                updated_by_name: z.string().nullable().optional(),
+                updated_at: z.string().nullable().optional(),
+                submitted_by: z.string().nullable().optional(),
+                submitted_at: z.string().nullable().optional(),
+            }).passthrough()),
+        });
+        return transport.execute<z.infer<typeof KpiRecordsListResponseSchema>>({
+            domain: 'kpi',
+            action: 'kpi/records/list',
+            payload: filters,
+            method: 'POST',
+            schema: KpiRecordsListResponseSchema,
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async deleteRecord(recordId: string) {
+        const accessToken = await getAccessToken();
+        return transport.execute({
+            domain: 'kpi',
+            action: 'kpi/record/delete',
+            payload: { record_id: recordId },
+            method: 'POST',
+            schema: z.object({ success: z.literal(true) }),
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async getDepartmentSummary(department: string, period?: string) {
+        const accessToken = await getAccessToken();
+        const KpiDepartmentSummarySchema = z.object({
+            success: z.literal(true),
+            department: z.string(),
+            period: z.string().nullable(),
+            total_employees: z.number().int().nonnegative(),
+            employees_with_records: z.number().int().nonnegative(),
+            employees_without_records: z.number().int().nonnegative(),
+            active_kpis: z.number().int().nonnegative(),
+            overall_achievement_pct: z.number(),
+            six_month_trend: z.array(z.object({
+                month: z.string(),
+                avg_achievement: z.number(),
+            })),
+            employees: z.array(z.object({
+                employee_id: z.string(),
+                name: z.string(),
+                position: z.string(),
+                kpi_group: z.string(),
+                has_record: z.boolean(),
+                avg_achievement: z.number().nullable(),
+                kpis: z.array(z.object({
+                    kpi_name: z.string(),
+                    target: z.number().nullable(),
+                    actual: z.number(),
+                    achievement_pct: z.number().nullable(),
+                    status: z.enum(['on_track', 'at_risk', 'below_target']),
+                    unit: z.string(),
+                })),
+            })),
+        });
+        return transport.execute<z.infer<typeof KpiDepartmentSummarySchema>>({
+            domain: 'kpi',
+            action: 'kpi/department-summary',
+            payload: { department, period: period || undefined },
+            method: 'POST',
+            schema: KpiDepartmentSummarySchema,
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async getDefinitions(filters: { applies_to_position?: string } = {}) {
+        const accessToken = await getAccessToken();
+        const KpiDefinitionsListResponseSchema = z.object({
+            success: z.literal(true),
+            definitions: z.record(z.string(), z.array(z.object({
+                id: z.string(),
+                name: z.string(),
+                description: z.string().nullable().optional(),
+                unit: z.string().default('%'),
+                kpi_type: z.enum(['direct', 'ratio']).default('direct'),
+                applies_to_position: z.string().nullable().optional(),
+                target_value: z.number().nullable().optional(),
+                effective_date: z.string(),
+                version: z.number().int().positive().default(1),
+                status: z.enum(['approved', 'pending', 'rejected', 'archived']).default('approved'),
+                created_by: z.string().nullable().optional(),
+                change_note: z.string().nullable().optional(),
+                created_at: z.string().nullable().optional(),
+            }).passthrough())),
+        });
+        return transport.execute<z.infer<typeof KpiDefinitionsListResponseSchema>>({
+            domain: 'kpi',
+            action: 'kpi/definitions/list',
+            payload: filters,
+            method: 'POST',
+            schema: KpiDefinitionsListResponseSchema,
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async createDefinition(input: { name: string; description?: string; unit?: string; kpi_type?: string; applies_to_position?: string; target_value?: number; effective_date: string; change_note?: string }) {
+        const accessToken = await getAccessToken();
+        return transport.execute({
+            domain: 'kpi',
+            action: 'kpi/definitions/create',
+            payload: input,
+            method: 'POST',
+            schema: z.object({ success: z.literal(true), definition: z.unknown() }),
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async getTargets(employeeId: string, period: string) {
+        const accessToken = await getAccessToken();
+        const KpiTargetsResponseSchema = z.object({
+            success: z.literal(true),
+            targets: z.array(z.object({
+                kpi_definition_id: z.string(),
+                kpi_name: z.string(),
+                unit: z.string(),
+                target_value: z.number(),
+                source: z.enum(['personal', 'default']),
+            })),
+        });
+        return transport.execute<z.infer<typeof KpiTargetsResponseSchema>>({
+            domain: 'kpi',
+            action: 'kpi/targets/get',
+            payload: { employee_id: employeeId, period },
+            method: 'POST',
+            schema: KpiTargetsResponseSchema,
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async getGovernance() {
+        const accessToken = await getAccessToken();
+        return transport.execute({
+            domain: 'kpi',
+            action: 'kpi/governance/get',
+            payload: {},
+            method: 'POST',
+            schema: z.object({ success: z.literal(true), require_hr_approval: z.boolean() }),
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async setGovernance(requireHrApproval: boolean) {
+        const accessToken = await getAccessToken();
+        return transport.execute({
+            domain: 'kpi',
+            action: 'kpi/governance/set',
+            payload: { require_hr_approval: requireHrApproval },
+            method: 'POST',
+            schema: z.object({ success: z.literal(true), require_hr_approval: z.boolean() }),
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async getVersionHistory(kpiDefinitionId?: string, limit = 50) {
+        const accessToken = await getAccessToken();
+        const KpiVersionHistoryResponseSchema = z.object({
+            success: z.literal(true),
+            history: z.array(z.object({
+                type: z.enum(['created', 'updated', 'deleted']),
+                scope: z.string(),
+                effective: z.string(),
+                version: z.number().int().positive(),
+                status: z.string(),
+                value: z.number().nullable(),
+                change_note: z.string().nullable().optional(),
+                created_by: z.string().nullable().optional(),
+                created_at: z.string().nullable().optional(),
+            })),
+        });
+        return transport.execute<z.infer<typeof KpiVersionHistoryResponseSchema>>({
+            domain: 'kpi',
+            action: 'kpi/version-history',
+            payload: { kpi_definition_id: kpiDefinitionId || undefined, limit },
+            method: 'POST',
+            schema: KpiVersionHistoryResponseSchema,
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async setTargets(employeeId: string, period: string, targets: Array<{ kpi_definition_id: string; target_value: number }>) {
+        const accessToken = await getAccessToken();
+        return transport.execute({
+            domain: 'kpi',
+            action: 'kpi/targets/set',
+            payload: { employee_id: employeeId, period, targets },
+            method: 'POST',
+            schema: z.object({ success: z.literal(true), targets: z.array(z.unknown()) }),
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async getPendingApprovals() {
+        const accessToken = await getAccessToken();
+        return transport.execute({
+            domain: 'kpi',
+            action: 'kpi/approvals/list',
+            payload: {},
+            method: 'POST',
+            schema: z.object({ success: z.literal(true), pending: z.array(z.unknown()) }),
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async approveDefinition(definitionId: string) {
+        const accessToken = await getAccessToken();
+        return transport.execute({
+            domain: 'kpi',
+            action: 'kpi/approvals/approve',
+            payload: { definition_id: definitionId },
+            method: 'POST',
+            schema: z.object({ success: z.literal(true) }),
+            accessToken: accessToken || undefined,
+        });
+    },
+
+    async rejectDefinition(definitionId: string) {
+        const accessToken = await getAccessToken();
+        return transport.execute({
+            domain: 'kpi',
+            action: 'kpi/approvals/reject',
+            payload: { definition_id: definitionId },
+            method: 'POST',
+            schema: z.object({ success: z.literal(true) }),
+            accessToken: accessToken || undefined,
+        });
+    },
+
     async getOverview(
         filters: ReportingFilters = {},
         context: { role: EmployeeRole | null; employeeId: string },
