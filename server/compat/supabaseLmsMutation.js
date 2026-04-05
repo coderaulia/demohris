@@ -424,3 +424,61 @@ export async function unenrollCourseInSupabase({
 
     return { enrollment };
 }
+
+// Explicit decoupling: this function ONLY updates enrollment status.
+// Certificate issuance is a separate action (lms/certificates/generate)
+// and must be triggered independently after completion.
+export async function completeEnrollmentInSupabase({
+    enrollmentId,
+    employeeId,
+    isAdmin = false,
+}) {
+    const { source, supabaseUrl, serviceRoleKey } = resolveLmsMutationSource();
+    if (source !== 'supabase') {
+        throw new Error('completeEnrollmentInSupabase called when LMS mutation source is not supabase.');
+    }
+
+    if (!enrollmentId) {
+        return { error: { status: 400, message: 'enrollment_id is required' } };
+    }
+
+    const enrollment = await findEnrollmentById({
+        supabaseUrl,
+        serviceRoleKey,
+        enrollmentId,
+    });
+
+    if (!enrollment) {
+        return { error: { status: 404, message: 'Enrollment not found' } };
+    }
+
+    if (!isAdmin && String(enrollment.employee_id || '') !== String(employeeId || '')) {
+        return { error: { status: 403, message: 'Not authorized to complete this enrollment' } };
+    }
+
+    const currentStatus = String(enrollment.status || '').toLowerCase();
+    if (currentStatus === 'completed') {
+        return { error: { status: 400, message: 'Course already completed' } };
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const updatedRows = await callSupabase({
+        supabaseUrl,
+        serviceRoleKey,
+        table: 'course_enrollments',
+        method: 'PATCH',
+        filters: {
+            id: { type: 'eq', value: enrollmentId },
+        },
+        body: {
+            status: 'completed',
+            completed_at: nowIso,
+        },
+        prefer: 'return=representation',
+    });
+
+    const updated = updatedRows[0] || { ...enrollment, status: 'completed', completed_at: nowIso };
+
+    return { enrollment: updated };
+}

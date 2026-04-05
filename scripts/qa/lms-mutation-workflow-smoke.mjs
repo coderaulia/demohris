@@ -371,7 +371,104 @@ async function main() {
     });
     assert(unauthorizedUnenroll.status === 401, `unauthorized unenroll should return 401, got ${unauthorizedUnenroll.status}`);
 
-    console.log('LMS enroll/unenroll/start workflow smoke checks passed.');
+    // === Complete enrollment workflow smoke ===
+    const enrollCompleteResp = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/enrollments/enroll',
+        jwt,
+        body: { course_id: enrollCourseId },
+    });
+    assert(
+        [200, 400, 409].includes(enrollCompleteResp.status),
+        `re-enroll for complete test should return 200, 400 or 409, got ${enrollCompleteResp.status}`
+    );
+
+    const completeEnrollId = await findEnrollmentByCourse({
+        baseUrl: backendBaseUrl,
+        jwt,
+        courseId: enrollCourseId,
+    });
+    assert(completeEnrollId, 'Unable to resolve enrollment for complete test');
+
+    const completeResp = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/enrollments/complete',
+        jwt,
+        body: { enrollment_id: completeEnrollId },
+    });
+    assert(
+        [200, 400].includes(completeResp.status),
+        `complete should return 200 or 400, got ${completeResp.status}`
+    );
+    if (completeResp.status === 200) {
+        assert(completeResp.payload?.success === true, 'complete should return success=true');
+        assert(completeResp.payload?.enrollment, 'complete should return enrollment payload');
+        assert(
+            String(completeResp.payload.enrollment.status || '').toLowerCase() === 'completed',
+            'complete should set status to completed'
+        );
+        assert(completeResp.payload.enrollment.completed_at, 'complete should set completed_at');
+    } else {
+        const message = String(completeResp.payload?.error || '').toLowerCase();
+        assert(
+            message.includes('already completed') || message.includes('not found') || message.includes('required'),
+            `complete 400 should be guard error, got: ${message || 'unknown'}`
+        );
+    }
+
+    const enrollmentAfterComplete = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/enrollments/get',
+        jwt,
+        body: { enrollment_id: completeEnrollId },
+    });
+    assert(
+        enrollmentAfterComplete.status === 200,
+        `enrollments/get after complete should return 200, got ${enrollmentAfterComplete.status}`
+    );
+    if (enrollmentAfterComplete.payload?.enrollment) {
+        const statusAfterComplete = String(enrollmentAfterComplete.payload.enrollment.status || '').toLowerCase();
+        assert(
+            statusAfterComplete === 'completed',
+            `enrollment status after complete should be completed, got ${statusAfterComplete}`
+        );
+        assert(
+            enrollmentAfterComplete.payload.enrollment.completed_at,
+            'enrollment after complete should have completed_at'
+        );
+    }
+
+    const progressAfterComplete = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/progress/get',
+        jwt,
+        body: { enrollment_id: completeEnrollId },
+    });
+    assert(
+        progressAfterComplete.status === 200,
+        `progress/get after complete should return 200, got ${progressAfterComplete.status}`
+    );
+    assertProgressShape(progressAfterComplete.payload);
+
+    const unauthorizedComplete = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/enrollments/complete',
+        body: { enrollment_id: completeEnrollId },
+    });
+    assert(unauthorizedComplete.status === 401, `unauthorized complete should return 401, got ${unauthorizedComplete.status}`);
+
+    const notFoundComplete = await callLmsEndpoint({
+        baseUrl: backendBaseUrl,
+        action: 'lms/enrollments/complete',
+        jwt,
+        body: { enrollment_id: '00000000-0000-4000-8000-000000000000' },
+    });
+    assert(
+        notFoundComplete.status === 404,
+        `complete with unknown enrollment should return 404, got ${notFoundComplete.status}`
+    );
+
+    console.log('LMS enroll/unenroll/start/complete workflow smoke checks passed.');
 }
 
 main().catch(error => {

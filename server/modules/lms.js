@@ -15,6 +15,7 @@ import {
     resolveLmsMutationSource,
     startCourseEnrollmentInSupabase,
     unenrollCourseInSupabase,
+    completeEnrollmentInSupabase,
 } from '../compat/supabaseLmsMutation.js';
 
 function generateId() {
@@ -128,7 +129,7 @@ export async function handleLmsAction(req, res, action) {
             case 'lms/enrollments/start':
                 return await startCourse(req, res, currentUser);
             case 'lms/enrollments/complete':
-                return await completeCourse(req, res, currentUser);
+                return await completeEnrollment(req, res, currentUser);
             
             case 'lms/progress/update':
                 return await updateLessonProgress(req, res, currentUser);
@@ -2074,4 +2075,28 @@ async function completeAssignment(req, res, currentUser) {
     );
     
     res.json({ success: true });
+}
+
+// Explicit decoupling: this handler ONLY updates enrollment status to completed.
+// Certificate issuance is a separate action (lms/certificates/generate)
+// and must be triggered independently after completion.
+async function completeEnrollment(req, res, currentUser) {
+    const { enrollment_id } = req.body;
+
+    if (!enrollment_id) {
+        return res.status(400).json({ error: 'enrollment_id is required' });
+    }
+
+    // Supabase-only path — no legacy branch
+    const result = await completeEnrollmentInSupabase({
+        enrollmentId: enrollment_id,
+        employeeId: currentUser.employee_id,
+        isAdmin: isAdmin(currentUser),
+    });
+
+    if (result?.error) {
+        return res.status(result.error.status).json({ error: result.error.message });
+    }
+
+    return res.json({ success: true, enrollment: normalizeRow(result.enrollment) });
 }
