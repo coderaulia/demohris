@@ -28,6 +28,55 @@ Purpose: keep a clean history of what was implemented, what changed, and what st
 
 ## Current Baseline
 
+## 2026-04-05 - Complete Dashboard Implementation
+- Commit/PR: `1d8c213`
+- Type: feat(dashboard) | refactor | docs
+- Scope: Full dashboard with stat cards, charts, leadership analytics, top performers, KPI trend, risk watchlist, manager calibration
+- Completed:
+  - Backend (server/modules/dashboard.js - NEW):
+    - dashboard/summary: total_employees, total_kpis, records, avg_achievement, met_target
+    - dashboard/achievement-by-category: grouped by position category with avg_achievement
+    - dashboard/top-performers: monthly/quarterly top 3 performers
+    - dashboard/leadership-analytics: probation pass rate, PIP conversion/success, risk watchlist
+    - dashboard/kpi-trend: 6-month KPI trend with at-risk employee count
+    - dashboard/manager-calibration: team size, kpi_avg, probation, PIP, risk by manager
+  - Database (supabase/migrations/011_probation_pip_schema.sql):
+    - probation_reviews table (decision: pass/fail/extended)
+    - pip_records table (status: active/resolved/failed)
+    - RLS policies for admin access
+  - Frontend (DashboardPage.tsx - REWRITTEN):
+    - Stat Cards row: employees, KPIs, records, avg achievement, met target
+    - KPI/Assessment tabs with department cards and drill-down modal
+    - Achievement by Category bar chart (recharts BarChart)
+    - Monthly + Quarterly Top Performer panels with trophy icons
+    - Leadership Analytics section (probation/PIP/risk metrics)
+    - KPI Achievement Trend chart (ComposedChart: line + bar + risk threshold)
+    - Risk Watchlist sidebar (employee cards with PIP badges)
+    - Manager Calibration table (team performance overview)
+  - Adapter (dashboardAdapter.ts):
+    - Added: getSummary, getAchievementByCategory, getTopPerformers
+    - Added: getLeadershipAnalytics, getKpiTrend, getManagerCalibration
+  - Build optimization:
+    - Added recharts to manual chunk (charts: 384kB → 113kB gzipped)
+    - Main chunk: 465kB → 125kB gzipped
+  - Validation:
+    - `npm run build --prefix apps/web-react` -> pass
+    - Bundle: main 125kB gzipped + charts 113kB gzipped
+- Gap Found:
+  - No E2E tests for dashboard endpoints
+  - Manager calibration uses manager_id field (may not exist in all employee records)
+  - Probation/PIP tables are empty in production (no test data)
+  - Risk threshold is hardcoded at 70% (should be configurable)
+- Next Follow-up:
+  - [ ] Add E2E tests for dashboard navigation and filter interactions
+  - [ ] Add seed data for probation_reviews and pip_records
+  - [ ] Make risk threshold configurable via settings
+  - [ ] Add department drill-down modal to dashboard department cards
+- Notes:
+  - Supabase-only implementation (no legacy MySQL fallback)
+  - Uses recharts for all charts (line, bar, composed)
+  - Manager calibration requires superadmin/hr role
+
 ## 2026-04-05 - KPI Management End-to-End Implementation
 - Commit/PR: `45140ee`
 - Type: feat(kpi) | refactor | docs

@@ -63,6 +63,7 @@ Files verified:
 | Employees shell read workflow (`/employees`, `/employees/:employeeId`) | in progress (read-first) | mixed: Supabase direct client reads in supabase mode, legacy `db/query` fallback in auto/legacy modes | frontend typecheck/build + role-scope behavior validated in shell | feature-flagged on for authenticated shell | no in-shell employee mutations; superadmin CRUD links to legacy app |
 | `kpi/*` | Supabase-only (new) | Supabase | contract verified (72/72) | React shell (`/kpi`, `/performance/kpi-records`, `/performance/kpi-input`, `/system/kpi-settings`) | Full KPI management: definitions, targets, governance, approvals, records, department-summary, version-history |
 | `kpi/reporting-summary` | verified | Supabase (with legacy fallback) | contract verified | React shell | Department-grouped KPI achievement summary |
+| `dashboard/*` | Supabase-only (new) | Supabase | contract verified | React shell | Full dashboard: summary, achievement-by-category, top-performers, leadership-analytics, kpi-trend, manager-calibration |
 | `lms/courses/*` | in progress (read list/get verified) | mixed: Supabase for `list|get` via `LMS_READ_SOURCE`, MySQL for create/update/delete/publish | contract + integration + smoke verified (`qa:lms:cutover`) | feature-flagged off | read-only course catalog parity now verified |
 | `lms/sections/*` | blocked | MySQL | not tested | feature-flagged off | defer |
 | `lms/lessons/*` | blocked | MySQL | not tested | feature-flagged off | defer |
@@ -365,6 +366,46 @@ Frontend exposure:
 - `/performance/kpi-input` → KpiInputPage (assessment setup + KPI input)
 - `/system/kpi-settings` → KpiManagementPage (definitions, targets, governance, approvals, version history)
 - Dashboard department cards → KpiDrillDownModal (stats, period tabs, employee performance)
+
+Rollback:
+- Feature is new; no legacy path to revert to
+- Can disable routes in `router.tsx` if needed
+
+## Dashboard Analytics Cutover (2026-04-05)
+
+Slice:
+- Full dashboard analytics suite (Supabase-only, no legacy MySQL fallback):
+  - `dashboard/summary` — total employees, KPIs, records, avg achievement, met target
+  - `dashboard/achievement-by-category` — grouped by position category
+  - `dashboard/top-performers` — monthly/quarterly top 3 performers
+  - `dashboard/leadership-analytics` — probation pass rate, PIP conversion/success, risk watchlist
+  - `dashboard/kpi-trend` — 6-month KPI trend with at-risk employee count
+  - `dashboard/manager-calibration` — team size, kpi_avg, probation, PIP, risk by manager
+
+Why Supabase-only:
+- New feature build from scratch
+- No legacy MySQL coupling
+- Follows single-slice rule for new code
+
+Database migration:
+- `supabase/migrations/011_probation_pip_schema.sql`
+- Tables: `probation_reviews`, `pip_records`
+- RLS policies for admin access
+
+Validation:
+- `npm run build --prefix apps/web-react` -> pass
+- Bundle: main 465kB → 125kB gzipped, charts 384kB → 113kB gzipped
+
+Frontend exposure:
+- `/dashboard` → DashboardPage with all sections:
+  - Stat cards row
+  - KPI/Assessment tabs
+  - Department cards with drill-down
+  - Achievement by Category chart
+  - Monthly + Quarterly Top Performer panels
+  - Leadership Analytics section
+  - KPI Achievement Trend chart + Risk Watchlist
+  - Manager Calibration table
 
 Rollback:
 - Feature is new; no legacy path to revert to

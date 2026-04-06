@@ -1140,6 +1140,17 @@ HTTP 403.
 | `kpi/department-summary` | — | dept | all | all |
 | `kpi/version-history` | ✓ | ✓ | ✓ | ✓ |
 
+#### Dashboard
+
+| Action | employee | manager | hr | superadmin |
+|---|---|---|---|---|
+| `dashboard/summary` | ✓ | dept | all | all |
+| `dashboard/achievement-by-category` | ✓ | dept | all | all |
+| `dashboard/top-performers` | ✓ | dept | all | all |
+| `dashboard/leadership-analytics` | — | — | all | all |
+| `dashboard/kpi-trend` | ✓ | dept | all | all |
+| `dashboard/manager-calibration` | — | — | all | all |
+
 ---
 
 ### STEP 3 — Stale / Blocked Entry Notes
@@ -2093,6 +2104,160 @@ POST /api?action=tna/assessment/list
       "competency_count": 5,
       "avg_gap": 0.8,
       "status": "finalized"
+    }
+  ]
+}
+```
+
+---
+
+## Dashboard Analytics Endpoints (2026-04-05)
+
+#### `dashboard/summary`
+
+**Request**
+```http
+POST /api?action=dashboard/summary
+Content-Type: application/json
+
+{ "department": "Sales", "period": "2026-04" }
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "total_employees_with_kpi": 45,
+  "total_kpi_definitions": 12,
+  "total_records": 180,
+  "records_period": "2026-04: 180 records",
+  "avg_achievement_pct": 87.5,
+  "met_target_count": 120
+}
+```
+
+---
+
+#### `dashboard/achievement-by-category`
+
+**Request**
+```http
+POST /api?action=dashboard/achievement-by-category
+Content-Type: application/json
+
+{ "department": "Sales", "period": "2026-04" }
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "categories": [
+    { "category": "Sales", "avg_achievement": 92.5, "record_count": 45 },
+    { "category": "Engineering", "avg_achievement": 88.3, "record_count": 32 }
+  ]
+}
+```
+
+---
+
+#### `dashboard/top-performers`
+
+**Request**
+```http
+POST /api?action=dashboard/top-performers
+Content-Type: application/json
+
+{ "scope": "monthly", "department": "Sales", "period": "2026-04" }
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "scope": "monthly",
+  "period": "2026-04",
+  "top_performers": [
+    { "employee_id": "EMP001", "name": "Farhan Akbar", "position": "Account Executive", "department": "Sales", "avg_achievement": 115.2, "kpi_count": 4 }
+  ]
+}
+```
+
+---
+
+#### `dashboard/leadership-analytics`
+
+**Request**
+```http
+POST /api?action=dashboard/leadership-analytics
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "probation_pass_rate": 85.7,
+  "probation_pass_count": 6,
+  "probation_total_closed": 7,
+  "pip_conversion_rate": 66.7,
+  "pip_active_count": 2,
+  "pip_total_eligible": 3,
+  "pip_success_rate": 75.0,
+  "risk_watchlist": [
+    { "employee_id": "EMP010", "name": "John Doe", "position": "Analyst", "department": "Finance", "avg_score": 52.3, "has_active_pip": true, "risk_level": "high" }
+  ]
+}
+```
+
+---
+
+#### `dashboard/kpi-trend`
+
+**Request**
+```http
+POST /api?action=dashboard/kpi-trend
+Content-Type: application/json
+
+{ "department": "Sales", "months": 6 }
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "trend": [
+    { "month": "Nov 2025", "period": "2025-11", "avg_kpi_score": 78.5, "at_risk_employee_count": 5 },
+    { "month": "Dec 2025", "period": "2025-12", "avg_kpi_score": 82.1, "at_risk_employee_count": 3 },
+    { "month": "Jan 2026", "period": "2026-01", "avg_kpi_score": 85.3, "at_risk_employee_count": 2 }
+  ]
+}
+```
+
+---
+
+#### `dashboard/manager-calibration`
+
+**Request**
+```http
+POST /api?action=dashboard/manager-calibration
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "period": "2026-04",
+  "calibration": [
+    {
+      "manager_id": "MGR001",
+      "manager_name": "Sinta Wibowo",
+      "manager_employee_id": "MGR001",
+      "team_size": 8,
+      "kpi_avg": 87.5,
+      "assessment_avg": null,
+      "probation_pass_count": 2,
+      "active_pip_count": 0,
+      "risk_count": 1
     }
   ]
 }
