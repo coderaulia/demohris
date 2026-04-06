@@ -1,10 +1,15 @@
 import { lmsAdapter } from './lmsAdapter'
 import { modulesAdapter } from './modulesAdapter'
 import { tnaAdapter } from './tnaAdapter'
+import { kpiAdapter } from './kpiAdapter'
+import { env } from '@/lib/env'
+import { getSupabaseSession } from '@/lib/supabaseClient'
+import { transport } from './transport'
 
 interface DashboardFiltersInput {
   department?: string
   period?: string
+  manager_id?: string
 }
 
 export interface DashboardDataResult {
@@ -20,6 +25,58 @@ export interface DashboardDataResult {
     managerFilterSource: boolean
     kpiScoreSummary: boolean
   }
+  summary?: {
+    total_employees_with_kpi: number
+    total_kpi_definitions: number
+    total_records: number
+    records_period: string
+    avg_achievement_pct: number | null
+    met_target_count: number
+  }
+  achievementByCategory?: Array<{
+    category: string
+    avg_achievement: number
+    record_count: number
+  }>
+  topPerformers?: {
+    monthly: Array<{ employee_id: string; name: string; position: string; department: string; avg_achievement: number; kpi_count: number }>
+    quarterly: Array<{ employee_id: string; name: string; position: string; department: string; avg_achievement: number; kpi_count: number }>
+  }
+  leadership?: {
+    probation_pass_rate: number
+    probation_pass_count: number
+    probation_total_closed: number
+    pip_conversion_rate: number
+    pip_active_count: number
+    pip_total_eligible: number
+    pip_success_rate: number
+    risk_watchlist: Array<{
+      employee_id: string
+      name: string
+      position: string
+      department: string
+      avg_score: number
+      has_active_pip: boolean
+      risk_level: 'high' | 'medium'
+    }>
+  }
+  kpiTrend?: Array<{
+    month: string
+    period: string
+    avg_kpi_score: number
+    at_risk_employee_count: number
+  }>
+  managerCalibration?: Array<{
+    manager_id: string
+    manager_name: string
+    manager_employee_id: string
+    team_size: number
+    kpi_avg: number | null
+    assessment_avg: number | null
+    probation_pass_count: number
+    active_pip_count: number
+    risk_count: number
+  }>
 }
 
 function toObject(value: unknown): Record<string, unknown> {
@@ -30,6 +87,11 @@ function toObject(value: unknown): Record<string, unknown> {
 function toObjectArray(value: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(value)) return []
   return value.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>
+}
+
+async function getAccessToken(): Promise<string> {
+  const session = await getSupabaseSession()
+  return String(session?.access_token || '')
 }
 
 export const dashboardAdapter = {
@@ -66,6 +128,78 @@ export const dashboardAdapter = {
         kpiScoreSummary: true,
       },
     }
+  },
+
+  async getSummary(filters: DashboardFiltersInput = {}) {
+    const accessToken = await getAccessToken()
+    return transport.execute({
+      domain: 'dashboard',
+      action: 'dashboard/summary',
+      payload: filters,
+      method: 'POST',
+      schema: null as any,
+      accessToken: accessToken || undefined,
+    })
+  },
+
+  async getAchievementByCategory(filters: DashboardFiltersInput = {}) {
+    const accessToken = await getAccessToken()
+    return transport.execute({
+      domain: 'dashboard',
+      action: 'dashboard/achievement-by-category',
+      payload: filters,
+      method: 'POST',
+      schema: null as any,
+      accessToken: accessToken || undefined,
+    })
+  },
+
+  async getTopPerformers(scope: 'monthly' | 'quarterly' = 'monthly', filters: DashboardFiltersInput = {}) {
+    const accessToken = await getAccessToken()
+    return transport.execute({
+      domain: 'dashboard',
+      action: 'dashboard/top-performers',
+      payload: { ...filters, scope },
+      method: 'POST',
+      schema: null as any,
+      accessToken: accessToken || undefined,
+    })
+  },
+
+  async getLeadershipAnalytics(filters: DashboardFiltersInput = {}) {
+    const accessToken = await getAccessToken()
+    return transport.execute({
+      domain: 'dashboard',
+      action: 'dashboard/leadership-analytics',
+      payload: filters,
+      method: 'POST',
+      schema: null as any,
+      accessToken: accessToken || undefined,
+    })
+  },
+
+  async getKpiTrend(filters: DashboardFiltersInput & { months?: number } = {}) {
+    const accessToken = await getAccessToken()
+    return transport.execute({
+      domain: 'dashboard',
+      action: 'dashboard/kpi-trend',
+      payload: filters,
+      method: 'POST',
+      schema: null as any,
+      accessToken: accessToken || undefined,
+    })
+  },
+
+  async getManagerCalibration(filters: DashboardFiltersInput = {}) {
+    const accessToken = await getAccessToken()
+    return transport.execute({
+      domain: 'dashboard',
+      action: 'dashboard/manager-calibration',
+      payload: filters,
+      method: 'POST',
+      schema: null as any,
+      accessToken: accessToken || undefined,
+    })
   },
 }
 

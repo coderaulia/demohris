@@ -34,6 +34,7 @@ export default defineConfig({
                     vendor: ['react', 'react-dom', 'react-router-dom'],
                     query: ['@tanstack/react-query'],
                     supabase: ['@supabase/supabase-js'],
+                    charts: ['recharts'],
                 },
             },
         },

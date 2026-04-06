@@ -19,6 +19,7 @@ import { isTnaEnabled, handleTnaAction } from './modules/tna.js';
 import { handleLmsAction } from './modules/lms.js';
 import { handleEmployeesAction } from './modules/employees.js';
 import { handleKpiAction } from './modules/kpi.js';
+import { handleDashboardAction } from './modules/dashboard.js';
 import {
     getAllModules,
     getModule,
@@ -1105,6 +1106,11 @@ app.all('/api', async (req, res, next) => {
                 throw new ApiError(404, 'KPI module is not enabled.', 'MODULE_DISABLED');
             }
             await handleKpiAction(req, res, action);
+            return;
+        }
+
+        if (action.startsWith('dashboard/')) {
+            await handleDashboardAction(req, res, action);
             return;
         }
 
