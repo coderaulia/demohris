@@ -20,6 +20,7 @@ import { handleLmsAction } from './modules/lms.js';
 import { handleEmployeesAction } from './modules/employees.js';
 import { handleKpiAction } from './modules/kpi.js';
 import { handleDashboardAction } from './modules/dashboard.js';
+import { handleSettingsAction } from './modules/settings.js';
 import {
     getAllModules,
     getModule,
@@ -1082,6 +1083,11 @@ app.all('/api', async (req, res, next) => {
 
         if (action.startsWith('employees/')) {
             await handleEmployeesAction(req, res, action);
+            return;
+        }
+
+        if (action.startsWith('settings/')) {
+            await handleSettingsAction(req, res, action);
             return;
         }
 

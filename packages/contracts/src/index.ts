@@ -4,4 +4,5 @@ export * from './employees';
 export * from './kpi';
 export * from './lms';
 export * from './modules';
+export * from './settings';
 export * from './tna';

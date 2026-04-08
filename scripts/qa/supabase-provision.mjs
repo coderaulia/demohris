@@ -92,25 +92,38 @@ async function applyMigrations(envLabel, projectRef, dbPassword) {
         env: { ...process.env, SUPABASE_ACCESS_TOKEN: env('SUPABASE_ACCESS_TOKEN') },
     });
 
-    const seedFile = path.join(rootDir, 'supabase', 'seeds', 'seed_dev_staging.sql');
-    if (!fs.existsSync(seedFile)) {
-        console.log(`- Seed skipped for ${envLabel}: ${seedFile} not found.`);
+    const seedsDir = path.join(rootDir, 'supabase', 'seeds');
+    if (!fs.existsSync(seedsDir)) {
+        console.log(`- Seed skipped for ${envLabel}: ${seedsDir} not found.`);
         return;
     }
 
-    console.log(`- Applying seed file to ${envLabel}: ${seedFile}`);
-    await run('npx', [
-        'supabase@latest',
-        'db',
-        'query',
-        '--linked',
-        '--file',
-        seedFile,
-        '--workdir',
-        cliWorkdir,
-    ], {
-        env: { ...process.env, SUPABASE_ACCESS_TOKEN: env('SUPABASE_ACCESS_TOKEN') },
-    });
+    const seedFiles = fs
+        .readdirSync(seedsDir)
+        .filter(name => name.endsWith('.sql'))
+        .sort((a, b) => a.localeCompare(b))
+        .map(name => path.join(seedsDir, name));
+
+    if (seedFiles.length === 0) {
+        console.log(`- Seed skipped for ${envLabel}: no .sql files found in ${seedsDir}.`);
+        return;
+    }
+
+    for (const seedFile of seedFiles) {
+        console.log(`- Applying seed file to ${envLabel}: ${seedFile}`);
+        await run('npx', [
+            'supabase@latest',
+            'db',
+            'query',
+            '--linked',
+            '--file',
+            seedFile,
+            '--workdir',
+            cliWorkdir,
+        ], {
+            env: { ...process.env, SUPABASE_ACCESS_TOKEN: env('SUPABASE_ACCESS_TOKEN') },
+        });
+    }
 }
 
 async function main() {

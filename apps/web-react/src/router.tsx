@@ -15,6 +15,8 @@ import { KpiManagementPage } from '@/pages/KpiManagementPage';
 import { LmsCourseDetailPage } from '@/pages/LmsCourseDetailPage';
 import { LmsReadOnlyPage } from '@/pages/LmsReadOnlyPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { SettingsCompetenciesPage } from '@/pages/SettingsCompetenciesPage';
+import { SettingsOrgPage } from '@/pages/SettingsOrgPage';
 import { TnaAssessmentPage } from '@/pages/TnaAssessmentPage';
 import { RouteGuard } from '@/components/RouteGuard';
 import { env } from '@/lib/env';
@@ -243,6 +245,22 @@ export const router = createBrowserRouter([
             },
 
             {
+                path: 'settings/org',
+                element: (
+                    <RoleGate allow={[...ADMIN_HR]}>
+                        <SettingsOrgPage />
+                    </RoleGate>
+                ),
+            },
+            {
+                path: 'settings/competencies',
+                element: (
+                    <RoleGate allow={[...ADMIN_HR]}>
+                        <SettingsCompetenciesPage />
+                    </RoleGate>
+                ),
+            },
+            {
                 path: 'organization/company-profile',
                 element: (
                     <RoleGate allow={[...ADMIN_HR]}>
@@ -254,7 +272,7 @@ export const router = createBrowserRouter([
                 path: 'organization/structure',
                 element: (
                     <RoleGate allow={[...ADMIN_HR]}>
-                        <DeferredModulePage title="Organization Structure" description="Org chart and structural changes are held until safe mutation cutovers are ready." />
+                        <SettingsOrgPage />
                     </RoleGate>
                 ),
             },
@@ -311,7 +329,7 @@ export const router = createBrowserRouter([
                 path: 'system/competencies',
                 element: (
                     <RoleGate allow={[...ADMIN_HR]}>
-                        <DeferredModulePage title="Competencies" description="Competency configuration mutation tools are deferred in shell." />
+                        <SettingsCompetenciesPage />
                     </RoleGate>
                 ),
             },

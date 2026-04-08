@@ -4,4 +4,5 @@ export * from './employeesAdapter';
 export * from './kpiAdapter';
 export * from './lmsAdapter';
 export * from './modulesAdapter';
+export * from './settingsAdapter';
 export * from './tnaAdapter';

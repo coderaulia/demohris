@@ -4,7 +4,7 @@ import { env, type BackendTarget } from '@/lib/env';
 import { HttpError, requestJson } from '@/lib/httpClient';
 import { getSupabaseSession } from '@/lib/supabaseClient';
 
-type Domain = 'auth' | 'employees' | 'kpi' | 'lms' | 'tna' | 'modules' | 'db';
+type Domain = 'auth' | 'employees' | 'kpi' | 'lms' | 'tna' | 'modules' | 'db' | 'settings';
 type RequestMethod = 'GET' | 'POST';
 type TransportSource = 'legacy' | 'supabase';
 
@@ -50,6 +50,16 @@ const SUPABASE_ACTIONS = new Set<string>([
     'kpi/record/create',
     'kpi/record/update',
     'tna/needs/create',
+    'settings/org/get',
+    'settings/org/save',
+    'settings/positions/list',
+    'settings/positions/create',
+    'settings/positions/update',
+    'settings/positions/delete',
+    'settings/competencies/list',
+    'settings/competencies/create',
+    'settings/competencies/update',
+    'settings/competencies/delete',
 ]);
 
 function buildActionUrl(action: string, domain: Domain): string {

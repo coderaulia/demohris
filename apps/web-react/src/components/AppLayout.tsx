@@ -87,7 +87,7 @@ const navSections: NavSection[] = [
         roles: ['superadmin', 'hr'],
         items: [
             { to: '/organization/company-profile', label: 'Company Profile', icon: <Building2 className="size-4" />, roles: ['superadmin', 'hr'] },
-            { to: '/organization/structure', label: 'Organization Structure', icon: <Building2 className="size-4" />, roles: ['superadmin', 'hr'] },
+            { to: '/settings/org', label: 'Organization Map', icon: <Building2 className="size-4" />, roles: ['superadmin', 'hr'] },
             { to: '/organization/departments', label: 'Departments', icon: <Building2 className="size-4" />, roles: ['superadmin', 'hr'] },
             { to: '/organization/positions', label: 'Positions & Job Levels', icon: <Building2 className="size-4" />, roles: ['superadmin', 'hr'] },
             { to: '/organization/grades', label: 'Grades / Classes', icon: <Building2 className="size-4" />, roles: ['superadmin', 'hr'] },
@@ -100,7 +100,7 @@ const navSections: NavSection[] = [
         items: [
             { to: '/system/site-settings', label: 'Site Settings', icon: <Settings className="size-4" />, roles: ['superadmin', 'hr'] },
             { to: '/system/users-roles', label: 'Users & Roles', icon: <Settings className="size-4" />, roles: ['superadmin', 'hr'] },
-            { to: '/system/competencies', label: 'Competencies', icon: <Settings className="size-4" />, roles: ['superadmin', 'hr'] },
+            { to: '/settings/competencies', label: 'Skill Matrices', icon: <Settings className="size-4" />, roles: ['superadmin', 'hr'] },
             { to: '/system/kpi-settings', label: 'KPI Settings', icon: <Settings className="size-4" />, roles: ['superadmin', 'hr'] },
         ],
     },
