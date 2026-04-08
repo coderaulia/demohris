@@ -280,7 +280,7 @@ export const router = createBrowserRouter([
                 path: 'organization/departments',
                 element: (
                     <RoleGate allow={[...ADMIN_HR]}>
-                        <DeferredModulePage title="Departments" description="Department management remains legacy-backed for now." />
+                        <SettingsOrgPage />
                     </RoleGate>
                 ),
             },
@@ -288,7 +288,7 @@ export const router = createBrowserRouter([
                 path: 'organization/positions',
                 element: (
                     <RoleGate allow={[...ADMIN_HR]}>
-                        <DeferredModulePage title="Positions & Job Levels" description="Position hierarchy tools are deferred during backend migration." />
+                        <SettingsOrgPage />
                     </RoleGate>
                 ),
             },

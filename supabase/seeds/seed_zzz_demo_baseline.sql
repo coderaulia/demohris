@@ -340,6 +340,63 @@ set name = excluded.name,
     approved_at = excluded.approved_at,
     updated_at = timezone('utc', now());
 
+do $$
+begin
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'kpi_definitions' and column_name = 'applies_to_position'
+    ) then
+        update public.kpi_definitions
+        set applies_to_position = coalesce(nullif(applies_to_position, ''), category)
+        where id like 'd2000000-%';
+    end if;
+
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'kpi_definitions' and column_name = 'target_value'
+    ) then
+        update public.kpi_definitions
+        set target_value = coalesce(target_value, target)
+        where id like 'd2000000-%';
+    end if;
+
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'kpi_definitions' and column_name = 'effective_date'
+    ) then
+        update public.kpi_definitions
+        set effective_date = coalesce(effective_date, date '2026-04-01')
+        where id like 'd2000000-%';
+    end if;
+
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'kpi_definitions' and column_name = 'status'
+    ) then
+        update public.kpi_definitions
+        set status = coalesce(nullif(status, ''), approval_status)
+        where id like 'd2000000-%';
+    end if;
+
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'kpi_definitions' and column_name = 'version'
+    ) then
+        update public.kpi_definitions
+        set version = coalesce(version, latest_version_no, 1)
+        where id like 'd2000000-%';
+    end if;
+
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'kpi_definitions' and column_name = 'created_by'
+    ) then
+        update public.kpi_definitions
+        set created_by = coalesce(created_by, approved_by)
+        where id like 'd2000000-%';
+    end if;
+end $$;
+
 insert into public.kpi_definition_versions (id, kpi_definition_id, version_no, effective_period, name, description, category, target, unit, status, requested_by, approved_by, approved_at)
 values
     ('d2100000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', 1, '2026-Q2', 'Enterprise Growth Index', 'Quarterly enterprise growth delivery against board plan.', 'Chief Executive Officer', 18, '%', 'approved', 'ADM001', 'ADM001', timezone('utc', now())),
@@ -415,6 +472,221 @@ set value = excluded.value,
     kpi_name_snapshot = excluded.kpi_name_snapshot,
     kpi_unit_snapshot = excluded.kpi_unit_snapshot,
     kpi_category_snapshot = excluded.kpi_category_snapshot,
+    updated_at = timezone('utc', now());
+
+insert into public.kpi_records (id, employee_id, kpi_id, period, value, notes, submitted_by, target_snapshot, definition_version_id, target_version_id, kpi_name_snapshot, kpi_unit_snapshot, kpi_category_snapshot)
+values
+    ('d2310000-0000-4000-8000-000000000001', 'ADM001', 'd2000000-0000-4000-8000-000000000001', '2026-04', 16.8, 'Monthly dashboard baseline for April 2026.', 'ADM001', 18, 'd2100000-0000-4000-8000-000000000001', 'd2200000-0000-4000-8000-000000000001', 'Enterprise Growth Index', '%', 'Chief Executive Officer'),
+    ('d2310000-0000-4000-8000-000000000002', 'DIR001', 'd2000000-0000-4000-8000-000000000002', '2026-04', 90.4, 'Monthly dashboard baseline for April 2026.', 'DIR001', 92, 'd2100000-0000-4000-8000-000000000002', 'd2200000-0000-4000-8000-000000000002', 'Operational Efficiency Index', '%', 'Chief Operating Officer'),
+    ('d2310000-0000-4000-8000-000000000003', 'BOD003', 'd2000000-0000-4000-8000-000000000003', '2026-04', 97.2, 'Monthly dashboard baseline for April 2026.', 'BOD003', 98, 'd2100000-0000-4000-8000-000000000003', 'd2200000-0000-4000-8000-000000000003', 'Budget Accuracy', '%', 'Chief Financial Officer'),
+    ('d2310000-0000-4000-8000-000000000004', 'MGR001', 'd2000000-0000-4000-8000-000000000004', '2026-04', 93.8, 'Monthly dashboard baseline for April 2026.', 'MGR001', 95, 'd2100000-0000-4000-8000-000000000004', 'd2200000-0000-4000-8000-000000000004', 'Team Revenue Attainment', '%', 'Sales Manager'),
+    ('d2310000-0000-4000-8000-000000000005', 'EMP001', 'd2000000-0000-4000-8000-000000000005', '2026-04', 812, 'Monthly dashboard baseline for April 2026.', 'EMP001', 850, 'd2100000-0000-4000-8000-000000000005', 'd2200000-0000-4000-8000-000000000005', 'Revenue Closed', 'IDR (M)', 'Senior Account Executive'),
+    ('d2310000-0000-4000-8000-000000000006', 'EMP002', 'd2000000-0000-4000-8000-000000000006', '2026-04', 90.5, 'Monthly dashboard baseline for April 2026.', 'EMP002', 92, 'd2100000-0000-4000-8000-000000000006', 'd2200000-0000-4000-8000-000000000006', 'Client Retention Rate', '%', 'Key Account Executive'),
+    ('d2310000-0000-4000-8000-000000000007', 'OPS001', 'd2000000-0000-4000-8000-000000000007', '2026-04', 94.7, 'Monthly dashboard baseline for April 2026.', 'OPS001', 96, 'd2100000-0000-4000-8000-000000000007', 'd2200000-0000-4000-8000-000000000007', 'On-Time Fulfilment', '%', 'Operations Manager'),
+    ('d2310000-0000-4000-8000-000000000008', 'OPS002', 'd2000000-0000-4000-8000-000000000008', '2026-04', 88.6, 'Monthly dashboard baseline for April 2026.', 'OPS002', 90, 'd2100000-0000-4000-8000-000000000008', 'd2200000-0000-4000-8000-000000000008', 'Shift Productivity', '%', 'Operations Supervisor'),
+    ('d2310000-0000-4000-8000-000000000009', 'EMP003', 'd2000000-0000-4000-8000-000000000009', '2026-04', 96.3, 'Monthly dashboard baseline for April 2026.', 'EMP003', 97, 'd2100000-0000-4000-8000-000000000009', 'd2200000-0000-4000-8000-000000000009', 'Delivery Accuracy', '%', 'Logistics Coordinator'),
+    ('d2310000-0000-4000-8000-000000000010', 'HR001', 'd2000000-0000-4000-8000-000000000010', '2026-04', 27, 'Monthly dashboard baseline for April 2026.', 'HR001', 30, 'd2100000-0000-4000-8000-000000000010', 'd2200000-0000-4000-8000-000000000010', 'Hiring SLA', 'Days', 'HR Manager'),
+    ('d2310000-0000-4000-8000-000000000011', 'HR002', 'd2000000-0000-4000-8000-000000000011', '2026-04', 92, 'Monthly dashboard baseline for April 2026.', 'HR002', 95, 'd2100000-0000-4000-8000-000000000011', 'd2200000-0000-4000-8000-000000000011', 'Training Completion Rate', '%', 'Talent Development Specialist'),
+    ('d2310000-0000-4000-8000-000000000012', 'HR003', 'd2000000-0000-4000-8000-000000000012', '2026-04', 2.5, 'Monthly dashboard baseline for April 2026.', 'HR003', 3, 'd2100000-0000-4000-8000-000000000012', 'd2200000-0000-4000-8000-000000000012', 'Case Resolution SLA', 'Days', 'HR Generalist'),
+    ('d2310000-0000-4000-8000-000000000013', 'FIN001', 'd2000000-0000-4000-8000-000000000013', '2026-04', 98.4, 'Monthly dashboard baseline for April 2026.', 'FIN001', 99, 'd2100000-0000-4000-8000-000000000013', 'd2200000-0000-4000-8000-000000000013', 'Monthly Close Accuracy', '%', 'Finance Manager'),
+    ('d2310000-0000-4000-8000-000000000014', 'FIN002', 'd2000000-0000-4000-8000-000000000014', '2026-04', 93.6, 'Monthly dashboard baseline for April 2026.', 'FIN002', 95, 'd2100000-0000-4000-8000-000000000014', 'd2200000-0000-4000-8000-000000000014', 'Forecast Accuracy', '%', 'Finance Analyst'),
+    ('d2310000-0000-4000-8000-000000000015', 'FIN003', 'd2000000-0000-4000-8000-000000000015', '2026-04', 99.1, 'Monthly dashboard baseline for April 2026.', 'FIN003', 99.5, 'd2100000-0000-4000-8000-000000000015', 'd2200000-0000-4000-8000-000000000015', 'Payroll Accuracy Rate', '%', 'Payroll Officer')
+on conflict (id) do update
+set period = excluded.period,
+    value = excluded.value,
+    notes = excluded.notes,
+    submitted_by = excluded.submitted_by,
+    target_snapshot = excluded.target_snapshot,
+    definition_version_id = excluded.definition_version_id,
+    target_version_id = excluded.target_version_id,
+    kpi_name_snapshot = excluded.kpi_name_snapshot,
+    kpi_unit_snapshot = excluded.kpi_unit_snapshot,
+    kpi_category_snapshot = excluded.kpi_category_snapshot,
+    updated_at = timezone('utc', now());
+
+do $$
+declare
+    target_snapshot_type text;
+begin
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'kpi_records' and column_name = 'achievement_pct'
+    ) then
+        select data_type
+        into target_snapshot_type
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'kpi_records'
+          and column_name = 'target_snapshot';
+
+        if target_snapshot_type in ('numeric', 'integer', 'bigint', 'real', 'double precision') then
+            update public.kpi_records
+            set achievement_pct = round(((value / nullif(target_snapshot::numeric, 0)) * 100)::numeric, 1)
+            where id like 'd23%'
+              and target_snapshot is not null;
+        elsif target_snapshot_type in ('json', 'jsonb') then
+            update public.kpi_records
+            set achievement_pct = round((
+                value / nullif(((target_snapshot ->> 'target_value')::numeric), 0)
+            * 100)::numeric, 1)
+            where id like 'd23%'
+              and target_snapshot is not null
+              and (target_snapshot ->> 'target_value') is not null;
+        end if;
+    end if;
+end $$;
+
+insert into public.courses (id, title, description, short_description, category, tags, difficulty_level, estimated_duration_minutes, author_employee_id, status, is_mandatory, competencies_covered, passing_score, published_at)
+values
+    ('c1000000-0000-4000-8000-000000000001', 'Executive Communication Essentials', 'Strengthen board-ready communication, executive updates, and alignment rituals.', 'Executive storytelling and communication cadence.', 'Leadership', '["Leadership","Communication"]'::jsonb, 'intermediate', 95, 'ADM001', 'published', false, '["Strategic Leadership","Board Governance"]'::jsonb, 75, timezone('utc', now()) - interval '30 days'),
+    ('c1000000-0000-4000-8000-000000000002', 'Sales Pipeline Mastery', 'Build a healthier pipeline, stronger qualification discipline, and better forecast quality.', 'Pipeline building and qualification discipline.', 'Sales', '["Sales","Pipeline"]'::jsonb, 'beginner', 120, 'MGR001', 'published', true, '["Pipeline Leadership","Opportunity Conversion"]'::jsonb, 70, timezone('utc', now()) - interval '28 days'),
+    ('c1000000-0000-4000-8000-000000000003', 'Strategic Account Management', 'Run account plans, stakeholder maps, and expansion plays for larger clients.', 'Account planning for strategic growth.', 'Sales', '["Sales","Account Management"]'::jsonb, 'intermediate', 140, 'EMP001', 'published', false, '["Key Account Growth","Client Retention"]'::jsonb, 75, timezone('utc', now()) - interval '26 days'),
+    ('c1000000-0000-4000-8000-000000000004', 'Operations Control Room', 'Improve dispatch rhythm, service visibility, and floor escalation handling.', 'Operational control and service stability.', 'Operations', '["Operations","Quality"]'::jsonb, 'intermediate', 110, 'OPS001', 'published', true, '["Process Optimization","Quality Control"]'::jsonb, 72, timezone('utc', now()) - interval '24 days'),
+    ('c1000000-0000-4000-8000-000000000005', 'People Operations Foundations', 'Cover workforce planning basics, employee case handling, and HR service quality.', 'Core HR operations and workforce planning.', 'HR', '["HR","People Operations"]'::jsonb, 'beginner', 105, 'HR001', 'published', false, '["Workforce Planning","Employee Relations"]'::jsonb, 70, timezone('utc', now()) - interval '22 days'),
+    ('c1000000-0000-4000-8000-000000000006', 'Finance Business Partnering', 'Translate financial analysis into clear business recommendations and operating decisions.', 'Finance analysis and business partnering.', 'Finance', '["Finance","Analysis"]'::jsonb, 'intermediate', 130, 'FIN001', 'published', false, '["Financial Analysis","Forecast Modelling"]'::jsonb, 75, timezone('utc', now()) - interval '20 days')
+on conflict (id) do update
+set title = excluded.title,
+    description = excluded.description,
+    short_description = excluded.short_description,
+    category = excluded.category,
+    tags = excluded.tags,
+    difficulty_level = excluded.difficulty_level,
+    estimated_duration_minutes = excluded.estimated_duration_minutes,
+    author_employee_id = excluded.author_employee_id,
+    status = excluded.status,
+    is_mandatory = excluded.is_mandatory,
+    competencies_covered = excluded.competencies_covered,
+    passing_score = excluded.passing_score,
+    published_at = excluded.published_at,
+    updated_at = timezone('utc', now());
+
+insert into public.course_sections (id, course_id, title, description, ordinal)
+values
+    ('c2000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000001', 'Executive Message Design', 'How to frame concise updates and strategic narratives.', 1),
+    ('c2000000-0000-4000-8000-000000000002', 'c1000000-0000-4000-8000-000000000001', 'Stakeholder Alignment', 'Cadence and communication routines for leadership teams.', 2),
+    ('c2000000-0000-4000-8000-000000000003', 'c1000000-0000-4000-8000-000000000002', 'Pipeline Structure', 'Qualification and stage discipline basics.', 1),
+    ('c2000000-0000-4000-8000-000000000004', 'c1000000-0000-4000-8000-000000000002', 'Forecast Rhythm', 'Review rhythm and conversion planning.', 2),
+    ('c2000000-0000-4000-8000-000000000005', 'c1000000-0000-4000-8000-000000000003', 'Account Planning', 'Mapping stakeholders and whitespace opportunities.', 1),
+    ('c2000000-0000-4000-8000-000000000006', 'c1000000-0000-4000-8000-000000000003', 'Expansion Plays', 'Retention and growth plays for existing accounts.', 2),
+    ('c2000000-0000-4000-8000-000000000007', 'c1000000-0000-4000-8000-000000000004', 'Control Tower Basics', 'How to monitor service health and escalations.', 1),
+    ('c2000000-0000-4000-8000-000000000008', 'c1000000-0000-4000-8000-000000000004', 'Floor Quality', 'Quality routines and daily management.', 2),
+    ('c2000000-0000-4000-8000-000000000009', 'c1000000-0000-4000-8000-000000000005', 'Workforce Planning Basics', 'Capacity planning and staffing assumptions.', 1),
+    ('c2000000-0000-4000-8000-000000000010', 'c1000000-0000-4000-8000-000000000005', 'Employee Case Handling', 'Case triage and documentation quality.', 2),
+    ('c2000000-0000-4000-8000-000000000011', 'c1000000-0000-4000-8000-000000000006', 'Financial Storytelling', 'Turn numbers into better management decisions.', 1),
+    ('c2000000-0000-4000-8000-000000000012', 'c1000000-0000-4000-8000-000000000006', 'Forecast Review', 'Lead forecast conversations with confidence.', 2)
+on conflict (id) do update
+set title = excluded.title,
+    description = excluded.description,
+    ordinal = excluded.ordinal,
+    updated_at = timezone('utc', now());
+
+insert into public.lessons (id, section_id, course_id, title, description, content_type, content_text, ordinal, is_preview, estimated_duration_minutes)
+values
+    ('c3000000-0000-4000-8000-000000000001', 'c2000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000001', 'Executive Update Framework', 'Build sharper executive updates.', 'text', '<p>Use context, signal, risk, and next-step framing.</p>', 1, true, 20),
+    ('c3000000-0000-4000-8000-000000000002', 'c2000000-0000-4000-8000-000000000002', 'c1000000-0000-4000-8000-000000000001', 'Stakeholder Communication Check', 'Quick comprehension quiz.', 'quiz', null, 1, false, 10),
+    ('c3000000-0000-4000-8000-000000000003', 'c2000000-0000-4000-8000-000000000003', 'c1000000-0000-4000-8000-000000000002', 'Pipeline Stages That Matter', 'Define stage exit criteria and quality gates.', 'text', '<p>Qualification quality protects forecast accuracy.</p>', 1, true, 18),
+    ('c3000000-0000-4000-8000-000000000004', 'c2000000-0000-4000-8000-000000000004', 'c1000000-0000-4000-8000-000000000002', 'Forecast Review Quiz', 'Quiz on review cadence and coverage.', 'quiz', null, 1, false, 12),
+    ('c3000000-0000-4000-8000-000000000005', 'c2000000-0000-4000-8000-000000000005', 'c1000000-0000-4000-8000-000000000003', 'Stakeholder Mapping', 'Map influence, risk, and expansion routes.', 'text', '<p>Keep one living stakeholder map for each key account.</p>', 1, true, 22),
+    ('c3000000-0000-4000-8000-000000000006', 'c2000000-0000-4000-8000-000000000006', 'c1000000-0000-4000-8000-000000000003', 'Retention Signals', 'Spot warning signs before renewal risk grows.', 'text', '<p>Monitor usage, sponsorship, and unresolved blockers.</p>', 1, false, 20),
+    ('c3000000-0000-4000-8000-000000000007', 'c2000000-0000-4000-8000-000000000007', 'c1000000-0000-4000-8000-000000000004', 'Control Room Metrics', 'Choose the metrics that keep daily ops stable.', 'text', '<p>Watch throughput, queue age, and escalation volume.</p>', 1, true, 18),
+    ('c3000000-0000-4000-8000-000000000008', 'c2000000-0000-4000-8000-000000000008', 'c1000000-0000-4000-8000-000000000004', 'Quality Escalation Drill', 'Apply quality escalation logic.', 'practice', '<p>Run the escalation decision tree for sample cases.</p>', 1, false, 18),
+    ('c3000000-0000-4000-8000-000000000009', 'c2000000-0000-4000-8000-000000000009', 'c1000000-0000-4000-8000-000000000005', 'Capacity Planning Basics', 'Translate hiring demand into staffing plans.', 'text', '<p>Use workload assumptions, ramp time, and hiring lead time.</p>', 1, true, 16),
+    ('c3000000-0000-4000-8000-000000000010', 'c2000000-0000-4000-8000-000000000010', 'c1000000-0000-4000-8000-000000000005', 'Case Note Quality', 'Improve case resolution notes and closure quality.', 'text', '<p>Document issue, action, decision, and follow-up clearly.</p>', 1, false, 17),
+    ('c3000000-0000-4000-8000-000000000011', 'c2000000-0000-4000-8000-000000000011', 'c1000000-0000-4000-8000-000000000006', 'Tell The Financial Story', 'Present financial patterns in operational language.', 'text', '<p>Lead with signal, driver, implication, and action.</p>', 1, true, 19),
+    ('c3000000-0000-4000-8000-000000000012', 'c2000000-0000-4000-8000-000000000012', 'c1000000-0000-4000-8000-000000000006', 'Forecast Review Habits', 'Build a reliable forecast review habit.', 'text', '<p>Review assumptions weekly and flag movement early.</p>', 1, false, 18)
+on conflict (id) do update
+set title = excluded.title,
+    description = excluded.description,
+    content_type = excluded.content_type,
+    content_text = excluded.content_text,
+    ordinal = excluded.ordinal,
+    is_preview = excluded.is_preview,
+    estimated_duration_minutes = excluded.estimated_duration_minutes,
+    updated_at = timezone('utc', now());
+
+insert into public.quiz_questions (id, lesson_id, question_text, question_type, options, correct_answer, points, ordinal)
+values
+    ('c4000000-0000-4000-8000-000000000001', 'c3000000-0000-4000-8000-000000000002', 'Which structure best fits an executive update?', 'multiple_choice', '["Problem, opinion, details","Context, signal, risk, next step","Greeting, agenda, appendix"]'::jsonb, '"Context, signal, risk, next step"'::jsonb, 1, 1),
+    ('c4000000-0000-4000-8000-000000000002', 'c3000000-0000-4000-8000-000000000004', 'What protects forecast accuracy most?', 'multiple_choice', '["More late-stage deals","Clear stage exit criteria","Larger contact lists"]'::jsonb, '"Clear stage exit criteria"'::jsonb, 1, 1)
+on conflict (id) do update
+set question_text = excluded.question_text,
+    question_type = excluded.question_type,
+    options = excluded.options,
+    correct_answer = excluded.correct_answer,
+    points = excluded.points,
+    ordinal = excluded.ordinal,
+    updated_at = timezone('utc', now());
+
+insert into public.course_enrollments (id, course_id, employee_id, enrolled_by, enrollment_type, status, progress_percent, score, started_at, completed_at, due_date, certificate_issued, time_spent_seconds, attempts_count, last_accessed_at)
+values
+    ('c5000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000002', 'EMP001', 'MGR001', 'assigned', 'in_progress', 50, null, timezone('utc', now()) - interval '10 days', null, current_date + 10, false, 1800, 1, timezone('utc', now()) - interval '1 day'),
+    ('c5000000-0000-4000-8000-000000000002', 'c1000000-0000-4000-8000-000000000003', 'EMP002', 'MGR001', 'assigned', 'completed', 100, 88, timezone('utc', now()) - interval '16 days', timezone('utc', now()) - interval '5 days', current_date - 5, true, 4200, 2, timezone('utc', now()) - interval '5 days'),
+    ('c5000000-0000-4000-8000-000000000003', 'c1000000-0000-4000-8000-000000000004', 'OPS002', 'OPS001', 'assigned', 'in_progress', 45, null, timezone('utc', now()) - interval '8 days', null, current_date + 14, false, 1600, 1, timezone('utc', now()) - interval '2 days'),
+    ('c5000000-0000-4000-8000-000000000004', 'c1000000-0000-4000-8000-000000000005', 'HR003', 'HR001', 'assigned', 'completed', 100, 92, timezone('utc', now()) - interval '20 days', timezone('utc', now()) - interval '7 days', current_date - 7, true, 3900, 1, timezone('utc', now()) - interval '7 days'),
+    ('c5000000-0000-4000-8000-000000000005', 'c1000000-0000-4000-8000-000000000006', 'FIN002', 'FIN001', 'assigned', 'in_progress', 60, null, timezone('utc', now()) - interval '9 days', null, current_date + 12, false, 2100, 1, timezone('utc', now()) - interval '1 day'),
+    ('c5000000-0000-4000-8000-000000000006', 'c1000000-0000-4000-8000-000000000001', 'ADM001', 'ADM001', 'self', 'completed', 100, 95, timezone('utc', now()) - interval '18 days', timezone('utc', now()) - interval '4 days', current_date - 4, true, 2600, 1, timezone('utc', now()) - interval '4 days'),
+    ('c5000000-0000-4000-8000-000000000007', 'c1000000-0000-4000-8000-000000000005', 'HR001', 'HR001', 'self', 'in_progress', 40, null, timezone('utc', now()) - interval '6 days', null, current_date + 21, false, 1500, 1, timezone('utc', now()) - interval '1 day'),
+    ('c5000000-0000-4000-8000-000000000008', 'c1000000-0000-4000-8000-000000000002', 'MGR001', 'MGR001', 'self', 'completed', 100, 90, timezone('utc', now()) - interval '14 days', timezone('utc', now()) - interval '3 days', current_date - 3, true, 3200, 1, timezone('utc', now()) - interval '3 days')
+on conflict (id) do update
+set status = excluded.status,
+    progress_percent = excluded.progress_percent,
+    score = excluded.score,
+    started_at = excluded.started_at,
+    completed_at = excluded.completed_at,
+    due_date = excluded.due_date,
+    certificate_issued = excluded.certificate_issued,
+    time_spent_seconds = excluded.time_spent_seconds,
+    attempts_count = excluded.attempts_count,
+    last_accessed_at = excluded.last_accessed_at,
+    updated_at = timezone('utc', now());
+
+insert into public.lesson_progress (id, enrollment_id, lesson_id, status, progress_percent, score, time_spent_seconds, first_accessed_at, completed_at, last_accessed_at)
+values
+    ('c6000000-0000-4000-8000-000000000001', 'c5000000-0000-4000-8000-000000000001', 'c3000000-0000-4000-8000-000000000003', 'completed', 100, null, 900, timezone('utc', now()) - interval '10 days', timezone('utc', now()) - interval '8 days', timezone('utc', now()) - interval '8 days'),
+    ('c6000000-0000-4000-8000-000000000002', 'c5000000-0000-4000-8000-000000000001', 'c3000000-0000-4000-8000-000000000004', 'in_progress', 50, null, 900, timezone('utc', now()) - interval '2 days', null, timezone('utc', now()) - interval '1 day'),
+    ('c6000000-0000-4000-8000-000000000003', 'c5000000-0000-4000-8000-000000000002', 'c3000000-0000-4000-8000-000000000005', 'completed', 100, null, 1200, timezone('utc', now()) - interval '16 days', timezone('utc', now()) - interval '10 days', timezone('utc', now()) - interval '10 days'),
+    ('c6000000-0000-4000-8000-000000000004', 'c5000000-0000-4000-8000-000000000002', 'c3000000-0000-4000-8000-000000000006', 'completed', 100, null, 1100, timezone('utc', now()) - interval '9 days', timezone('utc', now()) - interval '5 days', timezone('utc', now()) - interval '5 days'),
+    ('c6000000-0000-4000-8000-000000000005', 'c5000000-0000-4000-8000-000000000003', 'c3000000-0000-4000-8000-000000000007', 'completed', 100, null, 800, timezone('utc', now()) - interval '8 days', timezone('utc', now()) - interval '6 days', timezone('utc', now()) - interval '6 days'),
+    ('c6000000-0000-4000-8000-000000000006', 'c5000000-0000-4000-8000-000000000003', 'c3000000-0000-4000-8000-000000000008', 'in_progress', 30, null, 800, timezone('utc', now()) - interval '2 days', null, timezone('utc', now()) - interval '2 days'),
+    ('c6000000-0000-4000-8000-000000000007', 'c5000000-0000-4000-8000-000000000004', 'c3000000-0000-4000-8000-000000000009', 'completed', 100, null, 900, timezone('utc', now()) - interval '20 days', timezone('utc', now()) - interval '14 days', timezone('utc', now()) - interval '14 days'),
+    ('c6000000-0000-4000-8000-000000000008', 'c5000000-0000-4000-8000-000000000004', 'c3000000-0000-4000-8000-000000000010', 'completed', 100, null, 1000, timezone('utc', now()) - interval '13 days', timezone('utc', now()) - interval '7 days', timezone('utc', now()) - interval '7 days'),
+    ('c6000000-0000-4000-8000-000000000009', 'c5000000-0000-4000-8000-000000000005', 'c3000000-0000-4000-8000-000000000011', 'completed', 100, null, 1000, timezone('utc', now()) - interval '9 days', timezone('utc', now()) - interval '6 days', timezone('utc', now()) - interval '6 days'),
+    ('c6000000-0000-4000-8000-000000000010', 'c5000000-0000-4000-8000-000000000005', 'c3000000-0000-4000-8000-000000000012', 'in_progress', 20, null, 1100, timezone('utc', now()) - interval '1 day', null, timezone('utc', now()) - interval '1 day'),
+    ('c6000000-0000-4000-8000-000000000011', 'c5000000-0000-4000-8000-000000000006', 'c3000000-0000-4000-8000-000000000001', 'completed', 100, null, 1000, timezone('utc', now()) - interval '18 days', timezone('utc', now()) - interval '12 days', timezone('utc', now()) - interval '12 days'),
+    ('c6000000-0000-4000-8000-000000000012', 'c5000000-0000-4000-8000-000000000006', 'c3000000-0000-4000-8000-000000000002', 'completed', 100, 95, 900, timezone('utc', now()) - interval '8 days', timezone('utc', now()) - interval '4 days', timezone('utc', now()) - interval '4 days'),
+    ('c6000000-0000-4000-8000-000000000013', 'c5000000-0000-4000-8000-000000000007', 'c3000000-0000-4000-8000-000000000009', 'completed', 100, null, 700, timezone('utc', now()) - interval '6 days', timezone('utc', now()) - interval '4 days', timezone('utc', now()) - interval '4 days'),
+    ('c6000000-0000-4000-8000-000000000014', 'c5000000-0000-4000-8000-000000000007', 'c3000000-0000-4000-8000-000000000010', 'in_progress', 40, null, 800, timezone('utc', now()) - interval '2 days', null, timezone('utc', now()) - interval '1 day'),
+    ('c6000000-0000-4000-8000-000000000015', 'c5000000-0000-4000-8000-000000000008', 'c3000000-0000-4000-8000-000000000003', 'completed', 100, null, 950, timezone('utc', now()) - interval '14 days', timezone('utc', now()) - interval '10 days', timezone('utc', now()) - interval '10 days'),
+    ('c6000000-0000-4000-8000-000000000016', 'c5000000-0000-4000-8000-000000000008', 'c3000000-0000-4000-8000-000000000004', 'completed', 100, 90, 980, timezone('utc', now()) - interval '8 days', timezone('utc', now()) - interval '3 days', timezone('utc', now()) - interval '3 days')
+on conflict (enrollment_id, lesson_id) do update
+set status = excluded.status,
+    progress_percent = excluded.progress_percent,
+    score = excluded.score,
+    time_spent_seconds = excluded.time_spent_seconds,
+    first_accessed_at = excluded.first_accessed_at,
+    completed_at = excluded.completed_at,
+    last_accessed_at = excluded.last_accessed_at,
+    updated_at = timezone('utc', now());
+
+insert into public.quiz_attempts (id, enrollment_id, lesson_id, attempt_number, answers, score, passed, submitted_at, time_spent_seconds)
+values
+    ('c7000000-0000-4000-8000-000000000001', 'c5000000-0000-4000-8000-000000000006', 'c3000000-0000-4000-8000-000000000002', 1, '{"c4000000-0000-4000-8000-000000000001":"Context, signal, risk, next step"}'::jsonb, 100, true, timezone('utc', now()) - interval '4 days', 540),
+    ('c7000000-0000-4000-8000-000000000002', 'c5000000-0000-4000-8000-000000000002', 'c3000000-0000-4000-8000-000000000004', 1, '{"c4000000-0000-4000-8000-000000000002":"Clear stage exit criteria"}'::jsonb, 100, true, timezone('utc', now()) - interval '5 days', 480)
+on conflict (id) do update
+set answers = excluded.answers,
+    score = excluded.score,
+    passed = excluded.passed,
+    submitted_at = excluded.submitted_at,
+    time_spent_seconds = excluded.time_spent_seconds;
+
+insert into public.course_reviews (id, course_id, employee_id, rating, review_text)
+values
+    ('c8000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000003', 'EMP002', 5, 'Very practical for renewal planning and account reviews.'),
+    ('c8000000-0000-4000-8000-000000000002', 'c1000000-0000-4000-8000-000000000005', 'HR003', 4, 'Clear and easy to use in day-to-day HR case handling.'),
+    ('c8000000-0000-4000-8000-000000000003', 'c1000000-0000-4000-8000-000000000001', 'ADM001', 5, 'Good refresher for leadership communication discipline.')
+on conflict (id) do update
+set rating = excluded.rating,
+    review_text = excluded.review_text,
     updated_at = timezone('utc', now());
 
 insert into public.admin_activity_log (actor_employee_id, actor_role, action, entity_type, entity_id, details)

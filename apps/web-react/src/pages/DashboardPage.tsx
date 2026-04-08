@@ -5,11 +5,12 @@ import {
   Award, AlertTriangle, Shield, ListChecks, Layers3,
 } from 'lucide-react'
 
-import { dashboardAdapter } from '@/adapters'
+import { dashboardAdapter, kpiAdapter } from '@/adapters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { useAuth } from '@/providers/AuthProvider'
 import { SelectField, type SelectOption } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
@@ -104,38 +105,21 @@ function buildAssessmentDepartmentCards(
 }
 
 function buildKpiDepartmentCards(
-  lmsRows: Array<Record<string, unknown>>,
-  assessmentCards: DepartmentCardViewModel[],
+  kpiRows: Array<Record<string, unknown>>,
   selectedManager: string,
 ): DepartmentCardViewModel[] {
-  const assessmentContext = new Map(assessmentCards.map(card => [card.department, card]))
-
-  const byDepartment = new Map<string, { recordCount: number; completed: number; inProgress: number }>()
-  for (const row of lmsRows) {
-    const department = toStringValue(row.department) || 'Unassigned'
-    if (!byDepartment.has(department)) {
-      byDepartment.set(department, { recordCount: 0, completed: 0, inProgress: 0 })
-    }
-    const current = byDepartment.get(department)!
-    current.recordCount += toNumber(row.total_enrolled)
-    current.completed += toNumber(row.completed)
-    current.inProgress += toNumber(row.in_progress)
-  }
-
-  const departments = new Set([...assessmentContext.keys(), ...byDepartment.keys()])
-  return [...departments]
-    .map(department => {
-      const value = byDepartment.get(department)
-      return {
-        department,
-        manager: assessmentContext.get(department)?.manager || null,
-        employeeCount: assessmentContext.get(department)?.employeeCount ?? null,
-        recordCount: value?.recordCount || 0,
-        metCount: value?.completed || null,
-        secondaryMetricLabel: 'In Progress',
-        secondaryMetricValue: String(value?.inProgress || 0),
-      }
-    })
+  return kpiRows
+    .map(row => ({
+      department: toStringValue(row.department) || 'Unassigned',
+      manager: toStringValue(row.manager) || null,
+      employeeCount: toNumber(row.employee_count),
+      recordCount: toNumber(row.record_count),
+      metCount: null,
+      secondaryMetricLabel: 'Avg Achievement',
+      secondaryMetricValue: row.avg_achievement != null
+        ? `${toNumber(row.avg_achievement).toFixed(1)}%`
+        : 'No data',
+    }))
     .filter(card => !selectedManager || card.manager === selectedManager)
     .sort((a, b) => a.department.localeCompare(b.department))
 }
@@ -143,23 +127,32 @@ function buildKpiDepartmentCards(
 function buildDepartmentOptions(
   gapsRows: Array<Record<string, unknown>>,
   lmsRows: Array<Record<string, unknown>>,
+  kpiRows: Array<Record<string, unknown>>,
 ): SelectOption[] {
   const set = new Set<string>()
   for (const row of gapsRows) { const department = toStringValue(row.department); if (department) set.add(department) }
   for (const row of lmsRows) { const department = toStringValue(row.department); if (department) set.add(department) }
+  for (const row of kpiRows) { const department = toStringValue(row.department); if (department) set.add(department) }
   return [
     { value: '', label: 'All departments' },
     ...[...set].sort((a, b) => a.localeCompare(b)).map(value => ({ value, label: value })),
   ]
 }
 
-function buildManagerOptions(gapsRows: Array<Record<string, unknown>>): SelectOption[] {
+function buildManagerOptions(
+  gapsRows: Array<Record<string, unknown>>,
+  kpiRows: Array<Record<string, unknown>>,
+): SelectOption[] {
   const managers = new Set<string>()
   for (const row of gapsRows) {
     const name = toStringValue(row.employee_name)
     const position = toStringValue(row.position)
     if (!name || !isManagerPosition(position)) continue
     managers.add(name)
+  }
+  for (const row of kpiRows) {
+    const name = toStringValue(row.manager)
+    if (name) managers.add(name)
   }
   return [
     { value: '', label: 'All managers' },
@@ -251,6 +244,7 @@ function TopPerformerPanel({
 // ==================================================
 
 export function DashboardPage() {
+  const auth = useAuth()
   const [mode, setMode] = useState<DashboardMode>('kpi')
   const [draftFilters, setDraftFilters] = useState<FilterState>({
     department: '',
@@ -281,6 +275,22 @@ export function DashboardPage() {
   const categoryQuery = useQuery({
     queryKey: ['dashboard', 'achievement-by-category', appliedFilters.department, appliedFilters.period],
     queryFn: () => dashboardAdapter.getAchievementByCategory({ department: appliedFilters.department, period: appliedFilters.period }),
+    staleTime: 60_000,
+  })
+
+  const kpiOverviewQuery = useQuery({
+    queryKey: ['dashboard', 'kpi-overview', appliedFilters.department, appliedFilters.manager, appliedFilters.period, auth.user?.employee_id, auth.role],
+    queryFn: () => kpiAdapter.getOverview(
+      {
+        department: appliedFilters.department,
+        manager_id: appliedFilters.manager,
+        period: appliedFilters.period,
+      },
+      {
+        employeeId: String(auth.user?.employee_id || ''),
+        role: auth.role || null,
+      },
+    ),
     staleTime: 60_000,
   })
 
@@ -319,11 +329,12 @@ export function DashboardPage() {
   const tnaSummary = dashboardQuery.data?.tnaSummary || {}
   const activeModules = dashboardQuery.data?.modules || []
   const courseCatalog = dashboardQuery.data?.courseCatalog || []
+  const kpiGroupRows = (kpiOverviewQuery.data?.kpi.groups || []) as Array<Record<string, unknown>>
 
-  const managerOptions = useMemo(() => buildManagerOptions(gapsRows), [gapsRows])
+  const managerOptions = useMemo(() => buildManagerOptions(gapsRows, kpiGroupRows), [gapsRows, kpiGroupRows])
   const departmentOptions = useMemo(
-    () => buildDepartmentOptions(gapsRows, lmsByCourseRows),
-    [gapsRows, lmsByCourseRows],
+    () => buildDepartmentOptions(gapsRows, lmsByCourseRows, kpiGroupRows),
+    [gapsRows, lmsByCourseRows, kpiGroupRows],
   )
 
   const assessmentCards = useMemo(
@@ -331,8 +342,8 @@ export function DashboardPage() {
     [gapsRows, appliedFilters.manager],
   )
   const kpiCards = useMemo(
-    () => buildKpiDepartmentCards(lmsByCourseRows, assessmentCards, appliedFilters.manager),
-    [lmsByCourseRows, assessmentCards, appliedFilters.manager],
+    () => buildKpiDepartmentCards(kpiGroupRows, appliedFilters.manager),
+    [kpiGroupRows, appliedFilters.manager],
   )
 
   const currentCards = mode === 'kpi' ? kpiCards : assessmentCards
@@ -441,10 +452,10 @@ export function DashboardPage() {
 
         <TabsContent value="kpi" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryStat icon={<Building2 className="size-4 text-primary" />} label="Departments" value={String(kpiCards.length)} hint="LMS report grouped departments" />
-            <SummaryStat icon={<ListChecks className="size-4 text-primary" />} label="Enrollment Records" value={String(toNumber(dashboardQuery.data?.lmsReport?.summary?.total_enrollments))} hint="Total records from lms-report" />
-            <SummaryStat icon={<Target className="size-4 text-primary" />} label="Met Target" value={String(toNumber(dashboardQuery.data?.lmsReport?.summary?.completed))} hint="Completed enrollments (available metric)" />
-            <SummaryStat icon={<BarChart3 className="size-4 text-primary" />} label="Average Score" value={String(Number.isFinite(Number(dashboardQuery.data?.lmsReport?.summary?.avg_score)) ? Number(dashboardQuery.data?.lmsReport?.summary?.avg_score).toFixed(1) : 'N/A')} hint="Null-safe legacy parity average" />
+            <SummaryStat icon={<Building2 className="size-4 text-primary" />} label="Departments" value={String(kpiCards.length)} hint="Departments with KPI records or scoped employees" />
+            <SummaryStat icon={<ListChecks className="size-4 text-primary" />} label="KPI Records" value={String(kpiCards.reduce((sum, row) => sum + row.recordCount, 0))} hint="Grouped KPI records for current filter scope" />
+            <SummaryStat icon={<Target className="size-4 text-primary" />} label="Employees In Scope" value={String(kpiCards.reduce((sum, row) => sum + (row.employeeCount || 0), 0))} hint="Employee population represented in KPI grouping" />
+            <SummaryStat icon={<BarChart3 className="size-4 text-primary" />} label="Average Achievement" value={summary?.avg_achievement_pct != null ? `${summary.avg_achievement_pct}%` : 'No data'} hint="Supabase KPI summary for current period" />
           </div>
         </TabsContent>
 

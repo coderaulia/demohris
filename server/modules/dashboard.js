@@ -72,6 +72,37 @@ function getMonthLabels(months = 6) {
     return labels;
 }
 
+function parseTargetSnapshotValue(raw) {
+    if (raw === null || raw === undefined || raw === '') return null;
+    if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+    if (typeof raw === 'string') {
+        const numeric = Number(raw);
+        if (Number.isFinite(numeric)) return numeric;
+        try {
+            const parsed = JSON.parse(raw);
+            return parseTargetSnapshotValue(parsed);
+        } catch {
+            return null;
+        }
+    }
+    if (typeof raw === 'object') {
+        const candidate = Number(raw.target_value ?? raw.target ?? raw.value ?? null);
+        return Number.isFinite(candidate) ? candidate : null;
+    }
+    return null;
+}
+
+function resolveAchievementPct(record) {
+    const direct = Number(record?.achievement_pct);
+    if (Number.isFinite(direct)) return direct;
+    const actual = Number(record?.value);
+    const target = parseTargetSnapshotValue(record?.target_snapshot);
+    if (Number.isFinite(actual) && Number.isFinite(target) && target > 0) {
+        return Math.round((actual / target) * 1000) / 10;
+    }
+    return null;
+}
+
 // ==================================================
 // STEP 2: dashboard/summary
 // ==================================================
@@ -118,7 +149,7 @@ async function dashboardSummary(req, res) {
         records = await supabaseTableRequest({
             table: 'kpi_records',
             method: 'GET',
-            select: 'employee_id,achievement_pct',
+            select: 'employee_id,achievement_pct,value,target_snapshot',
             filters: recordFilters,
             limit: 5000,
         });
@@ -133,8 +164,8 @@ async function dashboardSummary(req, res) {
     // Calculate stats
     const employeesWithRecords = new Set(records.map(r => r.employee_id)).size;
     const achievements = records
-        .map(r => Number(r.achievement_pct))
-        .filter(a => Number.isFinite(a) && a !== null);
+        .map(resolveAchievementPct)
+        .filter((a) => a !== null);
     const avgAchievement = achievements.length > 0
         ? Math.round((achievements.reduce((a, b) => a + b, 0) / achievements.length) * 10) / 10
         : null;
@@ -173,7 +204,7 @@ async function achievementByCategory(req, res) {
     const records = await supabaseTableRequest({
         table: 'kpi_records',
         method: 'GET',
-        select: 'kpi_id,achievement_pct',
+        select: 'kpi_id,achievement_pct,value,target_snapshot',
         filters: period ? { period: { type: 'eq', value: period } } : {},
         limit: 5000,
     });
@@ -204,8 +235,9 @@ async function achievementByCategory(req, res) {
             });
         }
         const bucket = categories.get(cat);
-        if (rec.achievement_pct !== null) {
-            bucket.achievements.push(Number(rec.achievement_pct));
+        const achievement = resolveAchievementPct(rec);
+        if (achievement !== null) {
+            bucket.achievements.push(achievement);
         }
     }
 
@@ -266,7 +298,7 @@ async function topPerformers(req, res) {
     const records = await supabaseTableRequest({
         table: 'kpi_records',
         method: 'GET',
-        select: 'employee_id,achievement_pct',
+        select: 'employee_id,achievement_pct,value,target_snapshot',
         filters: recordFilters,
         limit: 5000,
     });
@@ -274,12 +306,13 @@ async function topPerformers(req, res) {
     // Group by employee
     const empScores = new Map();
     for (const rec of records) {
-        if (rec.achievement_pct === null) continue;
+        const achievement = resolveAchievementPct(rec);
+        if (achievement === null) continue;
         const eid = rec.employee_id;
         if (!empScores.has(eid)) {
             empScores.set(eid, []);
         }
-        empScores.get(eid).push(Number(rec.achievement_pct));
+        empScores.get(eid).push(achievement);
     }
 
     // Build performers list
@@ -364,18 +397,19 @@ async function leadershipAnalytics(req, res) {
     const lowRecords = await supabaseTableRequest({
         table: 'kpi_records',
         method: 'GET',
-        select: 'employee_id,achievement_pct',
+        select: 'employee_id,achievement_pct,value,target_snapshot',
         filters: { period: { type: 'eq', value: currentPeriod } },
         limit: 5000,
     });
 
     const empScores = new Map();
     for (const rec of lowRecords) {
-        if (rec.achievement_pct === null) continue;
+        const achievement = resolveAchievementPct(rec);
+        if (achievement === null) continue;
         if (!empScores.has(rec.employee_id)) {
             empScores.set(rec.employee_id, []);
         }
-        empScores.get(rec.employee_id).push(Number(rec.achievement_pct));
+        empScores.get(rec.employee_id).push(achievement);
     }
 
     const belowThreshold = [];
@@ -475,7 +509,7 @@ async function kpiTrend(req, res) {
     const allRecords = await supabaseTableRequest({
         table: 'kpi_records',
         method: 'GET',
-        select: 'employee_id,period,achievement_pct',
+        select: 'employee_id,period,achievement_pct,value,target_snapshot',
         filters: { period: { type: 'gte', value: firstPeriod } },
         limit: 10000,
     });
@@ -495,8 +529,9 @@ async function kpiTrend(req, res) {
         if (!periodData.has(rec.period)) continue;
         const bucket = periodData.get(rec.period);
         bucket.employees.add(rec.employee_id);
-        if (rec.achievement_pct !== null) {
-            bucket.achievements.push(Number(rec.achievement_pct));
+        const achievement = resolveAchievementPct(rec);
+        if (achievement !== null) {
+            bucket.achievements.push(achievement);
         }
     }
 
@@ -557,18 +592,19 @@ async function managerCalibration(req, res) {
     const kpiRecords = await supabaseTableRequest({
         table: 'kpi_records',
         method: 'GET',
-        select: 'employee_id,achievement_pct',
+        select: 'employee_id,achievement_pct,value,target_snapshot',
         filters: { period: { type: 'eq', value: period } },
         limit: 10000,
     });
 
     const kpiByEmployee = new Map();
     for (const rec of kpiRecords) {
-        if (rec.achievement_pct === null) continue;
+        const achievement = resolveAchievementPct(rec);
+        if (achievement === null) continue;
         if (!kpiByEmployee.has(rec.employee_id)) {
             kpiByEmployee.set(rec.employee_id, []);
         }
-        kpiByEmployee.get(rec.employee_id).push(Number(rec.achievement_pct));
+        kpiByEmployee.get(rec.employee_id).push(achievement);
     }
 
     // Get probation pass counts

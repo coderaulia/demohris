@@ -47,6 +47,26 @@ function uuid() {
     return crypto.randomUUID();
 }
 
+function parseTargetSnapshotValue(raw) {
+    if (raw === null || raw === undefined || raw === '') return null;
+    if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+    if (typeof raw === 'string') {
+        const numeric = Number(raw);
+        if (Number.isFinite(numeric)) return numeric;
+        try {
+            const parsed = JSON.parse(raw);
+            return parseTargetSnapshotValue(parsed);
+        } catch {
+            return null;
+        }
+    }
+    if (typeof raw === 'object') {
+        const candidate = Number(raw.target_value ?? raw.target ?? raw.value ?? null);
+        return Number.isFinite(candidate) ? candidate : null;
+    }
+    return null;
+}
+
 function isAdmin(user) {
     return ['superadmin', 'hr'].includes(String(user.role || '').toLowerCase());
 }
@@ -535,10 +555,12 @@ async function kpiRecordsList(req, res) {
         });
         const def = defRows[0] || {};
 
-        const targetSnapshot = row.target_snapshot;
-        const targetValue = targetSnapshot?.target_value ?? null;
+        const targetValue = parseTargetSnapshotValue(row.target_snapshot);
         const actualValue = Number(row.value || 0);
-        const achievementPct = targetValue && targetValue > 0
+        const existingAchievement = Number(row.achievement_pct);
+        const achievementPct = Number.isFinite(existingAchievement)
+            ? existingAchievement
+            : targetValue && targetValue > 0
             ? Math.round((actualValue / targetValue) * 1000) / 10
             : null;
 
@@ -825,9 +847,12 @@ async function kpiDepartmentSummary(req, res) {
         if (!empKpis.has(eid)) empKpis.set(eid, []);
 
         const def = defRows.find(d => String(d.id) === String(row.kpi_id));
-        const target = row.target_snapshot?.target_value ?? null;
+        const target = parseTargetSnapshotValue(row.target_snapshot);
         const actual = Number(row.value || 0);
-        const achievementPct = row.achievement_pct ?? (target && target > 0 ? Math.round((actual / target) * 1000) / 10 : null);
+        const existingAchievement = Number(row.achievement_pct);
+        const achievementPct = Number.isFinite(existingAchievement)
+            ? existingAchievement
+            : (target && target > 0 ? Math.round((actual / target) * 1000) / 10 : null);
 
         let status = 'below_target';
         if (achievementPct !== null) {
